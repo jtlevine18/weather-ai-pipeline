@@ -1,6 +1,6 @@
 """
-Build FAISS index from curated agricultural advisories corpus.
-Uses BAAI/bge-base-en-v1.5 embeddings.
+Build FAISS index from local agricultural corpus (ag_corpus.json)
+plus curated advisories. Uses BAAI/bge-base-en-v1.5 embeddings.
 """
 
 from __future__ import annotations
@@ -18,13 +18,27 @@ EMBED_MODEL  = "BAAI/bge-base-en-v1.5"
 
 
 def _load_dataset_texts() -> List[str]:
-    """Load agricultural corpus from curated advisories."""
-    from src.translation.curated_advisories import ADVISORY_MATRIX
+    """Load agricultural corpus from local JSON + curated advisories."""
     texts = []
+
+    # Primary: committed corpus extracted from HF datasets
+    corpus_path = os.path.join(os.path.dirname(__file__), "ag_corpus.json")
+    if os.path.exists(corpus_path):
+        import json
+        with open(corpus_path) as f:
+            hf_texts = json.load(f)
+        texts.extend(hf_texts)
+        log.info("Loaded %d texts from ag_corpus.json", len(hf_texts))
+    else:
+        log.warning("ag_corpus.json not found — using curated corpus only")
+
+    # Always append curated advisories (crop-specific, high quality)
+    from src.translation.curated_advisories import ADVISORY_MATRIX
     for cond, crop_map in ADVISORY_MATRIX.items():
         for crop, advisory in crop_map.items():
             texts.append(f"[{cond}][{crop}] {advisory}")
-    log.info("Corpus size: %d documents", len(texts))
+
+    log.info("Total corpus: %d documents", len(texts))
     return texts
 
 
