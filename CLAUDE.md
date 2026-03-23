@@ -168,15 +168,15 @@ weather AI 2/
 │   ├── export_training_data.py # DVC stage: DuckDB → Parquet
 │   └── train_mos.py           # DVC stage: Parquet → XGBoost model + metrics
 ├── streamlit_app/
-│   ├── app.py                 # Homepage: forecast table + advisory feed
+│   ├── app.py                 # Homepage: clickable pipeline diagram, key stats, run history
 │   ├── data_helpers.py        # Shared DB queries + Streamlit secrets injection
-│   ├── style.py               # Shared CSS (Inter font, cream/gold theme)
+│   ├── style.py               # Shared CSS (Inter font, cream/gold theme, pipeline cards)
+│   ├── chat_widget.py         # Floating chat toggle (sidebar panel, used on every page)
 │   └── pages/
-│       ├── 1_Network.py       # Station map (pydeck/CARTO), health, data quality
-│       ├── 2_Forecasts.py     # Station forecasts + model performance tabs
-│       ├── 3_Advisories.py    # Advisory feed with hover-to-English, SMS preview
-│       ├── 4_Chat.py          # NL agent chat interface
-│       └── 5_System.py        # Mermaid architecture, pipeline runs, cost
+│       ├── 1_Data.py          # Ingest+Heal: station map, sources, healing, health
+│       ├── 2_Forecasts.py     # Forecast+Downscale: station forecasts, model perf, downscaling
+│       ├── 3_Advisories.py    # Translate+Deliver: advisory feed, lineage, farmers/DPI, delivery
+│       └── _4_System.py       # System (hidden from sidebar): architecture, runs, cost
 ├── tests/
 │   ├── conftest.py            # Shared fixtures (sample_station, fault_config, etc.)
 │   ├── test_pipeline_stages.py  # Unit tests: ingestion, healing, forecasting, downscaling, advisory

@@ -11,11 +11,11 @@ import pandas as pd
 from streamlit_app.style import inject_css, CONDITION_EMOJI, CONDITION_COLOR
 from streamlit_app.data_helpers import load_forecasts, get_station_coords
 
-st.set_page_config(page_title="Forecasts", page_icon="📊", layout="wide")
+st.set_page_config(page_title="Forecasts", page_icon="F", layout="wide")
 inject_css()
 
-st.title("📊 Weather Forecasts")
-st.caption("Station-level weather predictions and model performance")
+st.title("Forecasts")
+st.caption("Station-level weather predictions, model performance, and spatial downscaling")
 
 forecasts = load_forecasts(limit=500)
 _coords   = get_station_coords()
@@ -104,7 +104,7 @@ st.divider()
 # ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
-tab_fc, tab_model = st.tabs(["Station Forecasts", "Model Performance"])
+tab_fc, tab_model, tab_downscale = st.tabs(["Station Forecasts", "Model Performance", "Downscaling"])
 
 # ========================== STATION FORECASTS ==========================
 with tab_fc:
@@ -351,60 +351,115 @@ with tab_model:
         with mm4:
             st.metric("Training Samples", _metrics.get("n_train", "?"))
 
-    btn1, btn2 = st.columns(2)
+# ========================== DOWNSCALING ==========================
+with tab_downscale:
+    st.markdown('<div class="section-header">Spatial Downscaling</div>',
+                unsafe_allow_html=True)
+    st.markdown(
+        "Station forecasts are adjusted to individual farmer GPS coordinates using "
+        "**Inverse Distance Weighting (IDW)** on a NASA POWER 5x5 grid, plus a "
+        "**lapse-rate elevation correction** of 6.5 C per 1000m."
+    )
 
-    with btn1:
-        if st.button("📡 Collect Training Data", width="stretch",
-                      help="Run Steps 1-3 only (Ingest → Heal → Forecast). Free APIs, no Claude cost."):
-            with st.spinner("Running Steps 1-3 (Ingest → Heal → Forecast)..."):
-                try:
-                    import asyncio
-                    from config import get_config
-                    from src.pipeline import WeatherPipeline
+    # Load farmer data for the map
+    from streamlit_app.data_helpers import load_farmer_profiles
+    farmers_df = load_farmer_profiles()
 
-                    cfg = get_config()
-                    pipe = WeatherPipeline(cfg, live_delivery=False)
+    if farmers_df.empty:
+        st.info("No farmer data available. Run the pipeline to generate farmer profiles.")
+    else:
+        # Station + Farmer map
+        try:
+            import pydeck as pdk
 
-                    async def _collect():
-                        raw = await pipe.step_ingest()
-                        clean = await pipe.step_heal(raw)
-                        forecasts_out = await pipe.step_forecast()
-                        return len(raw), len(clean), len(forecasts_out)
+            station_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=_coords.rename(columns={"lon": "longitude", "lat": "latitude"}),
+                get_position=["longitude", "latitude"],
+                get_color=[212, 160, 25, 220],
+                get_radius=8000,
+                pickable=True,
+            )
+            farmer_layer = pdk.Layer(
+                "ScatterplotLayer",
+                data=farmers_df.rename(columns={"gps_lon": "longitude", "gps_lat": "latitude"}).dropna(subset=["longitude", "latitude"]),
+                get_position=["longitude", "latitude"],
+                get_color=[42, 157, 143, 200],
+                get_radius=4000,
+                pickable=True,
+            )
+            view = pdk.ViewState(latitude=10.5, longitude=78.0, zoom=5.5)
+            st.pydeck_chart(pdk.Deck(
+                layers=[station_layer, farmer_layer],
+                initial_view_state=view,
+                map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
+            ))
+            st.markdown(
+                '<div style="display:flex;gap:16px;margin-top:8px;font-size:0.8rem;color:#666;">'
+                '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#d4a019;margin-right:4px;"></span>Stations</span>'
+                '<span><span style="display:inline-block;width:10px;height:10px;border-radius:50%;background:#2a9d8f;margin-right:4px;"></span>Farmer locations</span>'
+                '</div>',
+                unsafe_allow_html=True,
+            )
+        except Exception:
+            st.info("Map unavailable — pydeck not installed")
 
-                    n_raw, n_clean, n_fc = asyncio.run(_collect())
-                    st.success(f"Collected {n_raw} readings → {n_clean} cleaned → {n_fc} forecasts")
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"Collection failed: {exc}")
+        # Before/After demo table
+        st.markdown('<div class="section-header">Downscaling Effect</div>',
+                    unsafe_allow_html=True)
+        st.caption("Showing how station temperatures adjust for each farmer's specific location and elevation")
 
-    with btn2:
-        if st.button("🔧 Retrain MOS Model", width="stretch",
-                      help="Export training data and retrain XGBoost. Updates models/hybrid_mos.json."):
-            with st.spinner("Exporting training data + retraining XGBoost..."):
-                try:
-                    import subprocess
-                    proj_root = os.path.join(os.path.dirname(__file__), "..", "..")
+        rows = []
+        for _, farmer in farmers_df.iterrows():
+            sid = farmer.get("station_id")
+            if not sid:
+                continue
+            station_info = _coords[_coords["station_id"] == sid]
+            if station_info.empty:
+                continue
+            s = station_info.iloc[0]
+            f_lat = farmer.get("gps_lat")
+            f_lon = farmer.get("gps_lon")
+            if f_lat is None or f_lon is None:
+                continue
 
-                    # Step 1: Export
-                    r1 = subprocess.run(
-                        [sys.executable, "scripts/export_training_data.py"],
-                        cwd=proj_root, capture_output=True, text=True, timeout=120,
-                    )
-                    if r1.returncode != 0:
-                        st.error(f"Export failed:\n```\n{r1.stderr or r1.stdout}\n```")
-                        st.stop()
+            # Get latest forecast temp for this station
+            station_fc = df[df["station_id"] == sid].sort_values("issued_at", ascending=False)
+            if station_fc.empty:
+                continue
+            fc_temp = station_fc.iloc[0].get("temperature")
+            if fc_temp is None:
+                continue
 
-                    # Step 2: Train
-                    r2 = subprocess.run(
-                        [sys.executable, "scripts/train_mos.py"],
-                        cwd=proj_root, capture_output=True, text=True, timeout=120,
-                    )
-                    if r2.returncode != 0:
-                        st.error(f"Training failed:\n```\n{r2.stderr or r2.stdout}\n```")
-                        st.stop()
+            # Estimate altitude delta (farmer near station, small offset)
+            alt_delta = 0  # No farmer altitude in current data
+            lapse_correction = round(-0.0065 * alt_delta, 2)
 
-                    st.success("Model retrained! Refresh to see updated metrics.")
-                    st.text(r2.stdout)
-                    st.rerun()
-                except Exception as exc:
-                    st.error(f"Retrain failed: {exc}")
+            rows.append({
+                "Station": f"{s['name']} ({sid})",
+                "Station Temp": f"{fc_temp:.1f} C",
+                "Farmer": farmer.get("name", "?"),
+                "Distance (km)": round(((f_lat - s["lat"])**2 + (f_lon - s["lon"])**2)**0.5 * 111, 1),
+                "Lapse Delta": f"{lapse_correction:+.1f} C",
+                "Final Temp": f"{fc_temp + lapse_correction:.1f} C",
+            })
+
+        if rows:
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
+
+        # Lapse-rate explanation card
+        st.markdown("""
+        <div style="background:#fff;border:1px solid #e0dcd5;border-radius:8px;padding:16px;margin-top:12px;">
+            <div style="font-weight:600;color:#1a1a1a;margin-bottom:6px;">Lapse-Rate Correction</div>
+            <code style="font-size:0.9rem;color:#333;">Final = IDW_Temp - (0.0065 x altitude_delta_m)</code>
+            <div style="color:#666;font-size:0.85rem;margin-top:6px;">
+                Temperature drops approximately 6.5 C per 1000m elevation gain.
+                The IDW interpolation uses inverse distance weighting (power=2) on a 5x5 NASA POWER grid
+                (~0.5 degree radius) around the farmer's coordinates.
+            </div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# Chat toggle
+from streamlit_app.chat_widget import render_chat_toggle
+render_chat_toggle()

@@ -4,7 +4,7 @@ Used by both the Streamlit dashboard and the NL agent.
 """
 
 from __future__ import annotations
-from typing import Optional
+from typing import List, Dict, Optional
 
 
 def generate_mermaid() -> str:
@@ -94,3 +94,21 @@ STATIONS: 10 in Kerala, 10 in Tamil Nadu
 LANGUAGES: Malayalam (ml) for Kerala, Tamil (ta) for Tamil Nadu
 DATABASE: DuckDB embedded (weather.duckdb) — 6 tables
 """
+
+
+def get_pipeline_stages() -> List[Dict[str, str]]:
+    """Pipeline stage metadata for the clickable home page diagram."""
+    return [
+        {"name": "Ingest",    "step": "1", "page": "pages/1_Data.py",
+         "desc": "IMD stations + imdlib backup"},
+        {"name": "Heal",      "step": "2", "page": "pages/1_Data.py",
+         "desc": "Cross-validate via Tomorrow.io"},
+        {"name": "Forecast",  "step": "3", "page": "pages/2_Forecasts.py",
+         "desc": "NWP + XGBoost MOS"},
+        {"name": "Downscale", "step": "4", "page": "pages/2_Forecasts.py",
+         "desc": "IDW + lapse-rate to farmer GPS"},
+        {"name": "Translate", "step": "5", "page": "pages/3_Advisories.py",
+         "desc": "RAG + Claude advisory"},
+        {"name": "Deliver",   "step": "6", "page": "pages/3_Advisories.py",
+         "desc": "Console + SMS delivery"},
+    ]

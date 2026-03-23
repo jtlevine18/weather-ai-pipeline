@@ -117,6 +117,55 @@ CUSTOM_CSS = '''
         border-color: #d0ccc5 !important;
         border-radius: 8px !important;
     }
+
+    /* Pipeline diagram cards */
+    .pipeline-card {
+        background: #ffffff;
+        border: 1px solid #e0dcd5;
+        border-radius: 8px;
+        padding: 14px 10px;
+        text-align: center;
+        min-height: 76px;
+        transition: border-color 0.2s ease, box-shadow 0.2s ease;
+        cursor: pointer;
+    }
+    .pipeline-card:hover {
+        border-color: #d4a019;
+        box-shadow: 0 2px 8px rgba(212,160,25,0.15);
+    }
+    .pipeline-card .card-title {
+        font-weight: 600; color: #1a1a1a; font-size: 0.85rem;
+    }
+    .pipeline-card .card-stat {
+        color: #888; font-size: 0.72rem; margin-top: 4px;
+    }
+    .pipeline-arrow {
+        text-align: center; padding-top: 26px;
+        color: #d4a019; font-size: 1.2rem; font-weight: 300;
+    }
+
+    /* De-emphasised System link */
+    .system-link {
+        font-size: 0.75rem; color: #888; text-decoration: none;
+        letter-spacing: 0.5px;
+    }
+    .system-link:hover { color: #d4a019; }
+
+    /* Chat toggle in sidebar */
+    .chat-toggle-btn {
+        background: transparent !important;
+        border: 1px solid #444 !important;
+        color: #d4a019 !important;
+        font-size: 0.8rem !important;
+        text-transform: none !important;
+        letter-spacing: 0 !important;
+        font-weight: 500 !important;
+        width: 100%;
+    }
+    .chat-toggle-btn:hover {
+        background: rgba(212,160,25,0.1) !important;
+        border-color: #d4a019 !important;
+    }
 </style>
 '''
 
@@ -141,6 +190,14 @@ CONDITION_EMOJI = {
     "high_wind":     "💨",
     "foggy":         "🌫️",
     "clear":         "☀️",
+}
+
+
+STATUS_COLOR = {
+    "ok": "#2a9d8f",
+    "partial": "#f4a261",
+    "failed": "#e63946",
+    "running": "#1976D2",
 }
 
 

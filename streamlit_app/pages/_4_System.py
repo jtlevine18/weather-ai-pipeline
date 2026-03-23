@@ -9,21 +9,21 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 
-from streamlit_app.style import inject_css
+from streamlit_app.style import inject_css, STATUS_COLOR
 from streamlit_app.data_helpers import (load_pipeline_runs, load_delivery_log,
                                         load_conversation_log, load_delivery_metrics)
 
-st.set_page_config(page_title="System", page_icon="⚙️", layout="wide")
+st.set_page_config(page_title="System", page_icon="S", layout="wide")
 inject_css()
 
-st.title("⚙️ System Overview")
+st.title("System Overview")
 st.caption("Architecture, pipeline run history, and cost estimate")
 
 # ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
-tab_arch, tab_runs, tab_delivery, tab_cost, tab_eval, tab_agent, tab_funnel = st.tabs([
-    "Architecture", "Pipeline Runs", "Delivery Log", "Cost Estimate",
+tab_arch, tab_sched, tab_runs, tab_delivery, tab_cost, tab_eval, tab_agent, tab_funnel = st.tabs([
+    "Architecture", "Scheduler", "Pipeline Runs", "Delivery Log", "Cost Estimate",
     "Eval Metrics", "Agent Log", "Delivery Funnel"
 ])
 
@@ -77,6 +77,152 @@ with tab_arch:
         st.code(get_architecture_text(), language=None)
 
 
+# ========================== SCHEDULER ==========================
+with tab_sched:
+    from src.daily_scheduler import is_enabled as _sched_enabled, is_running as _sched_running
+    from src.daily_scheduler import start as _sched_start, stop as _sched_stop, next_run_time
+
+    current_enabled = _sched_enabled()
+
+    st.subheader("Daily Pipeline Scheduler")
+    st.caption("Runs the full 6-step pipeline once per day at 6:00 AM IST (background thread)")
+
+    new_enabled = st.toggle("Enable daily pipeline run", value=current_enabled)
+
+    if new_enabled != current_enabled:
+        if new_enabled:
+            _sched_start()
+        else:
+            _sched_stop()
+        st.rerun()
+
+    if current_enabled:
+        running = _sched_running()
+        if running:
+            nrt = next_run_time()
+            next_str = nrt.strftime("%Y-%m-%d %H:%M UTC") if nrt else "calculating..."
+            st.success(f"Scheduler is **active** — next run: {next_str}")
+        else:
+            st.warning("State is enabled but scheduler thread is not running. "
+                       "Toggle off and on to restart.")
+    else:
+        st.info("Scheduler is **off** — toggle on to start daily runs")
+
+    st.divider()
+
+    st.markdown(
+        "<div style='background:#fff;border:1px solid #e0dcd5;border-radius:8px;padding:16px;'>"
+        "<div style='font-size:0.82rem;color:#666;'>Schedule</div>"
+        "<div style='font-size:1.1rem;font-weight:600;color:#1a1a1a;'>Every day at 6:00 AM IST</div>"
+        "<div style='font-size:0.78rem;color:#888;margin-top:6px;'>"
+        "APScheduler background thread (cron: 00:30 UTC)<br>"
+        "State persists in <code>scheduler_state.json</code> — auto-resumes after restart</div>"
+        "</div>",
+        unsafe_allow_html=True,
+    )
+
+    st.divider()
+    last_runs = load_pipeline_runs(limit=3)
+    if not last_runs.empty:
+        st.markdown('<div class="section-header">Recent Runs</div>', unsafe_allow_html=True)
+        for _, row in last_runs.iterrows():
+            status = row.get("status", "?")
+            color = STATUS_COLOR.get(status, "#888")
+            started = str(row.get("started_at", ""))[:16]
+            st.markdown(
+                f"<span style='background:{color};color:#fff;padding:2px 8px;border-radius:3px;"
+                f"font-size:0.7rem;font-weight:600'>{status}</span>"
+                f"&nbsp;&nbsp;<span style='color:#555;font-size:0.82rem'>{started}</span>",
+                unsafe_allow_html=True,
+            )
+    else:
+        st.caption("No pipeline runs recorded yet.")
+
+    st.divider()
+    st.markdown('<div class="section-header">Manual Controls</div>', unsafe_allow_html=True)
+
+    bc1, bc2, bc3, bc4 = st.columns(4)
+
+    with bc1:
+        if st.button("Run Full Pipeline", use_container_width=True,
+                      help="All 6 steps: ingest → heal → forecast → downscale → translate → deliver"):
+            with st.spinner("Running all 6 steps..."):
+                try:
+                    import asyncio as _aio
+                    from config import get_config
+                    from src.pipeline import WeatherPipeline
+                    p = WeatherPipeline(get_config())
+                    r = _aio.run(p.run())
+                    st.success(f"{r.get('alerts', 0)} alerts in {r.get('elapsed_s', 0):.0f}s")
+                    st.cache_data.clear()
+                except Exception as exc:
+                    st.error(f"Pipeline error: {exc}")
+
+    with bc2:
+        if st.button("Ingest + Heal", use_container_width=True,
+                      help="Steps 1–2: fetch fresh IMD data and cross-validate"):
+            with st.spinner("Running ingest + heal..."):
+                try:
+                    import asyncio as _aio
+                    from config import get_config
+                    from src.pipeline import WeatherPipeline
+                    p = WeatherPipeline(get_config())
+
+                    async def _ingest_heal():
+                        raw = await p.step_ingest()
+                        clean = await p.step_heal(raw)
+                        return len(raw), len(clean)
+
+                    n_raw, n_clean = _aio.run(_ingest_heal())
+                    st.success(f"Ingested {n_raw} readings, healed → {n_clean}")
+                    st.cache_data.clear()
+                except Exception as exc:
+                    st.error(f"Error: {exc}")
+
+    with bc3:
+        if st.button("Forecast → Deliver", use_container_width=True,
+                      help="Steps 3–6: forecast, downscale, translate, deliver from existing data"):
+            with st.spinner("Running forecast → deliver..."):
+                try:
+                    import asyncio as _aio
+                    from config import get_config
+                    from src.pipeline import WeatherPipeline
+                    p = WeatherPipeline(get_config())
+
+                    async def _forecast_deliver():
+                        fc = await p.step_forecast()
+                        ds = await p.step_downscale(fc)
+                        alerts = await p.step_translate(ds)
+                        delivered = await p.step_deliver(alerts)
+                        return len(fc), len(alerts), delivered
+
+                    n_fc, n_alerts, n_del = _aio.run(_forecast_deliver())
+                    st.success(f"{n_fc} forecasts → {n_alerts} alerts → {n_del} delivered")
+                    st.cache_data.clear()
+                except Exception as exc:
+                    st.error(f"Error: {exc}")
+
+    with bc4:
+        if st.button("Retrain MOS Model", use_container_width=True,
+                      help="Export training data from DuckDB and retrain the XGBoost MOS model"):
+            with st.spinner("Exporting data and training model..."):
+                try:
+                    import subprocess
+                    subprocess.run(
+                        [sys.executable, "scripts/export_training_data.py"],
+                        check=True, capture_output=True, text=True,
+                        cwd=os.path.join(os.path.dirname(__file__), "..", ".."),
+                    )
+                    result = subprocess.run(
+                        [sys.executable, "scripts/train_mos.py"],
+                        check=True, capture_output=True, text=True,
+                        cwd=os.path.join(os.path.dirname(__file__), "..", ".."),
+                    )
+                    st.success("MOS model retrained successfully")
+                except subprocess.CalledProcessError as exc:
+                    st.error(f"Training failed: {(exc.stderr or exc.stdout or str(exc))[:300]}")
+
+
 # ========================== PIPELINE RUNS ==========================
 with tab_runs:
     runs = load_pipeline_runs(limit=20)
@@ -101,7 +247,6 @@ with tab_runs:
         if "id" in df_show.columns:
             df_show["id"] = df_show["id"].str[:8]
 
-        STATUS_COLOR = {"ok": "#2a9d8f", "partial": "#f4a261", "failed": "#e63946"}
         rows_html = ""
         for _, row in df_show.iterrows():
             status = row.get("status", "?")
@@ -507,3 +652,7 @@ with tab_funnel:
         station_agg.columns = ["Station", "Forecasts", "Advisories",
                                "Attempted", "Succeeded", "Success %"]
         st.dataframe(station_agg, hide_index=True, width="stretch")
+
+# Chat toggle
+from streamlit_app.chat_widget import render_chat_toggle
+render_chat_toggle()
