@@ -225,19 +225,27 @@ class IMDLibClient:
         return None
 
 
-# ---------------------------------------------------------------------------
-# Tomorrow.io — Step 2 (Healing reference)
-# ---------------------------------------------------------------------------
-
 class TomorrowIOClient:
-    def __init__(self, api_key: str):
+    def __init__(self, api_key: str, cache_ttl_s: int = 3600):
         self.api_key = api_key
+        self._cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        self._cache_ttl = cache_ttl_s  # 1 hour default
 
     async def get_current(self, lat: float, lon: float) -> Optional[Dict[str, Any]]:
         """Return current realtime weather from Tomorrow.io."""
         if not self.api_key:
             log.warning("Tomorrow.io key not set — skipping")
             return None
+
+        cache_key = f"{lat},{lon}"
+
+        # Check cache
+        if cache_key in self._cache:
+            cached_time, cached_data = self._cache[cache_key]
+            if time.time() - cached_time < self._cache_ttl:
+                log.debug("Tomorrow.io cache hit for %s", cache_key)
+                return cached_data
+
         url = f"{TOMORROW_IO_BASE}/weather/realtime"
         params = {
             "location": f"{lat},{lon}",
@@ -251,7 +259,7 @@ class TomorrowIOClient:
                 resp.raise_for_status()
                 data = resp.json()
             values = data["data"]["values"]
-            return {
+            result = {
                 "temperature": values.get("temperature"),
                 "humidity":    values.get("humidity"),
                 "wind_speed":  values.get("windSpeed"),
@@ -260,10 +268,11 @@ class TomorrowIOClient:
                 "rainfall":    values.get("rainIntensity", 0.0),
                 "source":      "tomorrow_io",
             }
+            self._cache[cache_key] = (time.time(), result)
+            return result
         except Exception as exc:
             log.warning("Tomorrow.io error at (%s,%s): %s", lat, lon, exc)
             return None
-
 
 # ---------------------------------------------------------------------------
 # Open-Meteo — Step 3 (NWP Forecast)
