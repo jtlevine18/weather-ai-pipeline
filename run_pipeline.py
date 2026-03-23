@@ -40,6 +40,9 @@ def parse_args():
                         help="DuckDB database path (default: weather.duckdb)")
     parser.add_argument("--step", type=int, choices=range(1, 7),
                         metavar="N", help="Run only step N (1-6)")
+    parser.add_argument("--source", choices=["real", "synthetic"],
+                        default="real",
+                        help="Data source for Step 1 ingestion (default: real)")
     parser.add_argument("--verbose", "-v", action="store_true")
     return parser.parse_args()
 
@@ -59,6 +62,7 @@ def main():
     from config import get_config
     config = get_config()
     config.db_path = args.db
+    config.weather.ingestion_source = args.source
 
     if args.schedule:
         from src.scheduler import PipelineScheduler

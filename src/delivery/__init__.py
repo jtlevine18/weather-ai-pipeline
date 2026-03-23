@@ -37,7 +37,7 @@ DEFAULT_RECIPIENTS: List[Recipient] = [
     Recipient("Murugan P",     "+919876543220", "TN_TNJ", "ta"),
     Recipient("Selvi R",       "+919876543221", "TN_MDU", "ta"),
     Recipient("Ravi S",        "+919876543222", "TN_CHN", "ta"),
-    Recipient("Suresh Nair",   "+919876543212", "KL_WYD", "ml"),
+    Recipient("Suresh Nair",   "+919876543212", "KL_NLB", "ml"),
 ]
 
 

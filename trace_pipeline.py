@@ -53,7 +53,7 @@ async def trace(interactive: bool = True):
     from src.database import (init_db, get_recent_forecasts, get_recent_alerts,
                                get_all_clean_telemetry)
     from src.weather_clients import TomorrowIOClient, OpenMeteoClient, NASAPowerClient
-    from src.agents          import RuleBasedFallback
+    from src.healing         import RuleBasedFallback
     from src.forecasting     import create_forecast_model, PersistenceModel, run_forecast_step
     from src.downscaling     import IDWDownscaler
     from src.translation     import get_provider, generate_advisory
@@ -66,8 +66,10 @@ async def trace(interactive: bool = True):
     console.print("This demo shows data at each step boundary.\n")
 
     # ---- Step 1 ----
-    console.rule("[bold blue]Step 1: Ingest (Synthetic Generator)[/bold blue]")
-    console.print("Generating synthetic readings with fault injection for 20 stations...")
+    mode = config.weather.ingestion_source
+    label = "Real IMD" if mode == "real" else "Synthetic Generator"
+    console.rule(f"[bold blue]Step 1: Ingest ({label})[/bold blue]")
+    console.print(f"Ingesting {mode} readings for 20 stations...")
     raw = await ingest_all_stations(config, conn)
     faults = [(r["station_id"], r["fault_type"]) for r in raw if r.get("fault_type")]
     console.print(f"  Generated {len(raw)} readings, {len(faults)} faults:")

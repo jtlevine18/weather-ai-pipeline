@@ -1,0 +1,71 @@
+{
+  "eval_name": "healing",
+  "timestamp": "2026-03-20T22:43:05.805408",
+  "total_readings": 1000,
+  "binary_detection": {
+    "precision": 1.0,
+    "recall": 0.4753521126760563,
+    "f1": 0.6443914081145585,
+    "tp": 270,
+    "fp": 0,
+    "fn": 298,
+    "tn": 432
+  },
+  "per_fault_type": {
+    "clean": {
+      "count": 432,
+      "confusion": {
+        "none": 432
+      },
+      "expected_action": "none",
+      "accuracy": 1.0,
+      "imputation_mae": null,
+      "imputation_rmse": null,
+      "avg_quality_score": 1.0
+    },
+    "typo": {
+      "count": 136,
+      "confusion": {
+        "typo_corrected": 136
+      },
+      "expected_action": "typo_corrected",
+      "accuracy": 1.0,
+      "imputation_mae": 2.2639842070787504e-16,
+      "imputation_rmse": 8.968437802135321e-16,
+      "avg_quality_score": 1.0
+    },
+    "offline": {
+      "count": 134,
+      "confusion": {
+        "imputed_from_reference": 134
+      },
+      "expected_action": "imputed_from_reference",
+      "accuracy": 1.0,
+      "imputation_mae": 0.3884509902164143,
+      "imputation_rmse": 0.5719323559886643,
+      "avg_quality_score": 1.0
+    },
+    "drift": {
+      "count": 158,
+      "confusion": {
+        "none": 158
+      },
+      "expected_action": null,
+      "accuracy": null,
+      "imputation_mae": 6.664576449340594,
+      "imputation_rmse": 9.125330902779684,
+      "avg_quality_score": 1.0
+    },
+    "missing_field": {
+      "count": 140,
+      "confusion": {
+        "none": 140
+      },
+      "expected_action": null,
+      "accuracy": null,
+      "imputation_mae": 0.0,
+      "imputation_rmse": 0.0,
+      "avg_quality_score": 1.0
+    }
+  }
+}

@@ -1,0 +1,71 @@
+{
+  "eval_name": "advisory",
+  "timestamp": "2026-03-20T19:46:54.962993",
+  "n_cases": 5,
+  "by_provider": {
+    "rule_based": {
+      "n": 5,
+      "avg_accuracy": 4.6,
+      "avg_actionability": 3.6,
+      "avg_safety": 3.8,
+      "avg_cultural": 4.6
+    }
+  },
+  "scores": [
+    {
+      "accuracy": 5.0,
+      "actionability": 4.0,
+      "safety": 4.0,
+      "cultural_appropriateness": 5.0,
+      "case_id": "K01",
+      "category": "knowledge",
+      "provider": "rule_based",
+      "advisory_preview": "Heavy rain expected \u2014 ensure all drainage channels are clear to prevent waterlogging above 10 cm. Delay urea top-dressin",
+      "safety_critical": false
+    },
+    {
+      "accuracy": 4.0,
+      "actionability": 3.0,
+      "safety": 3.0,
+      "cultural_appropriateness": 4.0,
+      "case_id": "K02",
+      "category": "knowledge",
+      "provider": "rule_based",
+      "advisory_preview": "Strong winds with heavy rain can snap fronds and cause premature nut drop. Secure young palms with bamboo supports. Afte",
+      "safety_critical": false
+    },
+    {
+      "accuracy": 4.0,
+      "actionability": 3.0,
+      "safety": 3.0,
+      "cultural_appropriateness": 4.0,
+      "case_id": "K03",
+      "category": "knowledge",
+      "provider": "rule_based",
+      "advisory_preview": "Strong winds with heavy rain can snap fronds and cause premature nut drop. Secure young palms with bamboo supports. Afte",
+      "safety_critical": false
+    },
+    {
+      "accuracy": 5.0,
+      "actionability": 4.0,
+      "safety": 5.0,
+      "cultural_appropriateness": 5.0,
+      "case_id": "K04",
+      "category": "knowledge",
+      "provider": "rule_based",
+      "advisory_preview": "Heavy rain during berry development can cause berry drop and promote coffee berry disease (CBD). Ensure slopes have clea",
+      "safety_critical": false
+    },
+    {
+      "accuracy": 5.0,
+      "actionability": 4.0,
+      "safety": 4.0,
+      "cultural_appropriateness": 5.0,
+      "case_id": "K05",
+      "category": "knowledge",
+      "provider": "rule_based",
+      "advisory_preview": "High temperature above 35\u00b0C during rice flowering causes spikelet sterility \u2014 1% yield loss per degree above 33\u00b0C. Maint",
+      "safety_critical": false
+    }
+  ]
+}

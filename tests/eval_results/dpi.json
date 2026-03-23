@@ -1,0 +1,55 @@
+{
+  "eval_name": "dpi",
+  "timestamp": "2026-03-20T22:43:17.034255",
+  "total_farmers": 42,
+  "coverage": {
+    "stations_covered": 20,
+    "stations_total": 20,
+    "coverage_rate": 1.0,
+    "min_per_station": 2,
+    "max_per_station": 3,
+    "by_state": {
+      "Kerala": 21,
+      "Tamil Nadu": 21
+    }
+  },
+  "completeness": {
+    "fully_complete": 42,
+    "completeness_rate": 1.0,
+    "by_source": {
+      "aadhaar": 42,
+      "land_records": 42,
+      "soil_health": 42,
+      "pmkisan": 42,
+      "pmfby": 42,
+      "kcc": 42
+    }
+  },
+  "geographic_realism": {
+    "crop_match_rate": 1.0,
+    "ph_match_rate": 0.9761904761904762,
+    "crop_mismatches": 0,
+    "ph_mismatches": 1,
+    "avg_area_by_state": {
+      "Kerala": 0.930952380952381,
+      "Tamil Nadu": 1.5052380952380953
+    }
+  },
+  "consistency": {
+    "checks": 126,
+    "passed": 126,
+    "rate": 1.0,
+    "issues": 0
+  },
+  "context_quality": {
+    "avg_length_chars": 692.5,
+    "sections_present": {
+      "FARMER PROFILE": 10,
+      "LAND HOLDINGS": 10,
+      "SOIL HEALTH CARD": 10,
+      "PM-KISAN": 10,
+      "CROP INSURANCE": 10,
+      "KISAN CREDIT CARD": 10
+    }
+  }
+}

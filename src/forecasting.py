@@ -275,7 +275,7 @@ class HybridNWPModel:
                 correction = max(-8.0, min(8.0, correction))  # sanity clamp
                 model_used = "hybrid_mos"
             except Exception as exc:
-                log.warning("MOS inference failed: %s", exc)
+                log.warning("MOS inference failed: %s", exc, exc_info=True)
 
         final_temp = nwp_temp + correction
 
@@ -314,6 +314,7 @@ async def run_forecast_step(
     model: HybridNWPModel,
     persistence_model: PersistenceModel,
     nasa_client=None,
+    station_history: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
     """Run complete forecast for one station. Returns forecast record."""
 
@@ -333,16 +334,27 @@ async def run_forecast_step(
         except Exception:
             pass
 
-    # Temperature trend from clean_reading (°C/h, use 0 if only one point)
+    # Temperature trend from history (°C/h)
     recent_temp_trend = 0.0
-    if clean_reading and clean_reading.get("temperature") is not None:
-        # Single observation — trend is 0 until we have history
+    if station_history and len(station_history) >= 3:
+        recent_temps = [h.get("temperature") for h in station_history[-5:]
+                        if h.get("temperature") is not None]
+        if len(recent_temps) >= 2:
+            recent_temp_trend = (recent_temps[-1] - recent_temps[0]) / max(1, len(recent_temps) - 1)
+    elif clean_reading and clean_reading.get("temperature") is not None:
         recent_temp_trend = 0.0
 
+    # Use full station history for training when available
+    training_obs = None
+    if station_history and len(station_history) >= 5:
+        training_obs = station_history
+    elif clean_reading:
+        training_obs = [clean_reading]
+
     if nwp_forecasts:
-        if clean_reading:
+        if training_obs:
             model.train(
-                [clean_reading], nwp_forecasts[:1],
+                training_obs, nwp_forecasts[:1],
                 station_altitude=station.altitude_m,
                 soil_moisture=soil_moisture,
             )

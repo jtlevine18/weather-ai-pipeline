@@ -1,0 +1,19 @@
+stages:
+  export_training_data:
+    cmd: python3 scripts/export_training_data.py
+    deps:
+      - scripts/export_training_data.py
+      - weather.duckdb
+    outs:
+      - data/training_export.parquet
+  train_mos:
+    cmd: python3 scripts/train_mos.py
+    deps:
+      - scripts/train_mos.py
+      - data/training_export.parquet
+      - src/forecasting.py
+    outs:
+      - models/hybrid_mos.json
+    metrics:
+      - metrics/mos_metrics.json:
+          cache: false

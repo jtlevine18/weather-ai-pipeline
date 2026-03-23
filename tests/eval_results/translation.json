@@ -1,0 +1,46 @@
+{
+  "eval_name": "translation",
+  "timestamp": "2026-03-20T19:47:22.590143",
+  "n_advisories": 3,
+  "avg_similarity": 4.0,
+  "avg_ag_preservation": 0.9523809523809524,
+  "by_language": {
+    "ta": {
+      "n": 3,
+      "avg_similarity": 4.0,
+      "avg_ag_preservation": 0.9523809523809524
+    }
+  },
+  "details": [
+    {
+      "station_id": "TN_VLR",
+      "language": "ta",
+      "condition": "clear",
+      "provider": "rag_claude",
+      "similarity": 4,
+      "ag_preservation": 1.0,
+      "original_preview": "**Advisory for Vellore, Tamil Nadu**\n\nToday's clear skies and mild temperature of 24.2\u00b0C provide exc",
+      "back_translated_preview": "**Agricultural Advisory for Vellore, Tamil Nadu**\n\nToday's clear weather and moderate temperature of"
+    },
+    {
+      "station_id": "TN_CBE",
+      "language": "ta",
+      "condition": "clear",
+      "provider": "rag_claude",
+      "similarity": 4,
+      "ag_preservation": 1.0,
+      "original_preview": "**Advisory for Coimbatore Farmers \u2013 Today's Conditions: Clear, 23.5\u00b0C**\n\nThe clear weather and calm ",
+      "back_translated_preview": "**Advisory for Coimbatore Farmers \u2013 Today's Conditions: Clear Weather, 23.5\u00b0C**\n\nSince clear weather"
+    },
+    {
+      "station_id": "TN_TNV",
+      "language": "ta",
+      "condition": "clear",
+      "provider": "rag_claude",
+      "similarity": 4,
+      "ag_preservation": 0.8571428571428571,
+      "original_preview": "**Advisory for Tirunelveli Farmers \u2013 Today's Conditions: Clear, 25.7\u00b0C**\n\nClear skies and mild tempe",
+      "back_translated_preview": "**Advisory for Tirunelveli Farmers \u2013 Today's Conditions: Clear Weather, 25.7\u00b0C**\n\nThe clear skies an"
+    }
+  ]
+}

@@ -10,7 +10,8 @@ import streamlit.components.v1 as components
 import pandas as pd
 
 from streamlit_app.style import inject_css
-from streamlit_app.data_helpers import load_pipeline_runs, load_delivery_log
+from streamlit_app.data_helpers import (load_pipeline_runs, load_delivery_log,
+                                        load_conversation_log, load_delivery_metrics)
 
 st.set_page_config(page_title="System", page_icon="⚙️", layout="wide")
 inject_css()
@@ -21,8 +22,9 @@ st.caption("Architecture, pipeline run history, and cost estimate")
 # ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
-tab_arch, tab_runs, tab_delivery, tab_cost = st.tabs([
-    "Architecture", "Pipeline Runs", "Delivery Log", "Cost Estimate"
+tab_arch, tab_runs, tab_delivery, tab_cost, tab_eval, tab_agent, tab_funnel = st.tabs([
+    "Architecture", "Pipeline Runs", "Delivery Log", "Cost Estimate",
+    "Eval Metrics", "Agent Log", "Delivery Funnel"
 ])
 
 # ========================== ARCHITECTURE ==========================
@@ -225,3 +227,283 @@ with tab_cost:
 
     st.caption("Based on claude-sonnet-4-6 pricing (~$3/M input, $15/M output tokens). "
                "Actual cost varies with RAG context length.")
+
+# ========================== EVAL METRICS ==========================
+with tab_eval:
+    from streamlit_app.data_helpers import load_eval_results
+    evals = load_eval_results()
+
+    if not evals:
+        st.info(
+            "No eval results found yet. Run the eval scripts from the project root:"
+        )
+        st.code(
+            "python tests/eval_healing.py         # Self-healing detection accuracy\n"
+            "python tests/eval_forecast.py        # Forecast accuracy (MAE/RMSE)\n"
+            "python tests/eval_rag.py             # RAG retrieval precision/recall\n"
+            "python tests/eval_advisory.py        # Advisory quality scoring\n"
+            "python tests/eval_translation.py     # Translation quality\n"
+            "python tests/eval_dpi.py             # DPI profile coverage & realism\n"
+            "python tests/eval_conversation.py    # Conversation engine quality",
+            language="bash",
+        )
+    else:
+        # ---- Healing ----
+        if "healing" in evals:
+            st.subheader("Self-Healing Detection")
+            h = evals["healing"]
+            bd = h.get("binary_detection", {})
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Precision", f"{bd.get('precision', 0):.0%}")
+            c2.metric("Recall", f"{bd.get('recall', 0):.0%}")
+            c3.metric("F1", f"{bd.get('f1', 0):.0%}")
+            c4.metric("Total Readings", h.get("total_readings", 0))
+
+            pft = h.get("per_fault_type", {})
+            if pft:
+                pft_rows = []
+                for ft, m in pft.items():
+                    pft_rows.append({
+                        "Fault Type": ft,
+                        "Count": m.get("count", 0),
+                        "Detection Rate": (f"{m['accuracy']:.0%}"
+                                           if m.get("accuracy") is not None else "N/A"),
+                        "Imputation MAE": (f"{m['imputation_mae']:.2f}"
+                                           if m.get("imputation_mae") is not None else "---"),
+                    })
+                st.dataframe(pd.DataFrame(pft_rows),
+                             hide_index=True, use_container_width=True)
+            st.divider()
+
+        # ---- Forecast ----
+        if "forecast" in evals:
+            st.subheader("Forecast Accuracy")
+            f_eval = evals["forecast"]
+            overall = f_eval.get("overall", {})
+            temp = overall.get("temperature", {})
+            c1, c2, c3 = st.columns(3)
+            c1.metric("Temp MAE",
+                       f"{temp['mae']:.2f} C" if temp.get("mae") else "---")
+            c2.metric("Temp RMSE",
+                       f"{temp['rmse']:.2f} C" if temp.get("rmse") else "---")
+            c3.metric("Paired Records", f_eval.get("total_pairs", 0))
+
+            by_model = f_eval.get("by_model", {})
+            if by_model:
+                model_rows = [
+                    {"Model": mt, "N": m.get("n", 0),
+                     "MAE (C)": f"{m['mae']:.2f}" if m.get("mae") else "---",
+                     "RMSE (C)": f"{m['rmse']:.2f}" if m.get("rmse") else "---",
+                     "Bias (C)": f"{m['bias']:+.2f}" if m.get("bias") is not None else "---"}
+                    for mt, m in by_model.items()
+                ]
+                st.dataframe(pd.DataFrame(model_rows),
+                             hide_index=True, use_container_width=True)
+            st.divider()
+
+        # ---- RAG ----
+        if "rag" in evals:
+            st.subheader("RAG Retrieval Quality")
+            by_mode = evals["rag"].get("by_mode", {})
+            if by_mode:
+                rag_rows = [
+                    {"Mode": mode,
+                     "Avg Precision@5": f"{m.get('avg_precision', 0):.2f}",
+                     "Avg Recall": f"{m.get('avg_recall', 0):.2f}",
+                     "Cases": m.get("n_cases", 0)}
+                    for mode, m in by_mode.items()
+                ]
+                st.dataframe(pd.DataFrame(rag_rows),
+                             hide_index=True, use_container_width=True)
+            st.divider()
+
+        # ---- Advisory ----
+        if "advisory" in evals:
+            st.subheader("Advisory Quality")
+            by_prov = evals["advisory"].get("by_provider", {})
+            if by_prov:
+                adv_rows = [
+                    {"Provider": prov,
+                     "Accuracy": f"{m.get('avg_accuracy', 0):.1f}/5",
+                     "Actionability": f"{m.get('avg_actionability', 0):.1f}/5",
+                     "Safety": f"{m.get('avg_safety', 0):+.1f}",
+                     "Cultural": f"{m.get('avg_cultural', 0):.1f}/5"}
+                    for prov, m in by_prov.items()
+                ]
+                st.dataframe(pd.DataFrame(adv_rows),
+                             hide_index=True, use_container_width=True)
+            st.divider()
+
+        # ---- Translation ----
+        if "translation" in evals:
+            st.subheader("Translation Quality")
+            t_eval = evals["translation"]
+            c1, c2 = st.columns(2)
+            c1.metric("Semantic Similarity",
+                       f"{t_eval.get('avg_similarity', 0):.1f}/5")
+            c2.metric("Ag Term Preservation",
+                       f"{t_eval.get('avg_ag_preservation', 0):.0%}")
+
+            by_lang = t_eval.get("by_language", {})
+            if by_lang:
+                lang_rows = [
+                    {"Language": {"ta": "Tamil", "ml": "Malayalam"}.get(lang, lang),
+                     "N": m.get("n", 0),
+                     "Similarity": f"{m.get('avg_similarity', 0):.1f}/5",
+                     "Ag Preservation": f"{m.get('avg_ag_preservation', 0):.0%}"}
+                    for lang, m in by_lang.items()
+                ]
+                st.dataframe(pd.DataFrame(lang_rows),
+                             hide_index=True, use_container_width=True)
+
+        # ---- DPI ----
+        if "dpi" in evals:
+            st.subheader("DPI Profile Quality")
+            d_eval = evals["dpi"]
+            cov = d_eval.get("coverage", {})
+            comp = d_eval.get("completeness", {})
+            geo = d_eval.get("geographic_realism", {})
+            con = d_eval.get("consistency", {})
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("Farmers", d_eval.get("total_farmers", 0))
+            c2.metric("Station Coverage", f"{cov.get('coverage_rate', 0):.0%}")
+            c3.metric("Completeness", f"{comp.get('completeness_rate', 0):.0%}")
+            c4.metric("Consistency", f"{con.get('rate', 0):.0%}")
+
+            geo_rows = [
+                {"Check": "Crop-region match", "Rate": f"{geo.get('crop_match_rate', 0):.0%}"},
+                {"Check": "Soil pH realism", "Rate": f"{geo.get('ph_match_rate', 0):.0%}"},
+            ]
+            st.dataframe(pd.DataFrame(geo_rows),
+                         hide_index=True, use_container_width=True)
+            st.divider()
+
+        # ---- Conversation ----
+        if "conversation" in evals:
+            st.subheader("Conversation Engine")
+            c_eval = evals["conversation"]
+            sm = c_eval.get("state_machine", {})
+            ld = c_eval.get("language_detection", {})
+            esc = c_eval.get("escalation_detection", {})
+            ov = c_eval.get("overall", {})
+
+            c1, c2, c3, c4 = st.columns(4)
+            c1.metric("State Machine", f"{sm.get('accuracy', 0):.0%}")
+            c2.metric("Language Detection", f"{ld.get('accuracy', 0):.0%}")
+            c3.metric("Escalation Detection", f"{esc.get('accuracy', 0):.0%}")
+            c4.metric("Overall", f"{ov.get('overall_rate', 0):.0%}")
+
+            tools_info = c_eval.get("tools", {})
+            if tools_info:
+                st.caption(f"Tools: {tools_info.get('nl_tools', 0)} NL + "
+                          f"{tools_info.get('conversation_tools', 0)} conversation = "
+                          f"{tools_info.get('total', 0)} total")
+
+            pers = c_eval.get("personalization", {})
+            if pers and not pers.get("skipped"):
+                st.metric("Personalization Uplift",
+                          f"{pers.get('avg_uplift', 0):.1f}/5")
+            st.divider()
+
+        st.caption("Run eval scripts from the project root to update these metrics.")
+
+# ========================== AGENT LOG ==========================
+with tab_agent:
+    conv_log = load_conversation_log(limit=200)
+    if conv_log.empty:
+        st.info("No conversation logs yet. Use the Chat page or `python run_chat.py` to generate data.")
+    else:
+        # Aggregate metrics
+        total_queries = len(conv_log[conv_log["role"] == "user"]) if "role" in conv_log.columns else 0
+        total_responses = len(conv_log[conv_log["role"] == "assistant"]) if "role" in conv_log.columns else 0
+        sessions = conv_log["session_id"].nunique() if "session_id" in conv_log.columns else 0
+
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Sessions", sessions)
+        c2.metric("User Queries", total_queries)
+        c3.metric("Responses", total_responses)
+
+        if "latency_ms" in conv_log.columns:
+            assistant_rows = conv_log[conv_log["role"] == "assistant"]
+            valid_latency = assistant_rows["latency_ms"].dropna()
+            avg_latency = int(valid_latency.mean()) if len(valid_latency) > 0 else 0
+            c4.metric("Avg Latency", f"{avg_latency} ms")
+        else:
+            c4.metric("Avg Latency", "---")
+
+        # Token usage
+        if "tokens_in" in conv_log.columns and "tokens_out" in conv_log.columns:
+            total_in = int(conv_log["tokens_in"].sum()) if conv_log["tokens_in"].notna().any() else 0
+            total_out = int(conv_log["tokens_out"].sum()) if conv_log["tokens_out"].notna().any() else 0
+            tc1, tc2 = st.columns(2)
+            tc1.metric("Total Input Tokens", f"{total_in:,}")
+            tc2.metric("Total Output Tokens", f"{total_out:,}")
+
+        # Most-used tools
+        tool_rows = conv_log[conv_log["role"] == "tool_use"] if "role" in conv_log.columns else pd.DataFrame()
+        if not tool_rows.empty and "tool_name" in tool_rows.columns:
+            st.subheader("Tool Usage")
+            tool_counts = tool_rows["tool_name"].value_counts().reset_index()
+            tool_counts.columns = ["Tool", "Count"]
+            st.dataframe(tool_counts, hide_index=True, use_container_width=True)
+
+        # Recent conversations
+        st.subheader("Recent Conversations")
+        user_msgs = conv_log[conv_log["role"] == "user"].copy() if "role" in conv_log.columns else pd.DataFrame()
+        if not user_msgs.empty:
+            display_cols = [c for c in ["session_id", "content", "created_at"]
+                           if c in user_msgs.columns]
+            df_show = user_msgs[display_cols].head(20).copy()
+            if "session_id" in df_show.columns:
+                df_show["session_id"] = df_show["session_id"].str[:8]
+            if "content" in df_show.columns:
+                df_show["content"] = df_show["content"].str[:100]
+            df_show.columns = ["Session", "Query", "Time"][:len(display_cols)]
+            st.dataframe(df_show, hide_index=True, use_container_width=True)
+
+# ========================== DELIVERY FUNNEL ==========================
+with tab_funnel:
+    dm = load_delivery_metrics(limit=500)
+    if dm.empty:
+        st.info("No delivery metrics yet. Run `python run_pipeline.py` to generate data.")
+    else:
+        # Aggregate funnel
+        total_stations = dm["station_id"].nunique() if "station_id" in dm.columns else 0
+        total_forecasts = int(dm["forecasts_generated"].sum()) if "forecasts_generated" in dm.columns else 0
+        total_advisories = int(dm["advisories_generated"].sum()) if "advisories_generated" in dm.columns else 0
+        total_attempted = int(dm["deliveries_attempted"].sum()) if "deliveries_attempted" in dm.columns else 0
+        total_succeeded = int(dm["deliveries_succeeded"].sum()) if "deliveries_succeeded" in dm.columns else 0
+
+        st.subheader("Delivery Funnel")
+        funnel_data = [
+            ("Stations", total_stations),
+            ("Forecasts", total_forecasts),
+            ("Advisories", total_advisories),
+            ("Deliveries Attempted", total_attempted),
+            ("Deliveries Succeeded", total_succeeded),
+        ]
+
+        # Horizontal funnel metrics
+        cols = st.columns(len(funnel_data))
+        for col, (label, val) in zip(cols, funnel_data):
+            col.metric(label, val)
+
+        # Funnel bar visualization
+        funnel_df = pd.DataFrame(funnel_data, columns=["Stage", "Count"])
+        st.bar_chart(funnel_df.set_index("Stage"))
+
+        # Per-station breakdown
+        st.subheader("Per-Station Breakdown")
+        station_agg = dm.groupby("station_id").agg(
+            forecasts=("forecasts_generated", "sum"),
+            advisories=("advisories_generated", "sum"),
+            attempted=("deliveries_attempted", "sum"),
+            succeeded=("deliveries_succeeded", "sum"),
+        ).reset_index()
+        station_agg["success_rate"] = (
+            (station_agg["succeeded"] / station_agg["attempted"].replace(0, 1)) * 100
+        ).round(1)
+        station_agg.columns = ["Station", "Forecasts", "Advisories",
+                               "Attempted", "Succeeded", "Success %"]
+        st.dataframe(station_agg, hide_index=True, use_container_width=True)

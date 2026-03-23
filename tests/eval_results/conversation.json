@@ -1,0 +1,41 @@
+{
+  "eval_name": "conversation",
+  "timestamp": "2026-03-20T22:43:17.127168",
+  "state_machine": {
+    "cases": 10,
+    "passed": 10,
+    "accuracy": 1.0
+  },
+  "language_detection": {
+    "cases": 8,
+    "passed": 8,
+    "accuracy": 1.0
+  },
+  "escalation_detection": {
+    "cases": 10,
+    "passed": 10,
+    "accuracy": 1.0
+  },
+  "tools": {
+    "nl_tools": 5,
+    "conversation_tools": 6,
+    "total": 11,
+    "with_schema": 11
+  },
+  "prompts": {
+    "combinations": 12,
+    "passed": 12,
+    "quality_rate": 1.0
+  },
+  "persistence": {
+    "memory_roundtrip": true,
+    "followup_roundtrip": true,
+    "followups_fired": 1,
+    "followups_pending": 1
+  },
+  "overall": {
+    "total_checks": 42,
+    "total_passed": 42,
+    "overall_rate": 1.0
+  }
+}

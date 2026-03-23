@@ -17,15 +17,18 @@ from rich.table   import Table
 from config import PipelineConfig, STATIONS, STATION_MAP, StationConfig
 from src.database import (init_db, insert_clean_telemetry, insert_forecast,
                             insert_alert, insert_delivery_log,
+                            insert_delivery_metrics,
                             start_pipeline_run, finish_pipeline_run,
-                            get_latest_clean_for_station)
+                            get_latest_clean_for_station,
+                            get_clean_history_for_station)
 from src.ingestion       import ingest_all_stations
 from src.weather_clients import TomorrowIOClient, OpenMeteoClient, NASAPowerClient
-from src.agents          import RuleBasedFallback, ObservabilityAgent, SelfHealingAgent
+from src.healing         import RuleBasedFallback, ObservabilityAgent, SelfHealingAgent
 from src.forecasting     import create_forecast_model, PersistenceModel, run_forecast_step
 from src.downscaling     import IDWDownscaler
 from src.translation     import get_provider, generate_advisory
 from src.delivery        import MultiChannelDelivery, DEFAULT_RECIPIENTS, DeliveryChannel
+from src.models          import RawReading, CleanReading, Forecast, Advisory, DeliveryLog
 
 log = logging.getLogger(__name__)
 console = Console()
@@ -62,19 +65,30 @@ class WeatherPipeline:
     # Step 1: Ingest
     # ------------------------------------------------------------------
     async def step_ingest(self) -> List[Dict[str, Any]]:
-        console.print("[bold blue]Step 1:[/bold blue] Ingesting synthetic telemetry...")
+        mode = self.config.weather.ingestion_source
+        label = "real (IMD)" if mode == "real" else "synthetic"
+        console.print(f"[bold blue]Step 1:[/bold blue] Ingesting {label} telemetry...")
         readings = await ingest_all_stations(self.config, self.conn)
-        faults   = sum(1 for r in readings if r.get("fault_type"))
-        console.print(f"  [green]✓[/green] {len(readings)} readings | {faults} faults injected")
+
+        # Source breakdown
+        sources: Dict[str, int] = {}
+        for r in readings:
+            s = r.get("source", "unknown")
+            sources[s] = sources.get(s, 0) + 1
+        source_str = " | ".join(f"{k}:{v}" for k, v in sorted(sources.items()))
+
+        faults = sum(1 for r in readings if r.get("fault_type"))
+        console.print(f"  [green]✓[/green] {len(readings)} readings | {source_str} | {faults} faults")
+        # Validate stage output
+        readings = [RawReading(**r).model_dump() for r in readings]
         return readings
 
     # ------------------------------------------------------------------
     # Step 2: Heal
     # ------------------------------------------------------------------
     async def step_heal(self, raw_readings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        console.print("[bold blue]Step 2:[/bold blue] Healing anomalies via Tomorrow.io...")
+        console.print("[bold blue]Step 2:[/bold blue] Cross-validating via Tomorrow.io...")
         clean = []
-        healed_count = 0
         skipped = 0
 
         # Fetch Tomorrow.io references in batches of 3 (API limit: 3 req/sec)
@@ -96,35 +110,57 @@ class WeatherPipeline:
             ref = references.get(reading["station_id"])
             fault = reading.get("fault_type")
 
-            if fault is None:
-                # No fault — pass through with heal_action=none
-                healed = dict(reading)
-                healed["heal_action"] = "none"
-                healed["heal_source"] = "original"
-                healed["quality_score"] = 1.0
-            else:
-                # Try rule-based first
+            # Phase 1: Fault-based healing (synthetic faults only)
+            if fault is not None:
                 healed = self.rule_healer.heal(reading, ref)
                 if healed is None:
-                    # Offline with no reference — try NASA POWER
                     station = STATION_MAP.get(reading["station_id"])
                     if station:
                         nasa_ref = await self.nasa_power.get_current(station.lat, station.lon)
                         if nasa_ref:
                             healed = self.rule_healer.heal(reading, nasa_ref)
+                            ref = ref or nasa_ref
                     if healed is None:
                         skipped += 1
-                        continue  # Skip — never fabricate
-                healed_count += 1
-                healed["quality_score"] = 0.8 if healed.get("heal_action") != "none" else 1.0
+                        continue  # Never fabricate
+            else:
+                healed = dict(reading)
 
-            # Ensure ID exists
+            # Phase 2+3: Cross-validate against reference (all readings)
+            if ref is not None:
+                healed = self.rule_healer.cross_validate(healed, ref)
+            else:
+                # No reference — try NASA POWER as cross-validation fallback
+                station = STATION_MAP.get(reading["station_id"])
+                if station and fault is None:
+                    nasa_ref = await self.nasa_power.get_current(station.lat, station.lon)
+                    if nasa_ref:
+                        healed = self.rule_healer.cross_validate(healed, nasa_ref)
+                if "quality_score" not in healed:
+                    healed["heal_action"] = healed.get("heal_action", "none")
+                    healed["heal_source"] = healed.get("heal_source", "original")
+                    null_count = sum(1 for f in ["temperature", "humidity", "wind_speed", "pressure", "rainfall"]
+                                     if healed.get(f) is None)
+                    healed["quality_score"] = max(0.5, 1.0 - null_count * 0.1)
+
             if "id" not in healed:
                 healed["id"] = reading.get("id", str(uuid.uuid4()))
             clean.append(healed)
 
+        # Validate stage output
+        clean = [CleanReading(**r).model_dump() for r in clean]
         insert_clean_telemetry(self.conn, clean)
-        console.print(f"  [green]✓[/green] {len(clean)} clean records | {healed_count} healed | {skipped} skipped")
+
+        # Summary stats
+        n_xval = sum(1 for r in clean if "cross_validated" in (r.get("heal_action") or ""))
+        n_filled = sum(1 for r in clean if "null_filled" in (r.get("heal_action") or ""))
+        n_flagged = sum(1 for r in clean if "anomaly_flagged" in (r.get("heal_action") or ""))
+        avg_q = sum(r.get("quality_score", 1.0) for r in clean) / max(len(clean), 1)
+        console.print(
+            f"  [green]✓[/green] {len(clean)} clean | "
+            f"{n_xval} validated | {n_filled} null-filled | {n_flagged} flagged | "
+            f"avg quality {avg_q:.2f} | {skipped} skipped"
+        )
         return clean
 
     # ------------------------------------------------------------------
@@ -136,10 +172,12 @@ class WeatherPipeline:
         tasks = []
         for station in STATIONS:
             obs = get_latest_clean_for_station(self.conn, station.station_id)
+            history = get_clean_history_for_station(self.conn, station.station_id)
             tasks.append(run_forecast_step(
                 station, obs, self.open_meteo,
                 self.forecast_model, self.persistence,
                 nasa_client=self.nasa_power,
+                station_history=history,
             ))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
@@ -155,6 +193,8 @@ class WeatherPipeline:
                 mos_count += 1
 
         console.print(f"  [green]✓[/green] {len(forecasts)} forecasts | {mos_count} MOS | {len(forecasts)-mos_count} fallback")
+        # Validate stage output
+        forecasts = [Forecast(**f).model_dump() for f in forecasts]
         return forecasts
 
     # ------------------------------------------------------------------
@@ -289,12 +329,54 @@ class WeatherPipeline:
         except Exception as e:
             log.error("Step 6 failed: %s", e); steps_fail += 1; deliveries = 0
 
+        # Aggregate delivery metrics per station
+        forecast_sids = {f["station_id"] for f in forecasts}
+        alert_sids = {a["station_id"] for a in alerts}
+        try:
+            dl_rows = self.conn.execute(
+                "SELECT station_id, channel, status FROM delivery_log WHERE id LIKE ?",
+                [f"%{self.run_id[:8]}%"],
+            ).fetchall()
+        except Exception:
+            dl_rows = []
+        delivery_by_station: Dict[str, Dict[str, Any]] = {}
+        for row in dl_rows:
+            sid = row[0]
+            if sid not in delivery_by_station:
+                delivery_by_station[sid] = {"attempted": 0, "succeeded": 0, "channels": set()}
+            delivery_by_station[sid]["attempted"] += 1
+            if row[2] in ("sent", "dry_run"):
+                delivery_by_station[sid]["succeeded"] += 1
+            delivery_by_station[sid]["channels"].add(row[1])
+
+        all_sids = forecast_sids | alert_sids | set(delivery_by_station.keys())
+        for sid in all_sids:
+            dl_info = delivery_by_station.get(sid, {})
+            insert_delivery_metrics(self.conn, {
+                "id": f"dm_{self.run_id[:8]}_{sid}",
+                "pipeline_run_id": self.run_id,
+                "station_id": sid,
+                "forecasts_generated": 1 if sid in forecast_sids else 0,
+                "advisories_generated": 1 if sid in alert_sids else 0,
+                "deliveries_attempted": dl_info.get("attempted", 0),
+                "deliveries_succeeded": dl_info.get("succeeded", 0),
+                "channels_used": ",".join(sorted(dl_info.get("channels", set()))) or None,
+            })
+
         elapsed = (datetime.utcnow() - start_time).total_seconds()
         status  = "ok" if steps_fail == 0 else "partial"
         summary = (f"{steps_ok}/6 steps ok | {len(alerts)} alerts | "
                    f"{deliveries} deliveries | {elapsed:.1f}s")
 
         finish_pipeline_run(self.conn, self.run_id, status, steps_ok, steps_fail, summary)
+
+        # Run quality checks
+        try:
+            from src.quality_checks import run_all_checks
+            run_all_checks(self.conn)
+        except Exception as e:
+            log.warning("Quality checks failed: %s", e)
+
         console.rule(f"[bold green]Run complete: {summary}[/bold green]")
 
         return {

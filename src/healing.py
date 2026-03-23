@@ -16,7 +16,7 @@ log = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 class RuleBasedFallback:
-    """Deterministic anomaly detection and correction."""
+    """Deterministic anomaly detection, correction, and cross-validation."""
 
     TEMP_MIN, TEMP_MAX     = -5.0, 55.0
     TEMP_VALID_MIN = 0.0
@@ -25,6 +25,17 @@ class RuleBasedFallback:
     WIND_MAX               = 150.0
     PRESSURE_MIN           = 850.0
     PRESSURE_MAX           = 1100.0
+
+    # Thresholds for cross-validation against Tomorrow.io / NASA POWER
+    CROSS_VAL_THRESHOLDS = {
+        "temperature": 8.0,   # °C
+        "humidity":    25.0,  # %
+        "wind_speed":  15.0,  # km/h
+        "pressure":    15.0,  # hPa
+        "rainfall":    20.0,  # mm
+    }
+
+    WEATHER_FIELDS = ["temperature", "humidity", "wind_speed", "wind_dir", "pressure", "rainfall"]
 
     def detect_anomalies(self, readings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         anomalies = []
@@ -54,7 +65,7 @@ class RuleBasedFallback:
 
     def heal(self, reading: Dict[str, Any],
               reference: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        """Apply rule-based corrections. Returns healed copy."""
+        """Apply rule-based corrections for synthetic fault types. Returns healed copy."""
         healed = dict(reading)
         healed["heal_action"] = "none"
         healed["heal_source"] = "original"
@@ -82,6 +93,93 @@ class RuleBasedFallback:
         if temp is None:
             # No reference and no data — skip record
             return None  # type: ignore
+
+        return healed
+
+    # ------------------------------------------------------------------
+    # Cross-validation against reference source (Tomorrow.io / NASA POWER)
+    # ------------------------------------------------------------------
+
+    def fill_nulls(self, reading: Dict[str, Any],
+                   reference: Dict[str, Any]) -> tuple:
+        """Fill NULL weather fields from reference. Returns (reading, filled_fields)."""
+        filled = []
+        for field in self.WEATHER_FIELDS:
+            if reading.get(field) is None and reference.get(field) is not None:
+                reading[field] = reference[field]
+                filled.append(field)
+        return reading, filled
+
+    def cross_validate(self, reading: Dict[str, Any],
+                       reference: Dict[str, Any]) -> Dict[str, Any]:
+        """Cross-validate a reading against a reference, fill NULLs, compute quality.
+
+        - Fills NULL fields from reference (never overwrites existing values)
+        - Flags anomalies where reading diverges from reference beyond thresholds
+        - Computes quality_score from agreement level
+        - Returns modified copy of reading with heal_action, heal_source, quality_score
+        """
+        healed = dict(reading)
+        ref_source = reference.get("source", "tomorrow_io")
+
+        # Preserve any existing heal_action from Phase 1 (e.g. typo_corrected)
+        prior_action = healed.get("heal_action", "none")
+
+        # Phase 2: Fill NULL fields
+        healed, filled_fields = self.fill_nulls(healed, reference)
+
+        # Phase 3: Compare non-NULL fields against reference
+        anomaly_fields = []
+        agreements = []
+        for field, threshold in self.CROSS_VAL_THRESHOLDS.items():
+            reading_val = reading.get(field)   # original value (before fill)
+            ref_val = reference.get(field)
+            if reading_val is not None and ref_val is not None:
+                diff = abs(reading_val - ref_val)
+                agreement = max(0.0, 1.0 - diff / threshold)
+                agreements.append((field, agreement))
+                if diff > threshold:
+                    anomaly_fields.append(field)
+
+        # Determine heal_action
+        actions = []
+        if prior_action not in ("none", "original"):
+            actions.append(prior_action)
+        if filled_fields:
+            actions.append("null_filled")
+        if anomaly_fields:
+            actions.append("anomaly_flagged")
+
+        if actions:
+            healed["heal_action"] = "+".join(actions)
+            healed["heal_source"] = f"original+{ref_source}"
+        elif prior_action in ("none", "original"):
+            healed["heal_action"] = "cross_validated"
+            healed["heal_source"] = f"original+{ref_source}"
+        # else: keep prior_action as-is
+
+        # Compute quality_score
+        if agreements:
+            # Weight temperature 2x
+            total_w = 0.0
+            weighted_sum = 0.0
+            for field, score in agreements:
+                w = 2.0 if field == "temperature" else 1.0
+                weighted_sum += w * score
+                total_w += w
+            base_score = weighted_sum / total_w
+        else:
+            base_score = 1.0
+
+        # Penalty for fields that are still NULL after filling
+        null_count = sum(1 for f in ["temperature", "humidity", "wind_speed", "pressure", "rainfall"]
+                         if healed.get(f) is None)
+        penalty = null_count * 0.05
+
+        # Filled fields are less trustworthy than independently measured
+        fill_penalty = len(filled_fields) * 0.03
+
+        healed["quality_score"] = round(max(0.3, min(1.0, base_score - penalty - fill_penalty)), 3)
 
         return healed
 

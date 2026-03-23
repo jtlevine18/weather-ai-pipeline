@@ -158,3 +158,47 @@ def get_station_coords() -> pd.DataFrame:
         "altitude_m": s.altitude_m,
         "crop":       s.crop_context,
     } for s in STATIONS])
+
+
+def load_conversation_log(limit: int = 200) -> pd.DataFrame:
+    try:
+        conn = get_conn()
+        if not table_exists(conn, "conversation_log"):
+            return pd.DataFrame()
+        df = conn.execute(
+            "SELECT * FROM conversation_log ORDER BY created_at DESC LIMIT ?", [limit]
+        ).df()
+        conn.close()
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+def load_delivery_metrics(limit: int = 500) -> pd.DataFrame:
+    try:
+        conn = get_conn()
+        if not table_exists(conn, "delivery_metrics"):
+            return pd.DataFrame()
+        df = conn.execute(
+            "SELECT * FROM delivery_metrics ORDER BY created_at DESC LIMIT ?", [limit]
+        ).df()
+        conn.close()
+        return df
+    except Exception:
+        return pd.DataFrame()
+
+
+def load_eval_results() -> dict:
+    """Load eval results from JSON files in tests/eval_results/."""
+    import json as json_mod
+    results_dir = os.path.join(os.path.dirname(__file__), "..", "tests", "eval_results")
+    results = {}
+    for name in ("healing", "forecast", "rag", "advisory", "translation", "dpi", "conversation"):
+        path = os.path.join(results_dir, f"{name}.json")
+        if os.path.exists(path):
+            try:
+                with open(path) as fh:
+                    results[name] = json_mod.load(fh)
+            except Exception:
+                pass
+    return results

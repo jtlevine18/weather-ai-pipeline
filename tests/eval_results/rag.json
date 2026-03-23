@@ -1,0 +1,1627 @@
+{
+  "eval_name": "rag",
+  "timestamp": "2026-03-20T19:55:22.116413",
+  "n_cases": 42,
+  "by_mode": {
+    "hybrid (a=0.5)": {
+      "avg_precision": 0.48571428571428577,
+      "avg_recall": 0.7202380952380952,
+      "negative_theme_cases": 7,
+      "n_cases": 42,
+      "per_case": [
+        {
+          "id": "K01",
+          "category": "knowledge",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.7744542732436652
+        },
+        {
+          "id": "K02",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7020470946592651
+        },
+        {
+          "id": "K03",
+          "category": "knowledge",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "tapping",
+            "latex",
+            "Phytophthora",
+            "Bordeaux"
+          ],
+          "negative_found": [
+            "harvest"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.7014723151487671
+        },
+        {
+          "id": "K04",
+          "category": "knowledge",
+          "precision_at_5": 0.6,
+          "recall": 0.5,
+          "themes_missed": [
+            "foot rot",
+            "copper"
+          ],
+          "negative_found": [
+            "prune"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6783831691656791
+        },
+        {
+          "id": "K05",
+          "category": "knowledge",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6809847862634376
+        },
+        {
+          "id": "K06",
+          "category": "knowledge",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6311155108457498
+        },
+        {
+          "id": "K07",
+          "category": "knowledge",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6630427438370121
+        },
+        {
+          "id": "K08",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7137190038545469
+        },
+        {
+          "id": "K09",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 0.25,
+          "themes_missed": [
+            "pod",
+            "irrigat",
+            "moisture"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.5989235247469991
+        },
+        {
+          "id": "K10",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "irrigat",
+            "mulch",
+            "bunch"
+          ],
+          "negative_found": [
+            "waterlog",
+            "drain"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.628290376600556
+        },
+        {
+          "id": "K11",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7701969492715012
+        },
+        {
+          "id": "K12",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7694953966420304
+        },
+        {
+          "id": "K13",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.5,
+          "themes_missed": [
+            "blister blight",
+            "pluck"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.7080019748041634
+        },
+        {
+          "id": "K14",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 0.25,
+          "themes_missed": [
+            "berry borer",
+            "trap",
+            "leaf rust"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.7081718540022377
+        },
+        {
+          "id": "K15",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6550958371550554
+        },
+        {
+          "id": "K16",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6557674980551713
+        },
+        {
+          "id": "K17",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 0.25,
+          "themes_missed": [
+            "transplant",
+            "spray",
+            "pest"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7780883120307923
+        },
+        {
+          "id": "K18",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 0.5,
+          "themes_missed": [
+            "cashew",
+            "canopy"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7863971697101594
+        },
+        {
+          "id": "K19",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "tapping",
+            "latex",
+            "bark rot"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6805325034431616
+        },
+        {
+          "id": "K20",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7997571796673822
+        },
+        {
+          "id": "P01",
+          "category": "personalization",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7970538166029763
+        },
+        {
+          "id": "P02",
+          "category": "personalization",
+          "precision_at_5": 0.6,
+          "recall": 0.25,
+          "themes_missed": [
+            "boll",
+            "harvest",
+            "shedding"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.765991752317236
+        },
+        {
+          "id": "P03",
+          "category": "personalization",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7970538166029763
+        },
+        {
+          "id": "P04",
+          "category": "personalization",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6630427438370121
+        },
+        {
+          "id": "P05",
+          "category": "personalization",
+          "precision_at_5": 0.8,
+          "recall": 0.75,
+          "themes_missed": [
+            "capsule"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6649932465178698
+        },
+        {
+          "id": "P06",
+          "category": "personalization",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6649932465178698
+        },
+        {
+          "id": "P07",
+          "category": "personalization",
+          "precision_at_5": 0.4,
+          "recall": 0.5,
+          "themes_missed": [
+            "thresh",
+            "moisture"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7811625109920503
+        },
+        {
+          "id": "P08",
+          "category": "personalization",
+          "precision_at_5": 0.4,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7393189229958564
+        },
+        {
+          "id": "P09",
+          "category": "personalization",
+          "precision_at_5": 0.4,
+          "recall": 0.25,
+          "themes_missed": [
+            "water stress",
+            "mulch",
+            "growth"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6817374258320678
+        },
+        {
+          "id": "P10",
+          "category": "personalization",
+          "precision_at_5": 0.2,
+          "recall": 0.5,
+          "themes_missed": [
+            "mulch",
+            "shade"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.618907872093897
+        },
+        {
+          "id": "P11",
+          "category": "personalization",
+          "precision_at_5": 0.6,
+          "recall": 0.25,
+          "themes_missed": [
+            "bunch",
+            "banana",
+            "cover"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7684866507474113
+        },
+        {
+          "id": "P12",
+          "category": "personalization",
+          "precision_at_5": 0.2,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7704569406452292
+        },
+        {
+          "id": "S01",
+          "category": "stress_test",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.5973191547095346
+        },
+        {
+          "id": "S02",
+          "category": "stress_test",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "cold",
+            "protect",
+            "cover"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7381816638614783
+        },
+        {
+          "id": "S03",
+          "category": "stress_test",
+          "precision_at_5": 0.4,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6554420690962732
+        },
+        {
+          "id": "S04",
+          "category": "stress_test",
+          "precision_at_5": 1.0,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.797025043137064
+        },
+        {
+          "id": "S05",
+          "category": "stress_test",
+          "precision_at_5": 0.2,
+          "recall": 0.3333333333333333,
+          "themes_missed": [
+            "cold",
+            "protect"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7527199602135124
+        },
+        {
+          "id": "S06",
+          "category": "stress_test",
+          "precision_at_5": 0.6,
+          "recall": 0.75,
+          "themes_missed": [
+            "stake"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7011825948519073
+        },
+        {
+          "id": "S07",
+          "category": "stress_test",
+          "precision_at_5": 0.8,
+          "recall": 0.6666666666666666,
+          "themes_missed": [
+            "fertiliz"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7754361196737861
+        },
+        {
+          "id": "S08",
+          "category": "stress_test",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7284315890791061
+        },
+        {
+          "id": "S09",
+          "category": "stress_test",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7728353696992172
+        },
+        {
+          "id": "S10",
+          "category": "stress_test",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6790765852842048
+        }
+      ]
+    },
+    "faiss_only (a=1.0)": {
+      "avg_precision": 0.5190476190476191,
+      "avg_recall": 0.7242063492063492,
+      "negative_theme_cases": 19,
+      "n_cases": 42,
+      "per_case": [
+        {
+          "id": "K01",
+          "category": "knowledge",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6569039225578308
+        },
+        {
+          "id": "K02",
+          "category": "knowledge",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [
+            "spray"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6915244698524475
+        },
+        {
+          "id": "K03",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.5,
+          "themes_missed": [
+            "tapping",
+            "latex"
+          ],
+          "negative_found": [
+            "harvest"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6917230010032653
+        },
+        {
+          "id": "K04",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 0.25,
+          "themes_missed": [
+            "berry drop",
+            "foot rot",
+            "copper"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.7090736389160156
+        },
+        {
+          "id": "K05",
+          "category": "knowledge",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6794180750846863
+        },
+        {
+          "id": "K06",
+          "category": "knowledge",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7113847017288208
+        },
+        {
+          "id": "K07",
+          "category": "knowledge",
+          "precision_at_5": 1.0,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7011471152305603
+        },
+        {
+          "id": "K08",
+          "category": "knowledge",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6777008056640625
+        },
+        {
+          "id": "K09",
+          "category": "knowledge",
+          "precision_at_5": 0.8,
+          "recall": 0.75,
+          "themes_missed": [
+            "pod"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.670709753036499
+        },
+        {
+          "id": "K10",
+          "category": "knowledge",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.704875135421753
+        },
+        {
+          "id": "K11",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [
+            "heat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6981924414634705
+        },
+        {
+          "id": "K12",
+          "category": "knowledge",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [
+            "heat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6961801648139954
+        },
+        {
+          "id": "K13",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.5,
+          "themes_missed": [
+            "blister blight",
+            "pluck"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6890060424804687
+        },
+        {
+          "id": "K14",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 0.25,
+          "themes_missed": [
+            "berry borer",
+            "trap",
+            "leaf rust"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6893830537796021
+        },
+        {
+          "id": "K15",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.5,
+          "themes_missed": [
+            "pseudostem",
+            "stake"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6878430008888244
+        },
+        {
+          "id": "K16",
+          "category": "knowledge",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "frond",
+            "nut drop",
+            "support",
+            "Bordeaux"
+          ],
+          "negative_found": [
+            "fertiliz",
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6881196737289429
+        },
+        {
+          "id": "K17",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "transplant",
+            "fertiliz",
+            "pest"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6661147356033326
+        },
+        {
+          "id": "K18",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.5,
+          "themes_missed": [
+            "cashew",
+            "canopy"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6766394376754761
+        },
+        {
+          "id": "K19",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "tapping",
+            "latex",
+            "bark rot"
+          ],
+          "negative_found": [
+            "heat",
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6823561549186706
+        },
+        {
+          "id": "K20",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6661002397537231
+        },
+        {
+          "id": "P01",
+          "category": "personalization",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [
+            "coconut"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6782040596008301
+        },
+        {
+          "id": "P02",
+          "category": "personalization",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "boll",
+            "drain",
+            "shedding"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6804984211921692
+        },
+        {
+          "id": "P03",
+          "category": "personalization",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6782040596008301
+        },
+        {
+          "id": "P04",
+          "category": "personalization",
+          "precision_at_5": 1.0,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.7011471152305603
+        },
+        {
+          "id": "P05",
+          "category": "personalization",
+          "precision_at_5": 1.0,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [
+            "drain",
+            "harvest"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.7083478569984436
+        },
+        {
+          "id": "P06",
+          "category": "personalization",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [
+            "drain",
+            "harvest"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.7083478569984436
+        },
+        {
+          "id": "P07",
+          "category": "personalization",
+          "precision_at_5": 0.2,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6675440907478333
+        },
+        {
+          "id": "P08",
+          "category": "personalization",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "harvest",
+            "copra",
+            "dry"
+          ],
+          "negative_found": [
+            "drain"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.674741017818451
+        },
+        {
+          "id": "P09",
+          "category": "personalization",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6838512182235718
+        },
+        {
+          "id": "P10",
+          "category": "personalization",
+          "precision_at_5": 0.6,
+          "recall": 0.75,
+          "themes_missed": [
+            "berry"
+          ],
+          "negative_found": [
+            "drain"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.7112085223197937
+        },
+        {
+          "id": "P11",
+          "category": "personalization",
+          "precision_at_5": 1.0,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [
+            "heat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6902727365493775
+        },
+        {
+          "id": "P12",
+          "category": "personalization",
+          "precision_at_5": 0.4,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [
+            "heat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6671597242355347
+        },
+        {
+          "id": "S01",
+          "category": "stress_test",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6882391691207885
+        },
+        {
+          "id": "S02",
+          "category": "stress_test",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "frost",
+            "cold",
+            "protect",
+            "cover"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6797398686408996
+        },
+        {
+          "id": "S03",
+          "category": "stress_test",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "secure",
+            "cyclone",
+            "damage",
+            "rope"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.697269082069397
+        },
+        {
+          "id": "S04",
+          "category": "stress_test",
+          "precision_at_5": 1.0,
+          "recall": 0.6666666666666666,
+          "themes_missed": [
+            "monitor"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6635369300842285
+        },
+        {
+          "id": "S05",
+          "category": "stress_test",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "frost",
+            "cold",
+            "protect"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6889040231704712
+        },
+        {
+          "id": "S06",
+          "category": "stress_test",
+          "precision_at_5": 0.6,
+          "recall": 0.75,
+          "themes_missed": [
+            "stake"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.6905674457550048
+        },
+        {
+          "id": "S07",
+          "category": "stress_test",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6656641364097595
+        },
+        {
+          "id": "S08",
+          "category": "stress_test",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6778815984725952
+        },
+        {
+          "id": "S09",
+          "category": "stress_test",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6760734558105469
+        },
+        {
+          "id": "S10",
+          "category": "stress_test",
+          "precision_at_5": 0.8,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.6757046937942505
+        }
+      ]
+    },
+    "bm25_only (a=0.0)": {
+      "avg_precision": 0.2619047619047619,
+      "avg_recall": 0.373015873015873,
+      "negative_theme_cases": 7,
+      "n_cases": 42,
+      "per_case": [
+        {
+          "id": "K01",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9681733164173041
+        },
+        {
+          "id": "K02",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 0.25,
+          "themes_missed": [
+            "frond",
+            "nut drop",
+            "root rot"
+          ],
+          "negative_found": [
+            "spray"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.9681733164173041
+        },
+        {
+          "id": "K03",
+          "category": "knowledge",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "tapping",
+            "latex",
+            "Phytophthora",
+            "Bordeaux"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9681733164173041
+        },
+        {
+          "id": "K04",
+          "category": "knowledge",
+          "precision_at_5": 0.8,
+          "recall": 0.5,
+          "themes_missed": [
+            "berry drop",
+            "foot rot"
+          ],
+          "negative_found": [
+            "prune"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.8513996549889464
+        },
+        {
+          "id": "K05",
+          "category": "knowledge",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.8380941532901254
+        },
+        {
+          "id": "K06",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "nut fall",
+            "mulch",
+            "husk"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.8206637090852412
+        },
+        {
+          "id": "K07",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 0.25,
+          "themes_missed": [
+            "irrigat",
+            "mulch",
+            "evaporat"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.8206637090852412
+        },
+        {
+          "id": "K08",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "standing water",
+            "irrigat",
+            "flowering"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9118031887304602
+        },
+        {
+          "id": "K09",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "pod",
+            "irrigat",
+            "moisture"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9482218037317292
+        },
+        {
+          "id": "K10",
+          "category": "knowledge",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "irrigat",
+            "water",
+            "mulch",
+            "bunch"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9161206754905097
+        },
+        {
+          "id": "K11",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "bloom",
+            "fertiliz",
+            "berry"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9835660146333061
+        },
+        {
+          "id": "K12",
+          "category": "knowledge",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "panicle",
+            "potassium",
+            "capsule",
+            "shade"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9835660146333061
+        },
+        {
+          "id": "K13",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.5,
+          "themes_missed": [
+            "blister blight",
+            "pluck"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.9246369285268525
+        },
+        {
+          "id": "K14",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "berry borer",
+            "trap",
+            "leaf rust"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.9246369285268525
+        },
+        {
+          "id": "K15",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "pseudostem",
+            "stake",
+            "bamboo"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.9247854702253443
+        },
+        {
+          "id": "K16",
+          "category": "knowledge",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "frond",
+            "nut drop",
+            "support",
+            "Bordeaux"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.9247854702253443
+        },
+        {
+          "id": "K17",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 0.25,
+          "themes_missed": [
+            "transplant",
+            "spray",
+            "pest"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9890808053819097
+        },
+        {
+          "id": "K18",
+          "category": "knowledge",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "harvest",
+            "cashew",
+            "dry",
+            "canopy"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9890808053819097
+        },
+        {
+          "id": "K19",
+          "category": "knowledge",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "tapping",
+            "latex",
+            "bark rot"
+          ],
+          "negative_found": [
+            "irrigat"
+          ],
+          "n_docs": 5,
+          "avg_score": 0.9154480066962151
+        },
+        {
+          "id": "K20",
+          "category": "knowledge",
+          "precision_at_5": 0.4,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9890808053819097
+        },
+        {
+          "id": "P01",
+          "category": "personalization",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9789634393364954
+        },
+        {
+          "id": "P02",
+          "category": "personalization",
+          "precision_at_5": 0.4,
+          "recall": 0.25,
+          "themes_missed": [
+            "boll",
+            "harvest",
+            "shedding"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9681733164173041
+        },
+        {
+          "id": "P03",
+          "category": "personalization",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9789634393364954
+        },
+        {
+          "id": "P04",
+          "category": "personalization",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "rhizome",
+            "irrigat",
+            "mulch",
+            "straw"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.8206637090852412
+        },
+        {
+          "id": "P05",
+          "category": "personalization",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "shade",
+            "capsule",
+            "irrigat",
+            "mulch"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.8206637090852412
+        },
+        {
+          "id": "P06",
+          "category": "personalization",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "flower",
+            "irrigat",
+            "shade",
+            "potassium"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.8206637090852412
+        },
+        {
+          "id": "P07",
+          "category": "personalization",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "thresh",
+            "dry",
+            "harvest",
+            "moisture"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9907663375824647
+        },
+        {
+          "id": "P08",
+          "category": "personalization",
+          "precision_at_5": 0.2,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.8532645842346446
+        },
+        {
+          "id": "P09",
+          "category": "personalization",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "irrigat",
+            "water stress",
+            "mulch",
+            "growth"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9118031887304602
+        },
+        {
+          "id": "P10",
+          "category": "personalization",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "irrigat",
+            "mulch",
+            "shade"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9253095973211469
+        },
+        {
+          "id": "P11",
+          "category": "personalization",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "bunch",
+            "banana",
+            "cover"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9617290621546679
+        },
+        {
+          "id": "P12",
+          "category": "personalization",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "growth",
+            "urea",
+            "earth",
+            "borer"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9617290621546679
+        },
+        {
+          "id": "S01",
+          "category": "stress_test",
+          "precision_at_5": 0.4,
+          "recall": 0.25,
+          "themes_missed": [
+            "irrigat",
+            "mulch",
+            "shade"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.8219600519435957
+        },
+        {
+          "id": "S02",
+          "category": "stress_test",
+          "precision_at_5": 0.2,
+          "recall": 0.25,
+          "themes_missed": [
+            "cold",
+            "protect",
+            "cover"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9370398161918759
+        },
+        {
+          "id": "S03",
+          "category": "stress_test",
+          "precision_at_5": 0.0,
+          "recall": 0.0,
+          "themes_missed": [
+            "secure",
+            "cyclone",
+            "damage",
+            "rope"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9084475675580291
+        },
+        {
+          "id": "S04",
+          "category": "stress_test",
+          "precision_at_5": 0.8,
+          "recall": 0.6666666666666666,
+          "themes_missed": [
+            "monitor"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9890808053819097
+        },
+        {
+          "id": "S05",
+          "category": "stress_test",
+          "precision_at_5": 0.2,
+          "recall": 0.3333333333333333,
+          "themes_missed": [
+            "cold",
+            "protect"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9370398161918759
+        },
+        {
+          "id": "S06",
+          "category": "stress_test",
+          "precision_at_5": 0.4,
+          "recall": 0.25,
+          "themes_missed": [
+            "wind",
+            "stake",
+            "harvest"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9681733164173041
+        },
+        {
+          "id": "S07",
+          "category": "stress_test",
+          "precision_at_5": 0.4,
+          "recall": 0.6666666666666666,
+          "themes_missed": [
+            "fertiliz"
+          ],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9521539532641856
+        },
+        {
+          "id": "S08",
+          "category": "stress_test",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.9681733164173041
+        },
+        {
+          "id": "S09",
+          "category": "stress_test",
+          "precision_at_5": 0.2,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.979695072280094
+        },
+        {
+          "id": "S10",
+          "category": "stress_test",
+          "precision_at_5": 0.6,
+          "recall": 1.0,
+          "themes_missed": [],
+          "negative_found": [],
+          "n_docs": 5,
+          "avg_score": 0.8380941532901254
+        }
+      ]
+    }
+  }
+}
