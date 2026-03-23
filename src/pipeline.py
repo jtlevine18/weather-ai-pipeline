@@ -91,10 +91,10 @@ class WeatherPipeline:
         clean = []
         skipped = 0
 
-        # Fetch Tomorrow.io references in batches of 3 (API limit: 3 req/sec)
+        # Fetch Tomorrow.io references in batches of 2 (free tier bursts trigger 429)
         station_ids = [r["station_id"] for r in raw_readings if r["station_id"] in STATION_MAP]
         references: Dict[str, Any] = {}
-        batch_size = 3
+        batch_size = 2
         for i in range(0, len(station_ids), batch_size):
             batch = station_ids[i:i + batch_size]
             results = await asyncio.gather(*[
@@ -104,7 +104,7 @@ class WeatherPipeline:
             for sid, res in zip(batch, results):
                 references[sid] = res if isinstance(res, dict) else None
             if i + batch_size < len(station_ids):
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(2.0)
 
         for reading in raw_readings:
             ref = references.get(reading["station_id"])
@@ -169,20 +169,32 @@ class WeatherPipeline:
     async def step_forecast(self) -> List[Dict[str, Any]]:
         console.print("[bold blue]Step 3:[/bold blue] Running MOS forecasts via Open-Meteo...")
         forecasts = []
-        tasks = []
+
+        # Batch Open-Meteo requests (5 at a time, 1s sleep) to avoid 429s
+        all_tasks = []
         for station in STATIONS:
             obs = get_latest_clean_for_station(self.conn, station.station_id)
             history = get_clean_history_for_station(self.conn, station.station_id)
-            tasks.append(run_forecast_step(
+            all_tasks.append((station, run_forecast_step(
                 station, obs, self.open_meteo,
                 self.forecast_model, self.persistence,
                 nasa_client=self.nasa_power,
                 station_history=history,
-            ))
+            )))
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        all_results = []
+        om_batch_size = 5
+        for i in range(0, len(all_tasks), om_batch_size):
+            batch = all_tasks[i:i + om_batch_size]
+            batch_results = await asyncio.gather(
+                *[task for _, task in batch], return_exceptions=True
+            )
+            all_results.extend(zip([s for s, _ in batch], batch_results))
+            if i + om_batch_size < len(all_tasks):
+                await asyncio.sleep(1.0)
+
         mos_count = 0
-        for station, result in zip(STATIONS, results):
+        for station, result in all_results:
             if isinstance(result, Exception) or result is None:
                 log.warning("Forecast failed for %s: %s", station.station_id, result)
                 continue

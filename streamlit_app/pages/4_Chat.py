@@ -76,7 +76,7 @@ with st.sidebar:
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("Look up", use_container_width=True):
+        if st.button("Look up", width="stretch"):
             if phone_input.strip():
                 st.session_state.farmer_phone = phone_input.strip()
                 with st.spinner("Identifying..."):
@@ -117,7 +117,7 @@ with st.sidebar:
                 st.rerun()
 
     with col2:
-        if st.button("Clear", use_container_width=True):
+        if st.button("Clear", width="stretch"):
             st.session_state.farmer_phone = ""
             st.session_state.farmer_identified = False
             st.session_state.farmer_info = None
@@ -142,7 +142,7 @@ with st.sidebar:
 
     st.divider()
 
-    if st.button("🗑️ Clear conversation", use_container_width=True):
+    if st.button("🗑️ Clear conversation", width="stretch"):
         st.session_state.chat_messages = [{
             "role": "assistant",
             "content": (
@@ -172,7 +172,7 @@ with st.sidebar:
         ]
 
     for qp in quick_prompts:
-        if st.button(qp, key=f"qp_{qp}", use_container_width=True):
+        if st.button(qp, key=f"qp_{qp}", width="stretch"):
             st.session_state["_pending_prompt"] = qp
             st.rerun()
 
@@ -184,7 +184,7 @@ with st.sidebar:
         registry = get_registry()
         for f in registry.list_farmers()[:6]:
             if st.button(f"{f['name']} ({f['phone'][-4:]})", key=f"farmer_{f['phone']}",
-                         use_container_width=True):
+                         width="stretch"):
                 st.session_state.farmer_phone = f["phone"]
                 st.rerun()
     except Exception:

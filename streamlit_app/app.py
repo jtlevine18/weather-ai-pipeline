@@ -32,7 +32,7 @@ with st.sidebar:
 
     # Pipeline trigger
     can_run = True  # extend with RBAC if needed
-    if st.button("▶ Run Pipeline Now", use_container_width=True):
+    if st.button("▶ Run Pipeline Now", width="stretch"):
         with st.spinner("Running pipeline…"):
             try:
                 import asyncio
@@ -60,7 +60,7 @@ with st.sidebar:
         st.metric("Avg Data Quality", f"{avg_q:.0%}")
 
     st.divider()
-    if st.button("🔄 Refresh", use_container_width=True):
+    if st.button("🔄 Refresh", width="stretch"):
         st.cache_data.clear()
         st.rerun()
 

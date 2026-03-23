@@ -100,7 +100,7 @@ with tab_map:
         df_show["avg_quality"] = df_show["avg_quality"].round(3)
     if "altitude_m" in df_show.columns:
         df_show["altitude_m"] = df_show["altitude_m"].astype(int)
-    st.dataframe(df_show, use_container_width=True, hide_index=True)
+    st.dataframe(df_show, width="stretch", hide_index=True)
 
 # ========================== HEALTH ==========================
 with tab_health:
@@ -135,9 +135,9 @@ with tab_health:
         if "avg_quality" in df_health.columns:
             df_health["avg_quality"] = df_health["avg_quality"].round(3)
             styled = df_health.style.map(_quality_style, subset=["avg_quality"])
-            st.dataframe(styled, use_container_width=True, hide_index=True)
+            st.dataframe(styled, width="stretch", hide_index=True)
         else:
-            st.dataframe(df_health, use_container_width=True, hide_index=True)
+            st.dataframe(df_health, width="stretch", hide_index=True)
 
         if not health.empty and "avg_quality" in health.columns:
             st.markdown('<div class="section-header">Average Data Quality by Station</div>', unsafe_allow_html=True)
@@ -174,7 +174,7 @@ with tab_quality:
                 show = [c for c in ["station_id", "ts", "temperature", "humidity",
                                      "wind_speed", "rainfall", "quality_score"]
                         if c in df_raw.columns]
-                st.dataframe(df_raw[show].head(50), use_container_width=True,
+                st.dataframe(df_raw[show].head(50), width="stretch",
                              height=300, hide_index=True)
         with right:
             st.markdown("**Clean telemetry (after healing)**")
@@ -192,9 +192,9 @@ with tab_quality:
                 df_disp = df_clean[show].head(50)
                 if "heal_action" in df_disp.columns:
                     st.dataframe(df_disp.style.apply(_highlight_healed),
-                                 use_container_width=True, height=300, hide_index=True)
+                                 width="stretch", height=300, hide_index=True)
                 else:
-                    st.dataframe(df_disp, use_container_width=True,
+                    st.dataframe(df_disp, width="stretch",
                                  height=300, hide_index=True)
 
         if not df_clean.empty and "heal_action" in df_clean.columns:

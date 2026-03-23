@@ -158,7 +158,7 @@ with tab_delivery:
         df_dl = delivery[display_cols].head(30).copy()
         if "message" in df_dl.columns:
             df_dl["message"] = df_dl["message"].str[:80]
-        st.dataframe(df_dl, use_container_width=True, hide_index=True)
+        st.dataframe(df_dl, width="stretch", hide_index=True)
 
 # ========================== COST ESTIMATE ==========================
 with tab_cost:
@@ -272,7 +272,7 @@ with tab_eval:
                                            if m.get("imputation_mae") is not None else "---"),
                     })
                 st.dataframe(pd.DataFrame(pft_rows),
-                             hide_index=True, use_container_width=True)
+                             hide_index=True, width="stretch")
             st.divider()
 
         # ---- Forecast ----
@@ -298,7 +298,7 @@ with tab_eval:
                     for mt, m in by_model.items()
                 ]
                 st.dataframe(pd.DataFrame(model_rows),
-                             hide_index=True, use_container_width=True)
+                             hide_index=True, width="stretch")
             st.divider()
 
         # ---- RAG ----
@@ -314,7 +314,7 @@ with tab_eval:
                     for mode, m in by_mode.items()
                 ]
                 st.dataframe(pd.DataFrame(rag_rows),
-                             hide_index=True, use_container_width=True)
+                             hide_index=True, width="stretch")
             st.divider()
 
         # ---- Advisory ----
@@ -331,7 +331,7 @@ with tab_eval:
                     for prov, m in by_prov.items()
                 ]
                 st.dataframe(pd.DataFrame(adv_rows),
-                             hide_index=True, use_container_width=True)
+                             hide_index=True, width="stretch")
             st.divider()
 
         # ---- Translation ----
@@ -354,7 +354,7 @@ with tab_eval:
                     for lang, m in by_lang.items()
                 ]
                 st.dataframe(pd.DataFrame(lang_rows),
-                             hide_index=True, use_container_width=True)
+                             hide_index=True, width="stretch")
 
         # ---- DPI ----
         if "dpi" in evals:
@@ -376,7 +376,7 @@ with tab_eval:
                 {"Check": "Soil pH realism", "Rate": f"{geo.get('ph_match_rate', 0):.0%}"},
             ]
             st.dataframe(pd.DataFrame(geo_rows),
-                         hide_index=True, use_container_width=True)
+                         hide_index=True, width="stretch")
             st.divider()
 
         # ---- Conversation ----
@@ -446,7 +446,7 @@ with tab_agent:
             st.subheader("Tool Usage")
             tool_counts = tool_rows["tool_name"].value_counts().reset_index()
             tool_counts.columns = ["Tool", "Count"]
-            st.dataframe(tool_counts, hide_index=True, use_container_width=True)
+            st.dataframe(tool_counts, hide_index=True, width="stretch")
 
         # Recent conversations
         st.subheader("Recent Conversations")
@@ -460,7 +460,7 @@ with tab_agent:
             if "content" in df_show.columns:
                 df_show["content"] = df_show["content"].str[:100]
             df_show.columns = ["Session", "Query", "Time"][:len(display_cols)]
-            st.dataframe(df_show, hide_index=True, use_container_width=True)
+            st.dataframe(df_show, hide_index=True, width="stretch")
 
 # ========================== DELIVERY FUNNEL ==========================
 with tab_funnel:
@@ -506,4 +506,4 @@ with tab_funnel:
         ).round(1)
         station_agg.columns = ["Station", "Forecasts", "Advisories",
                                "Attempted", "Succeeded", "Success %"]
-        st.dataframe(station_agg, hide_index=True, use_container_width=True)
+        st.dataframe(station_agg, hide_index=True, width="stretch")

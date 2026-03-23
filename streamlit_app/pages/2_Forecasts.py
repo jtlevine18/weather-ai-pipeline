@@ -4,6 +4,7 @@ import os
 import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
+import json
 import streamlit as st
 import pandas as pd
 
@@ -197,7 +198,7 @@ with tab_fc:
             ] if c in filtered.columns]
             st.dataframe(
                 filtered[show_cols].sort_values("issued_at", ascending=False),
-                use_container_width=True,
+                width="stretch",
                 height=400,
                 hide_index=True,
             )
@@ -296,3 +297,114 @@ with tab_model:
             f'<th style="{th}">Min</th><th style="{th}">Max</th><th style="{th}">Count</th>'
             f'</tr></thead><tbody>{conf_rows}</tbody></table>'
         )
+
+    # ==================================================================
+    # MOS Training Section
+    # ==================================================================
+    st.markdown("<div style='height:32px'></div>", unsafe_allow_html=True)
+    st.markdown(
+        '<p style="font-size:0.8rem;font-weight:600;text-transform:uppercase;'
+        'letter-spacing:1.5px;color:#666;border-bottom:2px solid #d4a019;'
+        'padding-bottom:6px;display:inline-block;">MOS Model Training</p>',
+        unsafe_allow_html=True,
+    )
+
+    st.markdown(
+        '<p style="font-size:0.85rem;color:#555;">'
+        'Collect observation + NWP pairs by running Steps 1-3 (free APIs only — no Claude cost). '
+        'Once you have enough data, retrain the XGBoost MOS model for better forecast accuracy.</p>',
+        unsafe_allow_html=True,
+    )
+
+    # Show current training data stats
+    try:
+        import duckdb
+        _db = os.path.join(os.path.dirname(__file__), "..", "..", "weather.duckdb")
+        _conn = duckdb.connect(_db, read_only=True)
+        _clean_n = _conn.execute("SELECT COUNT(*) FROM clean_telemetry").fetchone()[0]
+        _fc_n = _conn.execute("SELECT COUNT(*) FROM forecasts").fetchone()[0]
+        _stations_n = _conn.execute("SELECT COUNT(DISTINCT station_id) FROM forecasts").fetchone()[0]
+        _conn.close()
+    except Exception:
+        _clean_n = _fc_n = _stations_n = 0
+
+    m1, m2, m3 = st.columns(3)
+    with m1:
+        st.metric("Clean Observations", _clean_n)
+    with m2:
+        st.metric("Forecast Pairs", _fc_n)
+    with m3:
+        st.metric("Stations with Data", _stations_n)
+
+    # Show existing model metrics if available
+    _metrics_path = os.path.join(os.path.dirname(__file__), "..", "..", "metrics", "mos_metrics.json")
+    if os.path.exists(_metrics_path):
+        with open(_metrics_path) as _mf:
+            _metrics = json.load(_mf)
+        mm1, mm2, mm3, mm4 = st.columns(4)
+        with mm1:
+            st.metric("Model MAE", f"{_metrics.get('mae', '?')} °C")
+        with mm2:
+            st.metric("Model RMSE", f"{_metrics.get('rmse', '?')} °C")
+        with mm3:
+            st.metric("Model R²", f"{_metrics.get('r2', '?')}")
+        with mm4:
+            st.metric("Training Samples", _metrics.get("n_train", "?"))
+
+    btn1, btn2 = st.columns(2)
+
+    with btn1:
+        if st.button("📡 Collect Training Data", width="stretch",
+                      help="Run Steps 1-3 only (Ingest → Heal → Forecast). Free APIs, no Claude cost."):
+            with st.spinner("Running Steps 1-3 (Ingest → Heal → Forecast)..."):
+                try:
+                    import asyncio
+                    from config import get_config
+                    from src.pipeline import WeatherPipeline
+
+                    cfg = get_config()
+                    pipe = WeatherPipeline(cfg, live_delivery=False)
+
+                    async def _collect():
+                        raw = await pipe.step_ingest()
+                        clean = await pipe.step_heal(raw)
+                        forecasts_out = await pipe.step_forecast()
+                        return len(raw), len(clean), len(forecasts_out)
+
+                    n_raw, n_clean, n_fc = asyncio.run(_collect())
+                    st.success(f"Collected {n_raw} readings → {n_clean} cleaned → {n_fc} forecasts")
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Collection failed: {exc}")
+
+    with btn2:
+        if st.button("🔧 Retrain MOS Model", width="stretch",
+                      help="Export training data and retrain XGBoost. Updates models/hybrid_mos.json."):
+            with st.spinner("Exporting training data + retraining XGBoost..."):
+                try:
+                    import subprocess
+                    proj_root = os.path.join(os.path.dirname(__file__), "..", "..")
+
+                    # Step 1: Export
+                    r1 = subprocess.run(
+                        [sys.executable, "scripts/export_training_data.py"],
+                        cwd=proj_root, capture_output=True, text=True, timeout=120,
+                    )
+                    if r1.returncode != 0:
+                        st.error(f"Export failed:\n```\n{r1.stderr or r1.stdout}\n```")
+                        st.stop()
+
+                    # Step 2: Train
+                    r2 = subprocess.run(
+                        [sys.executable, "scripts/train_mos.py"],
+                        cwd=proj_root, capture_output=True, text=True, timeout=120,
+                    )
+                    if r2.returncode != 0:
+                        st.error(f"Training failed:\n```\n{r2.stderr or r2.stdout}\n```")
+                        st.stop()
+
+                    st.success("Model retrained! Refresh to see updated metrics.")
+                    st.text(r2.stdout)
+                    st.rerun()
+                except Exception as exc:
+                    st.error(f"Retrain failed: {exc}")
