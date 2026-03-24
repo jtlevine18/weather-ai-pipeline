@@ -43,7 +43,7 @@ dagster==1.7.0
 dagster-webserver==1.7.0
 
 # PostgreSQL
-psycopg2-binary==2.9.0
+psycopg2-binary==2.9.9
 
 # API + Auth
 fastapi==0.111.0
