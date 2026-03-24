@@ -9,6 +9,10 @@
 # FAISS index (binary) — rebuilt on first pipeline run
 models/faiss_index/
 
+# Node / frontend build
+node_modules/
+frontend/dist/
+
 # Python cache
 __pycache__/
 *.py[cod]
