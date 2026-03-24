@@ -8,14 +8,13 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 # ---------------------------------------------------------------------------
 # Inject Streamlit Cloud secrets into os.environ before anything reads them.
-# On Streamlit Cloud, API keys are stored in the Secrets manager (not .env).
-# This is a no-op locally when .env is already loaded by config.py.
 # ---------------------------------------------------------------------------
 def _inject_cloud_secrets() -> None:
     try:
         import streamlit as st
         for key in ("ANTHROPIC_API_KEY", "TOMORROW_IO_API_KEY",
-                    "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN"):
+                    "TWILIO_ACCOUNT_SID", "TWILIO_AUTH_TOKEN", "DATABASE_URL",
+                    "JWT_SECRET_KEY"):
             if key in st.secrets and not os.environ.get(key):
                 os.environ[key] = st.secrets[key]
     except Exception:
@@ -23,17 +22,33 @@ def _inject_cloud_secrets() -> None:
 
 _inject_cloud_secrets()
 
-import duckdb
+import psycopg2
 import pandas as pd
 import streamlit as st
 from contextlib import contextmanager
 from typing import Any, Dict, List, Optional
 
-DB_PATH = os.path.join(os.path.dirname(__file__), "..", "weather.duckdb")
+
+def _get_database_url() -> str:
+    """Get DATABASE_URL for Streamlit connections."""
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        try:
+            from dotenv import load_dotenv
+            load_dotenv()
+            url = os.environ.get("DATABASE_URL", "")
+        except ImportError:
+            pass
+    return url
 
 
 def get_conn():
-    return duckdb.connect(DB_PATH, read_only=True)
+    url = _get_database_url()
+    if not url:
+        raise RuntimeError("DATABASE_URL not set")
+    conn = psycopg2.connect(url)
+    conn.autocommit = True
+    return conn
 
 
 @contextmanager
@@ -47,11 +62,14 @@ def _db():
 
 
 def table_exists(conn, name: str) -> bool:
-    try:
-        conn.execute(f"SELECT 1 FROM {name} LIMIT 1")
-        return True
-    except Exception:
-        return False
+    """Check if a table exists in the public schema."""
+    cur = conn.cursor()
+    cur.execute(
+        "SELECT EXISTS(SELECT 1 FROM information_schema.tables "
+        "WHERE table_name = %s AND table_schema = 'public')",
+        [name],
+    )
+    return cur.fetchone()[0]
 
 
 @st.cache_data(ttl=60)
@@ -60,9 +78,10 @@ def load_forecasts(limit: int = 200) -> pd.DataFrame:
         with _db() as conn:
             if not table_exists(conn, "forecasts"):
                 return pd.DataFrame()
-            return conn.execute(
-                "SELECT * FROM forecasts ORDER BY issued_at DESC LIMIT ?", [limit]
-            ).df()
+            return pd.read_sql(
+                "SELECT * FROM forecasts ORDER BY issued_at DESC LIMIT %s",
+                conn, params=[limit],
+            )
     except Exception:
         return pd.DataFrame()
 
@@ -73,9 +92,10 @@ def load_alerts(limit: int = 100) -> pd.DataFrame:
         with _db() as conn:
             if not table_exists(conn, "agricultural_alerts"):
                 return pd.DataFrame()
-            return conn.execute(
-                "SELECT * FROM agricultural_alerts ORDER BY issued_at DESC LIMIT ?", [limit]
-            ).df()
+            return pd.read_sql(
+                "SELECT * FROM agricultural_alerts ORDER BY issued_at DESC LIMIT %s",
+                conn, params=[limit],
+            )
     except Exception:
         return pd.DataFrame()
 
@@ -86,9 +106,10 @@ def load_clean_telemetry(limit: int = 500) -> pd.DataFrame:
         with _db() as conn:
             if not table_exists(conn, "clean_telemetry"):
                 return pd.DataFrame()
-            return conn.execute(
-                "SELECT * FROM clean_telemetry ORDER BY ts DESC LIMIT ?", [limit]
-            ).df()
+            return pd.read_sql(
+                "SELECT * FROM clean_telemetry ORDER BY ts DESC LIMIT %s",
+                conn, params=[limit],
+            )
     except Exception:
         return pd.DataFrame()
 
@@ -99,9 +120,10 @@ def load_raw_telemetry(limit: int = 200) -> pd.DataFrame:
         with _db() as conn:
             if not table_exists(conn, "raw_telemetry"):
                 return pd.DataFrame()
-            return conn.execute(
-                "SELECT * FROM raw_telemetry ORDER BY ts DESC LIMIT ?", [limit]
-            ).df()
+            return pd.read_sql(
+                "SELECT * FROM raw_telemetry ORDER BY ts DESC LIMIT %s",
+                conn, params=[limit],
+            )
     except Exception:
         return pd.DataFrame()
 
@@ -112,9 +134,10 @@ def load_delivery_log(limit: int = 100) -> pd.DataFrame:
         with _db() as conn:
             if not table_exists(conn, "delivery_log"):
                 return pd.DataFrame()
-            return conn.execute(
-                "SELECT * FROM delivery_log ORDER BY delivered_at DESC LIMIT ?", [limit]
-            ).df()
+            return pd.read_sql(
+                "SELECT * FROM delivery_log ORDER BY delivered_at DESC LIMIT %s",
+                conn, params=[limit],
+            )
     except Exception:
         return pd.DataFrame()
 
@@ -125,9 +148,10 @@ def load_pipeline_runs(limit: int = 20) -> pd.DataFrame:
         with _db() as conn:
             if not table_exists(conn, "pipeline_runs"):
                 return pd.DataFrame()
-            return conn.execute(
-                "SELECT * FROM pipeline_runs ORDER BY started_at DESC LIMIT ?", [limit]
-            ).df()
+            return pd.read_sql(
+                "SELECT * FROM pipeline_runs ORDER BY started_at DESC LIMIT %s",
+                conn, params=[limit],
+            )
     except Exception:
         return pd.DataFrame()
 
@@ -140,16 +164,17 @@ def load_station_health() -> pd.DataFrame:
         with _db() as conn:
             if not table_exists(conn, "clean_telemetry"):
                 return pd.DataFrame()
-            return conn.execute("""
-                SELECT station_id,
+            return pd.read_sql(
+                """SELECT station_id,
                        MAX(ts) as last_seen,
                        COUNT(*) as record_count,
                        AVG(quality_score) as avg_quality,
                        SUM(CASE WHEN heal_action != 'none' THEN 1 ELSE 0 END) as healed_count
                 FROM clean_telemetry
-                WHERE station_id IN (SELECT UNNEST(?::VARCHAR[]))
-                GROUP BY station_id
-            """, [valid_ids]).df()
+                WHERE station_id = ANY(%s)
+                GROUP BY station_id""",
+                conn, params=[valid_ids],
+            )
     except Exception:
         return pd.DataFrame()
 
@@ -182,9 +207,10 @@ def load_conversation_log(limit: int = 200) -> pd.DataFrame:
         with _db() as conn:
             if not table_exists(conn, "conversation_log"):
                 return pd.DataFrame()
-            return conn.execute(
-                "SELECT * FROM conversation_log ORDER BY created_at DESC LIMIT ?", [limit]
-            ).df()
+            return pd.read_sql(
+                "SELECT * FROM conversation_log ORDER BY created_at DESC LIMIT %s",
+                conn, params=[limit],
+            )
     except Exception:
         return pd.DataFrame()
 
@@ -195,9 +221,10 @@ def load_delivery_metrics(limit: int = 500) -> pd.DataFrame:
         with _db() as conn:
             if not table_exists(conn, "delivery_metrics"):
                 return pd.DataFrame()
-            return conn.execute(
-                "SELECT * FROM delivery_metrics ORDER BY created_at DESC LIMIT ?", [limit]
-            ).df()
+            return pd.read_sql(
+                "SELECT * FROM delivery_metrics ORDER BY created_at DESC LIMIT %s",
+                conn, params=[limit],
+            )
     except Exception:
         return pd.DataFrame()
 
@@ -219,49 +246,47 @@ def load_eval_results() -> dict:
 
 
 # ---------------------------------------------------------------------------
-# New helpers for dashboard restructure
+# Dashboard helpers
 # ---------------------------------------------------------------------------
 
 @st.cache_data(ttl=60)
 def load_data_source_distribution() -> pd.DataFrame:
-    """Source distribution from raw_telemetry (IMD API / imdlib / synthetic)."""
     try:
         with _db() as conn:
             if not table_exists(conn, "raw_telemetry"):
                 return pd.DataFrame()
-            return conn.execute(
-                "SELECT source, COUNT(*) as count FROM raw_telemetry GROUP BY source ORDER BY count DESC"
-            ).df()
+            return pd.read_sql(
+                "SELECT source, COUNT(*) as count FROM raw_telemetry GROUP BY source ORDER BY count DESC",
+                conn,
+            )
     except Exception:
         return pd.DataFrame()
 
 
 @st.cache_data(ttl=60)
 def load_per_station_source() -> pd.DataFrame:
-    """Latest data source per station."""
     try:
         with _db() as conn:
             if not table_exists(conn, "raw_telemetry"):
                 return pd.DataFrame()
-            return conn.execute("""
+            return pd.read_sql("""
                 SELECT station_id, source, COUNT(*) as readings,
                        MAX(ts) as last_reading
                 FROM raw_telemetry
                 GROUP BY station_id, source
                 ORDER BY station_id
-            """).df()
+            """, conn)
     except Exception:
         return pd.DataFrame()
 
 
 @st.cache_data(ttl=60)
 def load_advisory_lineage(limit: int = 50) -> pd.DataFrame:
-    """Join alerts to forecasts by station_id + time proximity."""
     try:
         with _db() as conn:
             if not table_exists(conn, "agricultural_alerts") or not table_exists(conn, "forecasts"):
                 return pd.DataFrame()
-            return conn.execute("""
+            return pd.read_sql("""
                 WITH ranked AS (
                     SELECT a.station_id, a.condition as alert_condition,
                            a.advisory_en, a.advisory_local, a.language, a.provider,
@@ -271,16 +296,16 @@ def load_advisory_lineage(limit: int = 50) -> pd.DataFrame:
                            f.confidence as fc_confidence, f.issued_at as fc_time,
                            ROW_NUMBER() OVER (
                                PARTITION BY a.id
-                               ORDER BY ABS(EPOCH(a.issued_at) - EPOCH(f.issued_at))
+                               ORDER BY ABS(EXTRACT(EPOCH FROM a.issued_at) - EXTRACT(EPOCH FROM f.issued_at))
                            ) as rn
                     FROM agricultural_alerts a
                     LEFT JOIN forecasts f ON a.station_id = f.station_id
-                        AND ABS(EPOCH(a.issued_at) - EPOCH(f.issued_at)) < 600
+                        AND ABS(EXTRACT(EPOCH FROM a.issued_at) - EXTRACT(EPOCH FROM f.issued_at)) < 600
                 )
                 SELECT * FROM ranked WHERE rn = 1
                 ORDER BY alert_time DESC
-                LIMIT ?
-            """, [limit]).df()
+                LIMIT %s
+            """, conn, params=[limit])
     except Exception:
         return pd.DataFrame()
 
@@ -340,39 +365,39 @@ def load_farmer_profile_detail(phone: str) -> Optional[Dict]:
 
 @st.cache_data(ttl=60)
 def load_healing_log(limit: int = 200) -> pd.DataFrame:
-    """Load latest healing assessments with agent reasoning."""
     try:
         with _db() as conn:
             if not table_exists(conn, "healing_log"):
                 return pd.DataFrame()
-            return conn.execute(
-                "SELECT * FROM healing_log ORDER BY created_at DESC LIMIT ?", [limit]
-            ).df()
+            return pd.read_sql(
+                "SELECT * FROM healing_log ORDER BY created_at DESC LIMIT %s",
+                conn, params=[limit],
+            )
     except Exception:
         return pd.DataFrame()
 
 
 @st.cache_data(ttl=60)
 def load_healing_stats() -> Dict[str, Any]:
-    """Aggregate healing stats: assessment distribution, tool usage, avg quality."""
     try:
         with _db() as conn:
             if not table_exists(conn, "healing_log"):
                 return {}
 
-            # Assessment distribution
-            dist_rows = conn.execute(
+            cur = conn.cursor()
+            cur.execute(
                 """SELECT assessment, COUNT(*) as cnt, AVG(quality_score) as avg_q
                    FROM healing_log GROUP BY assessment"""
-            ).fetchall()
-            dist = {r[0]: {"count": r[1], "avg_quality": round(r[2], 3) if r[2] else None}
+            )
+            dist_rows = cur.fetchall()
+            dist = {r[0]: {"count": r[1], "avg_quality": round(float(r[2]), 3) if r[2] else None}
                     for r in dist_rows}
 
-            # Tool usage frequency
-            tool_rows = conn.execute(
+            cur.execute(
                 """SELECT tools_used FROM healing_log
                    WHERE tools_used IS NOT NULL AND tools_used != ''"""
-            ).fetchall()
+            )
+            tool_rows = cur.fetchall()
             tool_counts: Dict[str, int] = {}
             for (tools_str,) in tool_rows:
                 for t in tools_str.split(","):
@@ -380,11 +405,11 @@ def load_healing_stats() -> Dict[str, Any]:
                     if t:
                         tool_counts[t] = tool_counts.get(t, 0) + 1
 
-            # Latest run stats
-            latest = conn.execute(
+            cur.execute(
                 """SELECT model, tokens_in, tokens_out, latency_s, fallback_used, created_at
                    FROM healing_log ORDER BY created_at DESC LIMIT 1"""
-            ).fetchall()
+            )
+            latest = cur.fetchall()
             latest_run = None
             if latest:
                 r = latest[0]
@@ -418,46 +443,52 @@ def load_pipeline_stage_stats() -> Dict[str, Any]:
     }
     try:
         with _db() as conn:
+            cur = conn.cursor()
+
             if table_exists(conn, "raw_telemetry"):
-                src = conn.execute(
+                cur.execute(
                     "SELECT source, COUNT(*) as n FROM raw_telemetry GROUP BY source ORDER BY n DESC LIMIT 5"
-                ).fetchall()
+                )
+                src = cur.fetchall()
                 stats["sources"] = " · ".join(f"{s[0]}:{s[1]}" for s in src) if src else "no data"
 
             if table_exists(conn, "clean_telemetry"):
-                row = conn.execute(
-                    "SELECT AVG(quality_score) FROM clean_telemetry"
-                ).fetchone()
-                stats["avg_quality"] = round(row[0], 2) if row and row[0] else 0.0
+                cur.execute("SELECT AVG(quality_score) FROM clean_telemetry")
+                row = cur.fetchone()
+                stats["avg_quality"] = round(float(row[0]), 2) if row and row[0] else 0.0
 
             if table_exists(conn, "forecasts"):
-                row = conn.execute("SELECT COUNT(*) FROM forecasts").fetchone()
+                cur.execute("SELECT COUNT(*) FROM forecasts")
+                row = cur.fetchone()
                 stats["forecasts"] = row[0] if row else 0
-                row = conn.execute(
-                    "SELECT COUNT(*) FROM forecasts WHERE model_used = 'hybrid_mos'"
-                ).fetchone()
+
+                cur.execute("SELECT COUNT(*) FROM forecasts WHERE model_used = 'hybrid_mos'")
+                row = cur.fetchone()
                 stats["mos_count"] = row[0] if row else 0
-                row = conn.execute(
-                    "SELECT COUNT(DISTINCT station_id) FROM forecasts"
-                ).fetchone()
+
+                cur.execute("SELECT COUNT(DISTINCT station_id) FROM forecasts")
+                row = cur.fetchone()
                 stats["fc_stations"] = row[0] if row else 0
-                row = conn.execute(
-                    "SELECT AVG(confidence) FROM forecasts WHERE confidence IS NOT NULL"
-                ).fetchone()
-                stats["avg_confidence"] = round(row[0], 2) if row and row[0] else 0.0
+
+                cur.execute("SELECT AVG(confidence) FROM forecasts WHERE confidence IS NOT NULL")
+                row = cur.fetchone()
+                stats["avg_confidence"] = round(float(row[0]), 2) if row and row[0] else 0.0
 
             if table_exists(conn, "agricultural_alerts"):
-                row = conn.execute("SELECT COUNT(*) FROM agricultural_alerts").fetchone()
+                cur.execute("SELECT COUNT(*) FROM agricultural_alerts")
+                row = cur.fetchone()
                 stats["advisories"] = row[0] if row else 0
 
             if table_exists(conn, "delivery_log"):
-                row = conn.execute("SELECT COUNT(*) FROM delivery_log").fetchone()
+                cur.execute("SELECT COUNT(*) FROM delivery_log")
+                row = cur.fetchone()
                 stats["deliveries"] = row[0] if row else 0
 
             if table_exists(conn, "pipeline_runs"):
-                row = conn.execute(
+                cur.execute(
                     "SELECT started_at, status, summary FROM pipeline_runs ORDER BY started_at DESC LIMIT 1"
-                ).fetchone()
+                )
+                row = cur.fetchone()
                 if row:
                     stats["last_run"] = {"time": row[0], "status": row[1], "summary": row[2]}
     except Exception:

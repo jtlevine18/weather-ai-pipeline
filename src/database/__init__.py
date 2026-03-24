@@ -1,4 +1,4 @@
-"""DuckDB schema and CRUD helpers for the weather pipeline.
+"""PostgreSQL schema and CRUD helpers for the weather pipeline.
 
 This package splits database operations by domain. All public names are
 re-exported here so existing ``from src.database import X`` continues to work.
@@ -7,11 +7,9 @@ re-exported here so existing ``from src.database import X`` continues to work.
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
-import duckdb
-
 
 # ---------------------------------------------------------------------------
-# Schema DDL
+# Schema DDL (PostgreSQL)
 # ---------------------------------------------------------------------------
 
 DDL = """
@@ -19,31 +17,31 @@ CREATE TABLE IF NOT EXISTS raw_telemetry (
     id          VARCHAR PRIMARY KEY,
     station_id  VARCHAR NOT NULL,
     ts          TIMESTAMP NOT NULL,
-    temperature DOUBLE,
-    humidity    DOUBLE,
-    wind_speed  DOUBLE,
-    wind_dir    DOUBLE,
-    pressure    DOUBLE,
-    rainfall    DOUBLE,
+    temperature DOUBLE PRECISION,
+    humidity    DOUBLE PRECISION,
+    wind_speed  DOUBLE PRECISION,
+    wind_dir    DOUBLE PRECISION,
+    pressure    DOUBLE PRECISION,
+    rainfall    DOUBLE PRECISION,
     fault_type  VARCHAR,
     source      VARCHAR DEFAULT 'synthetic',
-    created_at  TIMESTAMP DEFAULT current_timestamp
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS clean_telemetry (
     id           VARCHAR PRIMARY KEY,
     station_id   VARCHAR NOT NULL,
     ts           TIMESTAMP NOT NULL,
-    temperature  DOUBLE,
-    humidity     DOUBLE,
-    wind_speed   DOUBLE,
-    wind_dir     DOUBLE,
-    pressure     DOUBLE,
-    rainfall     DOUBLE,
+    temperature  DOUBLE PRECISION,
+    humidity     DOUBLE PRECISION,
+    wind_speed   DOUBLE PRECISION,
+    wind_dir     DOUBLE PRECISION,
+    pressure     DOUBLE PRECISION,
+    rainfall     DOUBLE PRECISION,
     heal_action  VARCHAR,
     heal_source  VARCHAR,
-    quality_score DOUBLE DEFAULT 1.0,
-    created_at   TIMESTAMP DEFAULT current_timestamp
+    quality_score DOUBLE PRECISION DEFAULT 1.0,
+    created_at   TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS healing_log (
@@ -54,15 +52,15 @@ CREATE TABLE IF NOT EXISTS healing_log (
     assessment      VARCHAR,
     reasoning       VARCHAR,
     corrections     VARCHAR,
-    quality_score   DOUBLE,
+    quality_score   DOUBLE PRECISION,
     tools_used      VARCHAR,
     original_values VARCHAR,
     model           VARCHAR,
     tokens_in       INTEGER,
     tokens_out      INTEGER,
-    latency_s       DOUBLE,
+    latency_s       DOUBLE PRECISION,
     fallback_used   BOOLEAN DEFAULT FALSE,
-    created_at      TIMESTAMP DEFAULT current_timestamp
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS forecasts (
@@ -70,24 +68,24 @@ CREATE TABLE IF NOT EXISTS forecasts (
     station_id    VARCHAR NOT NULL,
     issued_at     TIMESTAMP NOT NULL,
     valid_for_ts  TIMESTAMP NOT NULL,
-    temperature   DOUBLE,
-    humidity      DOUBLE,
-    wind_speed    DOUBLE,
-    rainfall      DOUBLE,
+    temperature   DOUBLE PRECISION,
+    humidity      DOUBLE PRECISION,
+    wind_speed    DOUBLE PRECISION,
+    rainfall      DOUBLE PRECISION,
     condition     VARCHAR,
     model_used    VARCHAR,
     nwp_source    VARCHAR DEFAULT 'open_meteo',
-    nwp_temp      DOUBLE,
-    correction    DOUBLE,
-    confidence    DOUBLE DEFAULT 0.7,
-    created_at    TIMESTAMP DEFAULT current_timestamp
+    nwp_temp      DOUBLE PRECISION,
+    correction    DOUBLE PRECISION,
+    confidence    DOUBLE PRECISION DEFAULT 0.7,
+    created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS agricultural_alerts (
     id             VARCHAR PRIMARY KEY,
     station_id     VARCHAR NOT NULL,
-    farmer_lat     DOUBLE,
-    farmer_lon     DOUBLE,
+    farmer_lat     DOUBLE PRECISION,
+    farmer_lon     DOUBLE PRECISION,
     issued_at      TIMESTAMP NOT NULL,
     condition      VARCHAR,
     advisory_en    VARCHAR,
@@ -95,7 +93,7 @@ CREATE TABLE IF NOT EXISTS agricultural_alerts (
     language       VARCHAR,
     provider       VARCHAR,
     retrieval_docs INTEGER DEFAULT 0,
-    created_at     TIMESTAMP DEFAULT current_timestamp
+    created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS delivery_log (
@@ -106,7 +104,7 @@ CREATE TABLE IF NOT EXISTS delivery_log (
     recipient   VARCHAR,
     status      VARCHAR,
     message     VARCHAR,
-    delivered_at TIMESTAMP DEFAULT current_timestamp
+    delivered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS pipeline_runs (
@@ -129,7 +127,7 @@ CREATE TABLE IF NOT EXISTS conversation_log (
     tokens_in   INTEGER,
     tokens_out  INTEGER,
     latency_ms  INTEGER,
-    created_at  TIMESTAMP DEFAULT current_timestamp
+    created_at  TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS delivery_metrics (
@@ -141,7 +139,7 @@ CREATE TABLE IF NOT EXISTS delivery_metrics (
     deliveries_attempted INTEGER DEFAULT 0,
     deliveries_succeeded INTEGER DEFAULT 0,
     channels_used        VARCHAR,
-    created_at           TIMESTAMP DEFAULT current_timestamp
+    created_at           TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS feedback_responses (
@@ -151,7 +149,7 @@ CREATE TABLE IF NOT EXISTS feedback_responses (
     question       VARCHAR,
     response       VARCHAR,
     response_value INTEGER,
-    received_at    TIMESTAMP DEFAULT current_timestamp
+    received_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS farmer_profiles (
@@ -162,36 +160,36 @@ CREATE TABLE IF NOT EXISTS farmer_profiles (
     district        VARCHAR,
     station_id      VARCHAR,
     primary_crops   VARCHAR,
-    total_area      DOUBLE,
+    total_area      DOUBLE PRECISION,
     profile_json    VARCHAR,
-    cached_at       TIMESTAMP DEFAULT current_timestamp
+    cached_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS farmer_land_records (
     id              VARCHAR PRIMARY KEY,
     aadhaar_id      VARCHAR NOT NULL,
     survey_number   VARCHAR,
-    area_hectares   DOUBLE,
+    area_hectares   DOUBLE PRECISION,
     soil_type       VARCHAR,
     irrigation_type VARCHAR,
-    gps_lat         DOUBLE,
-    gps_lon         DOUBLE,
+    gps_lat         DOUBLE PRECISION,
+    gps_lon         DOUBLE PRECISION,
     crops           VARCHAR,
     station_id      VARCHAR,
-    created_at      TIMESTAMP DEFAULT current_timestamp
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS farmer_soil_health (
     id              VARCHAR PRIMARY KEY,
     aadhaar_id      VARCHAR NOT NULL,
     card_number     VARCHAR,
-    pH              DOUBLE,
-    nitrogen_kg_ha  DOUBLE,
-    phosphorus_kg_ha DOUBLE,
-    potassium_kg_ha DOUBLE,
-    organic_carbon  DOUBLE,
+    pH              DOUBLE PRECISION,
+    nitrogen_kg_ha  DOUBLE PRECISION,
+    phosphorus_kg_ha DOUBLE PRECISION,
+    potassium_kg_ha DOUBLE PRECISION,
+    organic_carbon  DOUBLE PRECISION,
     classification  VARCHAR,
-    created_at      TIMESTAMP DEFAULT current_timestamp
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS conversation_sessions (
@@ -201,7 +199,7 @@ CREATE TABLE IF NOT EXISTS conversation_sessions (
     state           VARCHAR DEFAULT 'onboarding',
     language        VARCHAR DEFAULT 'en',
     context_json    VARCHAR,
-    updated_at      TIMESTAMP DEFAULT current_timestamp
+    updated_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS conversation_memory (
@@ -211,7 +209,7 @@ CREATE TABLE IF NOT EXISTS conversation_memory (
     memory_type     VARCHAR,
     content         VARCHAR,
     expires_at      TIMESTAMP,
-    created_at      TIMESTAMP DEFAULT current_timestamp
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 CREATE TABLE IF NOT EXISTS scheduled_followups (
@@ -223,30 +221,42 @@ CREATE TABLE IF NOT EXISTS scheduled_followups (
     message_template VARCHAR,
     status          VARCHAR DEFAULT 'pending',
     fired_at        TIMESTAMP,
-    created_at      TIMESTAMP DEFAULT current_timestamp
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS users (
+    id              VARCHAR PRIMARY KEY,
+    username        VARCHAR UNIQUE NOT NULL,
+    password_hash   VARCHAR NOT NULL,
+    role            VARCHAR DEFAULT 'viewer',
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 """
 
 
-def init_db(db_path: str = "weather.duckdb") -> duckdb.DuckDBPyConnection:
-    conn = duckdb.connect(db_path)
+def init_db(database_url: str = "") -> Any:
+    """Initialize PostgreSQL database and return connection.
+
+    If database_url is empty, reads from DATABASE_URL environment variable.
+    """
+    from src.database._util import PgConnection, get_database_url
+    if not database_url:
+        database_url = get_database_url()
+    conn = PgConnection(database_url)
     conn.execute(DDL)
-    # Schema migrations for existing databases
     _migrate(conn)
     return conn
 
 
-def _migrate(conn: duckdb.DuckDBPyConnection) -> None:
+def _migrate(conn) -> None:
     """Apply schema migrations to existing tables (idempotent)."""
     _add_column_if_missing(conn, "forecasts", "nwp_source", "VARCHAR DEFAULT 'open_meteo'")
 
 
 def _add_column_if_missing(conn, table: str, column: str, typedef: str) -> None:
-    """Add a column to an existing table if it doesn't exist yet."""
+    """Add a column if it doesn't exist (PostgreSQL 9.6+)."""
     try:
-        cols = [r[1] for r in conn.execute(f"PRAGMA table_info('{table}')").fetchall()]
-        if column not in cols:
-            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {typedef}")
+        conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {typedef}")
     except Exception:
         pass
 

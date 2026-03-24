@@ -1,0 +1,75 @@
+"""JWT authentication for the weather pipeline API.
+
+Provides password hashing, token creation/validation, and FastAPI dependencies
+for route-level access control.
+
+Roles:
+  - operator: full access (create users, trigger pipeline)
+  - viewer: read-only data access
+"""
+
+from __future__ import annotations
+import os
+from datetime import datetime, timedelta
+
+from fastapi import Depends, HTTPException
+from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
+from jose import JWTError, jwt
+from passlib.context import CryptContext
+from pydantic import BaseModel
+
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-change-in-production")
+ALGORITHM = "HS256"
+TOKEN_EXPIRE_HOURS = 24
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+security = HTTPBearer()
+
+
+class User(BaseModel):
+    username: str
+    role: str = "viewer"
+
+
+class TokenData(BaseModel):
+    username: str
+    role: str
+
+
+def hash_password(password: str) -> str:
+    return pwd_context.hash(password)
+
+
+def verify_password(plain: str, hashed: str) -> bool:
+    return pwd_context.verify(plain, hashed)
+
+
+def create_token(username: str, role: str = "viewer") -> str:
+    expire = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    return jwt.encode(
+        {"sub": username, "role": role, "exp": expire},
+        SECRET_KEY, algorithm=ALGORITHM,
+    )
+
+
+def decode_token(token: str) -> TokenData:
+    try:
+        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return TokenData(username=payload["sub"], role=payload.get("role", "viewer"))
+    except JWTError:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+
+
+async def get_current_user(
+    creds: HTTPAuthorizationCredentials = Depends(security),
+) -> User:
+    """FastAPI dependency — extracts user from Bearer token."""
+    data = decode_token(creds.credentials)
+    return User(username=data.username, role=data.role)
+
+
+def require_operator(user: User = Depends(get_current_user)) -> User:
+    """FastAPI dependency — requires operator role."""
+    if user.role != "operator":
+        raise HTTPException(status_code=403, detail="Operator role required")
+    return user

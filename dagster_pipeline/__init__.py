@@ -13,7 +13,7 @@ from dagster_pipeline.assets import (
     downscaled_forecasts, agricultural_alerts, delivery_log,
 )
 from dagster_pipeline.resources import (
-    DuckDBResource, TomorrowIOResource, OpenMeteoResource,
+    PostgresResource, TomorrowIOResource, OpenMeteoResource,
     NASAPowerResource, AnthropicResource,
 )
 from dagster_pipeline.io_manager import duckdb_io_manager
@@ -46,7 +46,7 @@ defs = Definitions(
         check_forecast_confidence,
     ],
     resources={
-        "duckdb": DuckDBResource(db_path="weather.duckdb"),
+        "postgres": PostgresResource(database_url=os.getenv("DATABASE_URL", "")),
         "duckdb_io": duckdb_io_manager,
         "tomorrow_io": TomorrowIOResource(
             api_key=os.getenv("TOMORROW_IO_API_KEY", ""),

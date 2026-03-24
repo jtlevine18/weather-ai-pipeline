@@ -72,7 +72,7 @@ class PipelineConfig:
     translation: TranslationConfig = field(default_factory=TranslationConfig)
     neuralgcm: NeuralGCMConfig = field(default_factory=NeuralGCMConfig)
     dpi: DPIConfig = field(default_factory=DPIConfig)
-    db_path: str = "weather.duckdb"
+    database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
     tomorrow_io_key: str = field(default_factory=lambda: os.getenv("TOMORROW_IO_API_KEY", ""))
     anthropic_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", "").strip())
     models_dir: str = "models"

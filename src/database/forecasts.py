@@ -3,18 +3,17 @@
 from __future__ import annotations
 from typing import Any, Dict, List
 
-import duckdb
-
 from src.database._util import _rows_to_dicts
 
 
-def insert_forecast(conn: duckdb.DuckDBPyConnection, record: Dict[str, Any]) -> None:
+def insert_forecast(conn: Any, record: Dict[str, Any]) -> None:
     conn.execute(
-        """INSERT OR REPLACE INTO forecasts
+        """INSERT INTO forecasts
            (id, station_id, issued_at, valid_for_ts, temperature, humidity,
             wind_speed, rainfall, condition, model_used, nwp_source, nwp_temp,
             correction, confidence)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+           ON CONFLICT (id) DO NOTHING""",
         [record["id"], record["station_id"], record["issued_at"], record["valid_for_ts"],
          record.get("temperature"), record.get("humidity"), record.get("wind_speed"),
          record.get("rainfall"), record.get("condition", "clear"),
@@ -25,7 +24,7 @@ def insert_forecast(conn: duckdb.DuckDBPyConnection, record: Dict[str, Any]) -> 
     )
 
 
-def get_recent_forecasts(conn: duckdb.DuckDBPyConnection,
+def get_recent_forecasts(conn: Any,
                           limit: int = 100) -> List[Dict[str, Any]]:
     rows = conn.execute(
         "SELECT * FROM forecasts ORDER BY issued_at DESC LIMIT ?", [limit]
@@ -33,10 +32,9 @@ def get_recent_forecasts(conn: duckdb.DuckDBPyConnection,
     return _rows_to_dicts(conn, rows)
 
 
-def get_forecast_actuals(conn: duckdb.DuckDBPyConnection,
+def get_forecast_actuals(conn: Any,
                           limit: int = 1000) -> tuple:
-    """Get forecasts and clean_telemetry separately for accuracy eval.
-    Returns (forecasts_list, actuals_list) — join in Python by station+time."""
+    """Get forecasts and clean_telemetry separately for accuracy eval."""
     rows = conn.execute(
         "SELECT * FROM forecasts ORDER BY issued_at DESC LIMIT ?", [limit]
     ).fetchall()

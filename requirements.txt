@@ -44,5 +44,14 @@ apscheduler>=3.10.0
 dagster>=1.7.0
 dagster-webserver>=1.7.0
 
+# PostgreSQL
+psycopg2-binary>=2.9.0
+
+# API + Auth
+fastapi>=0.111.0
+uvicorn>=0.29.0
+python-jose[cryptography]>=3.3.0
+passlib[bcrypt]>=1.7.0
+
 # Optional: Twilio SMS
 # twilio>=9.0.0

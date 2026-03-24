@@ -41,7 +41,7 @@ class WeatherPipeline:
     def __init__(self, config: PipelineConfig, live_delivery: bool = False):
         self.config        = config
         self.live_delivery = live_delivery
-        self.conn          = init_db(config.db_path)
+        self.conn          = init_db(config.database_url)
         self.run_id        = str(uuid.uuid4())
 
         # Clients

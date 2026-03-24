@@ -1,25 +1,18 @@
-"""FastAPI health-check endpoint for the weather pipeline.
+"""Health-check endpoint for the weather pipeline.
 
-Exposes /health that reports DuckDB connectivity, pipeline freshness,
-and table row counts.  The same logic is available via get_health_status()
-for programmatic use (e.g. Streamlit sidebar widget).
+get_health_status() is the core logic (no FastAPI dependency).
+The FastAPI app below is kept for backward compatibility; the main
+API entry point is now src/api.py.
 """
 
 from __future__ import annotations
 
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict
 
-import duckdb
 from fastapi import FastAPI
 
-# ---------------------------------------------------------------------------
-# Constants
-# ---------------------------------------------------------------------------
-
-DB_PATH = Path("weather.duckdb")
 STALE_THRESHOLD_SECONDS = 2 * 60 * 60  # 2 hours
 
 KEY_TABLES = [
@@ -33,54 +26,47 @@ KEY_TABLES = [
 
 _START_TIME = time.monotonic()
 
-# ---------------------------------------------------------------------------
-# Core logic (no FastAPI dependency)
-# ---------------------------------------------------------------------------
 
-
-def get_health_status(db_path: Path = DB_PATH) -> Dict[str, Any]:
+def get_health_status(database_url: str = "") -> Dict[str, Any]:
     """Return a dict describing pipeline health.
 
-    Safe to call from Streamlit or any other context — no FastAPI
-    objects involved.
+    Safe to call from Streamlit or any other context.
     """
+    from src.database._util import PgConnection, get_database_url
+
     checks: Dict[str, Any] = {
         "db_accessible": False,
         "pipeline_fresh": False,
         "tables_have_data": False,
     }
     table_counts: Dict[str, int] = {}
-    last_run_ts: str | None = None
+    last_run_ts = None
     status = "ok"
-    errors: list[str] = []
+    errors: list = []
 
-    # --- DuckDB accessible? ---
     try:
-        con = duckdb.connect(str(db_path), read_only=True)
+        con = PgConnection(database_url or get_database_url())
     except Exception as exc:
-        errors.append(f"Cannot open DuckDB: {exc}")
+        errors.append(f"Cannot connect to PostgreSQL: {exc}")
         return _build_response("degraded", checks, table_counts, last_run_ts, errors)
 
     try:
-        # --- Table row counts ---
         for table in KEY_TABLES:
             try:
-                (count,) = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
-                table_counts[table] = count
-            except duckdb.CatalogException:
+                row = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+                table_counts[table] = row[0] if row else 0
+            except Exception:
                 table_counts[table] = 0
 
         checks["db_accessible"] = True
 
-        # --- Last pipeline run freshness ---
         try:
             row = con.execute(
                 "SELECT started_at FROM pipeline_runs "
                 "ORDER BY started_at DESC LIMIT 1"
             ).fetchone()
             if row:
-                last_run_dt: datetime = row[0]
-                # Normalise to UTC-aware for comparison
+                last_run_dt = row[0]
                 if last_run_dt.tzinfo is None:
                     last_run_dt = last_run_dt.replace(tzinfo=timezone.utc)
                 last_run_ts = last_run_dt.isoformat()
@@ -88,10 +74,9 @@ def get_health_status(db_path: Path = DB_PATH) -> Dict[str, Any]:
                 checks["pipeline_fresh"] = age < STALE_THRESHOLD_SECONDS
             else:
                 checks["pipeline_fresh"] = False
-        except duckdb.CatalogException:
+        except Exception:
             checks["pipeline_fresh"] = False
 
-        # --- Tables have data ---
         checks["tables_have_data"] = all(
             table_counts.get(t, 0) > 0 for t in KEY_TABLES
         )
@@ -99,7 +84,6 @@ def get_health_status(db_path: Path = DB_PATH) -> Dict[str, Any]:
     finally:
         con.close()
 
-    # --- Overall status ---
     if not all(checks.values()):
         status = "degraded"
 
@@ -110,8 +94,8 @@ def _build_response(
     status: str,
     checks: Dict[str, Any],
     table_counts: Dict[str, int],
-    last_pipeline_run: str | None,
-    errors: list[str],
+    last_pipeline_run,
+    errors: list,
 ) -> Dict[str, Any]:
     uptime_seconds = round(time.monotonic() - _START_TIME, 1)
     payload: Dict[str, Any] = {
@@ -126,10 +110,7 @@ def _build_response(
     return payload
 
 
-# ---------------------------------------------------------------------------
-# FastAPI app
-# ---------------------------------------------------------------------------
-
+# Backward-compatible standalone app (main API is src/api.py)
 app = FastAPI(title="Weather Pipeline Health", docs_url=None, redoc_url=None)
 
 

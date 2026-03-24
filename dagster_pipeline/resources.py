@@ -1,31 +1,21 @@
-"""
-Dagster resources — thin wrappers around existing API clients and DB.
+"""Dagster resources wrapping existing src/ clients.
 
 Each resource holds configuration (API keys, paths) and provides
 a method to get the underlying client from src/.
 """
 
 from dagster import ConfigurableResource
-import duckdb
 
 from src.weather_clients import TomorrowIOClient, OpenMeteoClient, NASAPowerClient
-from src.database import init_db
 
 
-class DuckDBResource(ConfigurableResource):
-    """Manages DuckDB connection lifecycle."""
-    db_path: str = "weather.duckdb"
-    _ddl_done: bool = False
+class PostgresResource(ConfigurableResource):
+    """Manages PostgreSQL connection lifecycle."""
+    database_url: str = ""
 
-    class Config:
-        arbitrary_types_allowed = True
-
-    def get_connection(self) -> duckdb.DuckDBPyConnection:
-        if not DuckDBResource._ddl_done:
-            conn = init_db(self.db_path)
-            DuckDBResource._ddl_done = True
-            return conn
-        return duckdb.connect(self.db_path)
+    def get_connection(self):
+        from src.database import init_db
+        return init_db(self.database_url)
 
 
 class TomorrowIOResource(ConfigurableResource):
@@ -37,7 +27,7 @@ class TomorrowIOResource(ConfigurableResource):
 
 
 class OpenMeteoResource(ConfigurableResource):
-    """Open-Meteo NWP client for forecasting."""
+    """Open-Meteo NWP forecast client."""
 
     def get_client(self) -> OpenMeteoClient:
         return OpenMeteoClient()

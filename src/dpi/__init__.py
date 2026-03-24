@@ -24,9 +24,9 @@ PROFILE_STALE_HOURS = 24
 
 
 class DPIAgent:
-    def __init__(self, simulation: bool = True, db_path: str = "weather.duckdb"):
+    def __init__(self, simulation: bool = True, database_url: str = ""):
         self.simulation = simulation
-        self.db_path = db_path
+        self.database_url = database_url
 
     async def identify_farmer(self, phone: str) -> Optional[AadhaarProfile]:
         from src.dpi.services import get_service
@@ -133,7 +133,7 @@ class DPIAgent:
     def _load_cached_profile(self, phone: str) -> Optional[FarmerProfile]:
         try:
             from src.database import init_db
-            conn = init_db(self.db_path)
+            conn = init_db(self.database_url)
             row = conn.execute(
                 "SELECT profile_json, cached_at FROM farmer_profiles WHERE phone = ?",
                 [phone],
@@ -155,13 +155,14 @@ class DPIAgent:
     def _cache_profile(self, profile: FarmerProfile) -> None:
         try:
             from src.database import init_db
-            conn = init_db(self.db_path)
+            conn = init_db(self.database_url)
             d = _profile_to_dict(profile)
             conn.execute(
-                """INSERT OR REPLACE INTO farmer_profiles
+                """INSERT INTO farmer_profiles
                    (id, aadhaar_id, phone, name, district, station_id,
                     primary_crops, total_area, profile_json, cached_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)""",
+                   VALUES (?,?,?,?,?,?,?,?,?,?)
+                   ON CONFLICT (id) DO NOTHING""",
                 [str(uuid.uuid4()), profile.aadhaar.aadhaar_id, profile.aadhaar.phone,
                  profile.aadhaar.name, profile.aadhaar.district,
                  profile.nearest_stations[0] if profile.nearest_stations else "",

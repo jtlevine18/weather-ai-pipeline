@@ -3,18 +3,17 @@
 from __future__ import annotations
 from typing import Any, Dict, List, Optional
 
-import duckdb
-
 from src.database._util import _rows_to_dicts
 
 
-def insert_raw_telemetry(conn: duckdb.DuckDBPyConnection, records: List[Dict[str, Any]]) -> None:
+def insert_raw_telemetry(conn: Any, records: List[Dict[str, Any]]) -> None:
     for r in records:
         conn.execute(
-            """INSERT OR REPLACE INTO raw_telemetry
+            """INSERT INTO raw_telemetry
                (id, station_id, ts, temperature, humidity, wind_speed, wind_dir,
                 pressure, rainfall, fault_type, source)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT (id) DO NOTHING""",
             [r["id"], r["station_id"], r["ts"],
              r.get("temperature"), r.get("humidity"), r.get("wind_speed"),
              r.get("wind_dir"), r.get("pressure"), r.get("rainfall"),
@@ -22,13 +21,14 @@ def insert_raw_telemetry(conn: duckdb.DuckDBPyConnection, records: List[Dict[str
         )
 
 
-def insert_clean_telemetry(conn: duckdb.DuckDBPyConnection, records: List[Dict[str, Any]]) -> None:
+def insert_clean_telemetry(conn: Any, records: List[Dict[str, Any]]) -> None:
     for r in records:
         conn.execute(
-            """INSERT OR REPLACE INTO clean_telemetry
+            """INSERT INTO clean_telemetry
                (id, station_id, ts, temperature, humidity, wind_speed, wind_dir,
                 pressure, rainfall, heal_action, heal_source, quality_score)
-               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT (id) DO NOTHING""",
             [r["id"], r["station_id"], r["ts"],
              r.get("temperature"), r.get("humidity"), r.get("wind_speed"),
              r.get("wind_dir"), r.get("pressure"), r.get("rainfall"),
@@ -37,7 +37,7 @@ def insert_clean_telemetry(conn: duckdb.DuckDBPyConnection, records: List[Dict[s
         )
 
 
-def get_latest_clean_for_station(conn: duckdb.DuckDBPyConnection,
+def get_latest_clean_for_station(conn: Any,
                                   station_id: str) -> Optional[Dict[str, Any]]:
     rows = conn.execute(
         """SELECT * FROM clean_telemetry WHERE station_id=?
@@ -48,14 +48,14 @@ def get_latest_clean_for_station(conn: duckdb.DuckDBPyConnection,
     return result[0] if result else None
 
 
-def get_all_clean_telemetry(conn: duckdb.DuckDBPyConnection) -> List[Dict[str, Any]]:
+def get_all_clean_telemetry(conn: Any) -> List[Dict[str, Any]]:
     rows = conn.execute(
         "SELECT * FROM clean_telemetry ORDER BY ts DESC LIMIT 500"
     ).fetchall()
     return _rows_to_dicts(conn, rows)
 
 
-def get_clean_history_for_station(conn: duckdb.DuckDBPyConnection,
+def get_clean_history_for_station(conn: Any,
                                    station_id: str,
                                    limit: int = 200) -> List[Dict[str, Any]]:
     """Return all clean_telemetry rows for a station, oldest first."""
@@ -67,14 +67,15 @@ def get_clean_history_for_station(conn: duckdb.DuckDBPyConnection,
     return _rows_to_dicts(conn, rows)
 
 
-def get_paired_raw_clean(conn: duckdb.DuckDBPyConnection,
+def get_paired_raw_clean(conn: Any,
                           limit: int = 500) -> List[Dict[str, Any]]:
     """Join raw_telemetry with clean_telemetry for healing evaluation."""
     rows = conn.execute("""
         SELECT r.id, r.station_id, r.ts,
                r.temperature AS raw_temp, r.humidity AS raw_humidity,
                r.wind_speed AS raw_wind, r.pressure AS raw_pressure,
-               r.rainfall AS raw_rainfall, r.fault_type,
+               r.rainfall AS raw_rainfall,
+               r.fault_type,
                c.temperature AS clean_temp, c.humidity AS clean_humidity,
                c.wind_speed AS clean_wind, c.pressure AS clean_pressure,
                c.rainfall AS clean_rainfall,
