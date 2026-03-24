@@ -252,6 +252,12 @@ class NeuralGCMClient:
 
         model = self._model
 
+        # Regrid ERA5 (0.25°) to model's native grid (1.4°)
+        model_coords = model.data_coords
+        log.info("Regridding ERA5 to model grid (%s)...",
+                 {k: len(v) for k, v in model_coords.items() if hasattr(v, '__len__')})
+        init_ds = init_ds.interp(model_coords)
+
         log.info("Encoding initial state...")
         inputs = model.inputs_from_xarray(init_ds)
         forcings = model.forcings_from_xarray(init_ds)
