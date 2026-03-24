@@ -248,7 +248,7 @@ with tab_fc:
             ] if c in filtered.columns]
             st.dataframe(
                 filtered[show_cols].sort_values("issued_at", ascending=False),
-                width="stretch",
+                use_container_width=True,
                 height=400,
                 hide_index=True,
             )
@@ -520,7 +520,7 @@ with tab_downscale:
             })
 
         if rows:
-            st.dataframe(pd.DataFrame(rows), width="stretch", hide_index=True)
+            st.dataframe(pd.DataFrame(rows), use_container_width=True, hide_index=True)
 
         # Lapse-rate explanation card
         st.markdown("""

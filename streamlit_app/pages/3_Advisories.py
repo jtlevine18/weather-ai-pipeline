@@ -422,10 +422,10 @@ with tab_delivery:
         if "status" in df_del.columns:
             st.dataframe(
                 df_del.style.map(_status_style, subset=["status"]),
-                width="stretch", hide_index=True,
+                use_container_width=True, hide_index=True,
             )
         else:
-            st.dataframe(df_del, width="stretch", hide_index=True)
+            st.dataframe(df_del, use_container_width=True, hide_index=True)
 
 # Chat toggle
 from streamlit_app.chat_widget import render_chat_toggle

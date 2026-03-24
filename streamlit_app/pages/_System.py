@@ -145,7 +145,7 @@ with tab_sched:
     bc1, bc2, bc3, bc4 = st.columns(4)
 
     with bc1:
-        if st.button("Run Full Pipeline", width="stretch",
+        if st.button("Run Full Pipeline", use_container_width=True,
                       help="All 6 steps: ingest → heal → forecast → downscale → translate → deliver"):
             with st.spinner("Running all 6 steps..."):
                 try:
@@ -160,7 +160,7 @@ with tab_sched:
                     st.error(f"Pipeline error: {exc}")
 
     with bc2:
-        if st.button("Ingest + Heal", width="stretch",
+        if st.button("Ingest + Heal", use_container_width=True,
                       help="Steps 1–2: fetch fresh IMD data and cross-validate"):
             with st.spinner("Running ingest + heal..."):
                 try:
@@ -181,7 +181,7 @@ with tab_sched:
                     st.error(f"Error: {exc}")
 
     with bc3:
-        if st.button("Forecast → Deliver", width="stretch",
+        if st.button("Forecast → Deliver", use_container_width=True,
                       help="Steps 3–6: forecast, downscale, translate, deliver from existing data"):
             with st.spinner("Running forecast → deliver..."):
                 try:
@@ -204,7 +204,7 @@ with tab_sched:
                     st.error(f"Error: {exc}")
 
     with bc4:
-        if st.button("Retrain MOS Model", width="stretch",
+        if st.button("Retrain MOS Model", use_container_width=True,
                       help="Export day-0 forecast/obs pairs from PostgreSQL and retrain the XGBoost MOS model"):
             with st.spinner("Exporting data and training model..."):
                 try:
@@ -304,7 +304,7 @@ with tab_delivery:
         df_dl = delivery[display_cols].head(30).copy()
         if "message" in df_dl.columns:
             df_dl["message"] = df_dl["message"].str[:80]
-        st.dataframe(df_dl, width="stretch", hide_index=True)
+        st.dataframe(df_dl, use_container_width=True, hide_index=True)
 
 # ========================== COST ESTIMATE ==========================
 with tab_cost:
@@ -418,7 +418,7 @@ with tab_eval:
                                            if m.get("imputation_mae") is not None else "---"),
                     })
                 st.dataframe(pd.DataFrame(pft_rows),
-                             hide_index=True, width="stretch")
+                             hide_index=True, use_container_width=True)
             st.divider()
 
         # ---- Forecast ----
@@ -444,7 +444,7 @@ with tab_eval:
                     for mt, m in by_model.items()
                 ]
                 st.dataframe(pd.DataFrame(model_rows),
-                             hide_index=True, width="stretch")
+                             hide_index=True, use_container_width=True)
             st.divider()
 
         # ---- RAG ----
@@ -460,7 +460,7 @@ with tab_eval:
                     for mode, m in by_mode.items()
                 ]
                 st.dataframe(pd.DataFrame(rag_rows),
-                             hide_index=True, width="stretch")
+                             hide_index=True, use_container_width=True)
             st.divider()
 
         # ---- Advisory ----
@@ -477,7 +477,7 @@ with tab_eval:
                     for prov, m in by_prov.items()
                 ]
                 st.dataframe(pd.DataFrame(adv_rows),
-                             hide_index=True, width="stretch")
+                             hide_index=True, use_container_width=True)
             st.divider()
 
         # ---- Translation ----
@@ -500,7 +500,7 @@ with tab_eval:
                     for lang, m in by_lang.items()
                 ]
                 st.dataframe(pd.DataFrame(lang_rows),
-                             hide_index=True, width="stretch")
+                             hide_index=True, use_container_width=True)
 
         # ---- DPI ----
         if "dpi" in evals:
@@ -522,7 +522,7 @@ with tab_eval:
                 {"Check": "Soil pH realism", "Rate": f"{geo.get('ph_match_rate', 0):.0%}"},
             ]
             st.dataframe(pd.DataFrame(geo_rows),
-                         hide_index=True, width="stretch")
+                         hide_index=True, use_container_width=True)
             st.divider()
 
         # ---- Conversation ----
@@ -592,7 +592,7 @@ with tab_agent:
             st.subheader("Tool Usage")
             tool_counts = tool_rows["tool_name"].value_counts().reset_index()
             tool_counts.columns = ["Tool", "Count"]
-            st.dataframe(tool_counts, hide_index=True, width="stretch")
+            st.dataframe(tool_counts, hide_index=True, use_container_width=True)
 
         # Recent conversations
         st.subheader("Recent Conversations")
@@ -606,7 +606,7 @@ with tab_agent:
             if "content" in df_show.columns:
                 df_show["content"] = df_show["content"].str[:100]
             df_show.columns = ["Session", "Query", "Time"][:len(display_cols)]
-            st.dataframe(df_show, hide_index=True, width="stretch")
+            st.dataframe(df_show, hide_index=True, use_container_width=True)
 
 # ========================== DELIVERY FUNNEL ==========================
 with tab_funnel:
@@ -652,7 +652,7 @@ with tab_funnel:
         ).round(1)
         station_agg.columns = ["Station", "Forecasts", "Advisories",
                                "Attempted", "Succeeded", "Success %"]
-        st.dataframe(station_agg, hide_index=True, width="stretch")
+        st.dataframe(station_agg, hide_index=True, use_container_width=True)
 
 # Chat toggle
 from streamlit_app.chat_widget import render_chat_toggle

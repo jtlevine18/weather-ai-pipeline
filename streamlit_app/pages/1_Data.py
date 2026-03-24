@@ -279,7 +279,7 @@ with tab_stations:
                             if c in df.columns]
                 st.dataframe(
                     df[show].sort_values("ts", ascending=False),
-                    width="stretch", height=400, hide_index=True,
+                    use_container_width=True, height=400, hide_index=True,
                 )
 
     # Data source info card
@@ -540,7 +540,7 @@ with tab_map:
         df_show["avg_quality"] = df_show["avg_quality"].round(3)
     if "altitude_m" in df_show.columns:
         df_show["altitude_m"] = df_show["altitude_m"].astype(int)
-    st.dataframe(df_show, width="stretch", hide_index=True)
+    st.dataframe(df_show, use_container_width=True, hide_index=True)
 
 # Chat toggle
 from streamlit_app.chat_widget import render_chat_toggle

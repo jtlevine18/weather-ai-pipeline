@@ -61,7 +61,7 @@ def _render_chat_panel():
 
     c1, c2 = st.columns(2)
     with c1:
-        if st.button("Look up", key="_chat_lookup", width="stretch"):
+        if st.button("Look up", key="_chat_lookup", use_container_width=True):
             if phone_input.strip():
                 st.session_state.farmer_phone = phone_input.strip()
                 try:
@@ -96,7 +96,7 @@ def _render_chat_panel():
                     st.error(str(exc))
                 st.rerun()
     with c2:
-        if st.button("Clear", key="_chat_clear", width="stretch"):
+        if st.button("Clear", key="_chat_clear", use_container_width=True):
             st.session_state.farmer_phone = ""
             st.session_state.farmer_identified = False
             st.session_state.farmer_info = None
@@ -117,7 +117,7 @@ def _render_chat_panel():
             from src.dpi.simulator import get_registry
             for f in get_registry().list_farmers()[:6]:
                 if st.button(f"{f['name']} ({f['phone'][-4:]})",
-                             key=f"cw_{f['phone']}", width="stretch"):
+                             key=f"cw_{f['phone']}", use_container_width=True):
                     st.session_state.farmer_phone = f["phone"]
                     st.rerun()
         except Exception:
@@ -137,7 +137,7 @@ def _render_chat_panel():
     # Chat input
     user_input = st.text_input("Ask something...", key="_chat_input",
                                label_visibility="collapsed")
-    if st.button("Send", key="_chat_send", width="stretch") and user_input:
+    if st.button("Send", key="_chat_send", use_container_width=True) and user_input:
         st.session_state.chat_messages.append({"role": "user", "content": user_input})
         try:
             from config import get_config
@@ -175,7 +175,7 @@ def _render_chat_panel():
             )
         st.rerun()
 
-    if st.button("Clear conversation", key="_chat_clear_conv", width="stretch"):
+    if st.button("Clear conversation", key="_chat_clear_conv", use_container_width=True):
         st.session_state.chat_messages = [{
             "role": "assistant",
             "content": "Chat cleared. How can I help?",
