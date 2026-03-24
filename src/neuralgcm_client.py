@@ -131,9 +131,10 @@ class NeuralGCMClient:
         forecast_hours: int = 24,
     ):
         self.model_name = model_name
-        self.forecast_hours = forecast_hours
+        self.forecast_hours = forecast_hours  # minimum forecast horizon beyond "now"
         self._model = None
         self._gcs = None
+        self._init_time = None  # set after ERA5 fetch, used to compute total unroll
 
     # ------------------------------------------------------------------
     # Lazy loading
@@ -175,6 +176,10 @@ class NeuralGCMClient:
         same store. We select only the variables the model needs via
         model.input_variables + model.forcing_variables.
 
+        ERA5T (preliminary) data lags ~5 days; the store's time axis extends
+        to 2050 but future slots are empty (all NaN). We search backwards
+        from 5 days ago to find the most recent time with real data.
+
         Returns (xr_dataset, init_time_np64).
         """
         import xarray as xr
@@ -187,10 +192,6 @@ class NeuralGCMClient:
         full_ds = xr.open_zarr(ERA5_PATH, chunks=None,
                                storage_options=gcs_opts, consolidated=True)
 
-        # Find latest available timestep
-        latest_time = full_ds.time[-1].values
-        log.info("Latest ERA5 time available: %s", latest_time)
-
         # Select only the variables the model needs (pressure-level + forcings)
         all_vars = model.input_variables + model.forcing_variables
         available = [v for v in all_vars if v in full_ds]
@@ -200,9 +201,30 @@ class NeuralGCMClient:
         if len(available) < 4:
             raise ValueError(f"ARCO ERA5 missing critical variables. Found: {available}")
 
-        log.info("Fetching %d variables at latest timestep...", len(available))
+        # Find latest time with actual data — the store extends to 2050 but
+        # future time slots are all NaN. ERA5T lags ~5 days.
+        # Try 5 days ago first, then 6, 7, 8 days ago as fallback.
+        now = np.datetime64("now")
+        test_var = available[0]  # check one pressure-level var
+        init_time = None
+        for lag_days in range(5, 12):
+            candidate = now - np.timedelta64(lag_days * 24, "h")
+            # Snap to nearest available hour in the store
+            candidate = full_ds.time.sel(time=candidate, method="nearest").values
+            probe = full_ds[test_var].sel(time=candidate).isel(level=0, latitude=360, longitude=720)
+            val = float(probe.compute().values)
+            if not np.isnan(val):
+                init_time = candidate
+                log.info("Found ERA5 data at lag=%d days, time=%s", lag_days, init_time)
+                break
+            log.info("ERA5 at lag=%d days (%s): NaN, trying older...", lag_days, candidate)
+
+        if init_time is None:
+            raise ValueError("No valid ERA5 data found in the last 12 days")
+
+        log.info("Fetching %d variables at %s...", len(available), init_time)
         # Keep time dim as a length-1 slice (regridder and model expect it)
-        data = full_ds[available].sel(time=slice(latest_time, latest_time)).compute()
+        data = full_ds[available].sel(time=slice(init_time, init_time)).compute()
 
         log.info("ERA5 data shape: %s, vars: %s",
                  {d: data.sizes[d] for d in data.dims}, list(data.data_vars))
@@ -212,10 +234,15 @@ class NeuralGCMClient:
         for var in model.forcing_variables:
             if var in data and data[var].isnull().any():
                 mean_val = float(data[var].mean(skipna=True).values)
-                data[var] = data[var].fillna(mean_val)
-                log.info("Filled NaN in %s with global mean %.2f", var, mean_val)
+                if np.isnan(mean_val):
+                    log.warning("Variable %s is ALL NaN even at %s — filling with 0", var, init_time)
+                    data[var] = data[var].fillna(0.0)
+                else:
+                    data[var] = data[var].fillna(mean_val)
+                    log.info("Filled NaN in %s with global mean %.2f", var, mean_val)
 
-        return data, latest_time
+        self._init_time = init_time
+        return data, init_time
 
     # ------------------------------------------------------------------
     # Inference
@@ -267,14 +294,21 @@ class NeuralGCMClient:
         # Persistent forcings for unroll (SST/sea-ice from full time slice)
         all_forcings = model.forcings_from_xarray(init_ds.head(time=1))
 
-        # Forecast configuration: output every 6 hours
+        # Compute total forecast hours: must cover ERA5 lag + desired horizon.
+        # ERA5 init is ~5 days old, so we unroll enough to reach now + forecast_hours.
+        era5_age_h = max(0, int(
+            (np.datetime64("now") - init_time) / np.timedelta64(1, "h")
+        ))
+        total_forecast_hours = era5_age_h + self.forecast_hours
+        # Round up to nearest 6h (output cadence)
         inner_steps = 6
-        outer_steps = max(1, self.forecast_hours // inner_steps)
+        outer_steps = max(1, -(-total_forecast_hours // inner_steps))  # ceiling division
         timedelta = np.timedelta64(inner_steps, "h")
 
         log.info(
-            "Running NeuralGCM: %d steps × %dh = %dh forecast...",
-            outer_steps, inner_steps, outer_steps * inner_steps,
+            "Running NeuralGCM: ERA5 age=%dh + horizon=%dh = %dh total | %d steps × %dh...",
+            era5_age_h, self.forecast_hours, outer_steps * inner_steps,
+            outer_steps, inner_steps,
         )
 
         t0 = time_mod.time()
@@ -294,6 +328,13 @@ class NeuralGCMClient:
             for i in range(outer_steps + 1)
         ]
         output_ds = model.data_to_xarray(predictions, times=times)
+
+        # Trim to only future timesteps (drop the historical catch-up portion)
+        now = np.datetime64("now")
+        future_mask = output_ds.time >= now - np.timedelta64(6, "h")  # keep nearest 6h before now
+        output_ds = output_ds.sel(time=future_mask)
+        log.info("Trimmed to %d future timesteps (from %s onward)",
+                 output_ds.sizes["time"], output_ds.time[0].values)
 
         return output_ds, inference_s
 

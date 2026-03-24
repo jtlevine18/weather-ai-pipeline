@@ -58,9 +58,12 @@ def save_memories(conn, aadhaar_id: str, session_id: str,
         if mem.get("expires_days"):
             expires_at = (datetime.utcnow() + timedelta(days=mem["expires_days"])).isoformat()
         conn.execute(
-            """INSERT OR REPLACE INTO conversation_memory
+            """INSERT INTO conversation_memory
                (id, aadhaar_id, session_id, memory_type, content, expires_at, created_at)
-               VALUES (?,?,?,?,?,?,?)""",
+               VALUES (?,?,?,?,?,?,?)
+               ON CONFLICT (id) DO UPDATE SET
+                 content = EXCLUDED.content,
+                 expires_at = EXCLUDED.expires_at""",
             [str(uuid.uuid4()), aadhaar_id, session_id,
              mem.get("type", "topic"), mem.get("content", ""),
              expires_at, now],

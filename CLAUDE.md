@@ -11,8 +11,8 @@ Self-healing, AI-powered weather forecasting for smallholder farmers in Kerala a
 # Install dependencies
 pip install -r requirements.txt
 
-# Add API keys
-cp .env.example .env      # then fill in keys
+# Add API keys + database URL
+cp .env.example .env      # then fill in keys + DATABASE_URL
 
 # Run the full pipeline with real IMD data (all 20 stations)
 python run_pipeline.py
@@ -32,11 +32,8 @@ python run_chat.py
 # Station health monitor
 python run_monitor.py
 
-# Health check endpoint
-uvicorn src.health:app --port 8000
-
-# Webhook receiver
-uvicorn src.webhook_receiver:app --port 8001
+# Unified REST API (health, auth, stations, forecasts, alerts, webhook)
+python run_api.py                # FastAPI on port 8000
 
 # Dagster orchestration UI
 dagster dev -m dagster_pipeline
@@ -95,11 +92,13 @@ Quality score measures **accuracy of compared fields only** (how well IMD temp/r
 ```
 weather AI 2/
 ├── CLAUDE.md                  # This file
-├── config.py                  # All station configs + pipeline dataclasses
+├── config.py                  # All station configs + pipeline dataclasses (database_url, DPIConfig)
 ├── run_pipeline.py            # Main entry point
+├── run_api.py                 # FastAPI server entry point (uvicorn on port 8000)
 ├── run_chat.py                # NL agent CLI
 ├── run_monitor.py             # Station health monitor
 ├── trace_pipeline.py          # Step-by-step pipeline demo
+├── docker-compose.yml         # Single app service
 ├── requirements.txt
 ├── pyproject.toml
 ├── dvc.yaml                   # DVC pipeline: export_training_data → train_mos
@@ -109,8 +108,8 @@ weather AI 2/
 │   └── secrets.toml           # API keys for Streamlit Cloud (never commit)
 ├── src/
 │   ├── pipeline.py            # WeatherPipeline orchestrator (6-step, parallelized async)
-│   ├── database/              # DuckDB lakehouse (15 tables)
-│   │   ├── __init__.py        # DDL (16 tables), init_db(), re-exports all public names
+│   ├── database/              # PostgreSQL (Neon) — 17 tables, PgConnection wrapper
+│   │   ├── __init__.py        # DDL (17 tables), init_db(), re-exports all public names
 │   │   ├── telemetry.py       # raw/clean telemetry CRUD + paired join
 │   │   ├── forecasts.py       # forecast CRUD + actuals join
 │   │   ├── alerts.py          # agricultural_alerts CRUD
@@ -135,7 +134,8 @@ weather AI 2/
 │   │   ├── local_provider.py  # Rule-based fallback (no API)
 │   │   ├── claude_provider.py # Claude-only provider
 │   │   ├── curated_advisories.py  # Crop-specific advisory templates
-│   │   └── rag_index_builder.py   # Build FAISS + BM25 index
+│   │   ├── rag_index_builder.py   # Build FAISS + BM25 index
+│   │   └── farmer_template.py # Per-farmer advisory template expansion from DPI profiles
 │   ├── delivery/              # Console + Twilio SMS/WhatsApp
 │   │   ├── __init__.py        # MultiChannelDelivery
 │   │   ├── console_provider.py
@@ -159,15 +159,15 @@ weather AI 2/
 │   ├── daily_scheduler.py     # Singleton daily scheduler (APScheduler, toggle via System tab, auto-resumes)
 │   ├── event_bus.py           # File-based pub/sub event bus
 │   ├── quality_checks.py      # Post-pipeline data quality checks (row count, nulls, ranges, freshness)
-│   ├── health.py              # FastAPI /health endpoint (DuckDB connectivity, pipeline freshness)
-│   ├── webhook_receiver.py    # FastAPI webhook receiver (POST /webhook, GET /webhook/history)
+│   ├── api.py                 # Unified FastAPI REST API (GET /health, POST /auth/*, GET /api/stations, GET /api/forecasts, GET /api/alerts, GET /api/station/{id}/latest, GET /api/pipeline/runs, POST /webhook, GET /webhook/history)
+│   ├── auth.py                # JWT auth with operator/viewer roles, passlib bcrypt
 │   ├── scheduler.py           # APScheduler-based pipeline scheduling
 │   ├── monitor.py             # Station health monitor
 │   └── architecture.py        # Dynamic Mermaid diagram + get_pipeline_stages() (3 stages: Data/Forecasts/Advisories)
 ├── dagster_pipeline/          # Dagster orchestration (alternative to run_pipeline.py)
 │   ├── __init__.py            # Dagster definitions
-│   ├── resources.py           # Dagster resources (API clients)
-│   ├── io_manager.py          # DuckDB I/O manager
+│   ├── resources.py           # Dagster resources (API clients, PostgresResource)
+│   ├── io_manager.py          # PostgreSQL I/O manager
 │   ├── schedules.py           # Dagster schedules
 │   ├── sensors.py             # Dagster sensors
 │   ├── hooks.py               # Dagster hooks
@@ -223,7 +223,7 @@ Crop contexts: verified per-district from state agriculture department data.
 
 ---
 
-## Database (DuckDB — 16 tables)
+## Database (PostgreSQL / Neon — 17 tables)
 
 | Table | Domain | Purpose |
 |---|---|---|
@@ -243,6 +243,7 @@ Crop contexts: verified per-district from state agriculture department data.
 | `farmer_profiles` | DPI | Cached composite farmer profiles |
 | `farmer_land_records` | DPI | Land records from DPI |
 | `farmer_soil_health` | DPI | Soil Health Card data |
+| `users` | auth | User accounts for JWT auth (operator/viewer roles) |
 
 ---
 
@@ -319,8 +320,8 @@ Aadhaar eKYC, Land Records, Soil Health Card, PM-KISAN, PMFBY crop insurance, Ki
 ## Dagster Orchestration
 
 Alternative to `run_pipeline.py` — same 6 steps as Dagster assets with:
-- Resources for API clients (Tomorrow.io, NASA POWER, Open-Meteo)
-- DuckDB I/O manager
+- Resources for API clients (Tomorrow.io, NASA POWER, Open-Meteo), PostgresResource
+- PostgreSQL I/O manager
 - Schedules, sensors, hooks
 - Asset checks (data quality validation)
 - Launch via `dagster dev -m dagster_pipeline`
@@ -370,6 +371,8 @@ NASA POWER 5x5 grid (~0.5 deg radius around station) → IDW interpolation to fa
 
 NASA POWER, Open-Meteo, NeuralGCM (model checkpoints on GCS), ERA5 ARCO Zarr, IMD city weather (scraping), and imdlib are fully free, no key needed.
 
+| `DATABASE_URL` | PostgreSQL (Neon) connection | Required (no default) |
+
 Set in `.env` for local development. On Streamlit Cloud, add to App Settings → Secrets.
 
 ---
@@ -388,7 +391,7 @@ HF Spaces L4 GPU tier gives **24 GB VRAM** — runs NeuralGCM 1.4° comfortably.
 HF Spaces free tier gives **16 GB RAM** — enough for RAG (sentence-transformers + FAISS).
 - `models/faiss_index/` (180 KB) is committed — RAG index is pre-built
 - BGE embedding model downloads from HF Hub on first use (~30 sec on HF infra)
-- `weather.duckdb` is committed (pre-populated data)
+- Database hosted on Neon PostgreSQL (no local file needed)
 - NeuralGCM disabled (no GPU) — uses Open-Meteo for NWP
 
 ### Streamlit Cloud
@@ -400,7 +403,7 @@ HF Spaces free tier gives **16 GB RAM** — enough for RAG (sentence-transformer
 
 ## Tech Stack
 
-- **Python 3.12+**, **DuckDB** (embedded lakehouse)
+- **Python 3.12+**, **PostgreSQL** (Neon hosted) + **psycopg2-binary**
 - **neuralgcm** + **jax[cuda12]** (Google DeepMind neural weather model on GPU)
 - **anthropic** (Claude API — advisory generation + translation)
 - **xgboost** + **scikit-learn** (MOS correction model)
@@ -412,7 +415,8 @@ HF Spaces free tier gives **16 GB RAM** — enough for RAG (sentence-transformer
 - **beautifulsoup4** + **imdlib** (IMD data scraping + gridded backup)
 - **streamlit** + **pydeck** (dashboard)
 - **dagster** (orchestration — alternative to linear pipeline)
-- **fastapi** + **uvicorn** (health endpoint + webhook receiver)
+- **fastapi** + **uvicorn** (unified REST API: health, auth, stations, forecasts, alerts, webhook)
+- **python-jose** + **passlib** (JWT auth + bcrypt password hashing)
 - **apscheduler** (scheduled pipeline runs)
 - **rich** (terminal output)
 - **DVC** (ML model versioning pipeline)

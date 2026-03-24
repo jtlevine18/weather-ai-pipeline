@@ -3,13 +3,22 @@
 import os
 import sys
 import pytest
-import duckdb
 
 # Ensure project root is on sys.path so imports like `from config import ...` work
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from config import STATIONS, FaultInjectionConfig, PipelineConfig
-from src.database import DDL
+from src.database import DDL, init_db
+
+# Tables to clean between tests (order matters for foreign-key-like dependencies)
+_TABLES_TO_CLEAN = [
+    "delivery_log", "delivery_metrics", "feedback_responses",
+    "agricultural_alerts", "forecasts", "healing_log",
+    "clean_telemetry", "raw_telemetry", "pipeline_runs",
+    "conversation_log", "conversation_sessions", "conversation_memory",
+    "scheduled_followups", "farmer_profiles", "farmer_land_records",
+    "farmer_soil_health",
+]
 
 
 # ---------------------------------------------------------------------------
@@ -18,10 +27,18 @@ from src.database import DDL
 
 @pytest.fixture
 def db_conn():
-    """Fresh in-memory DuckDB with all tables created."""
-    conn = duckdb.connect(":memory:")
-    conn.execute(DDL)
+    """PostgreSQL connection via PgConnection; skips if DATABASE_URL not set."""
+    database_url = os.environ.get("DATABASE_URL", "")
+    if not database_url:
+        pytest.skip("DATABASE_URL not set — skipping database test")
+    conn = init_db(database_url)
     yield conn
+    # Clean up test data (DELETE, not DROP — tables are shared)
+    for table in _TABLES_TO_CLEAN:
+        try:
+            conn.execute(f"DELETE FROM {table}")
+        except Exception:
+            pass
     conn.close()
 
 
@@ -43,8 +60,12 @@ def fault_config_clean():
 
 @pytest.fixture
 def pipeline_config():
-    """PipelineConfig with in-memory DB and empty API keys."""
-    return PipelineConfig(db_path=":memory:", tomorrow_io_key="", anthropic_key="")
+    """PipelineConfig with test DB URL and empty API keys."""
+    return PipelineConfig(
+        db_path=os.environ.get("DATABASE_URL", ""),
+        tomorrow_io_key="",
+        anthropic_key="",
+    )
 
 
 # ---------------------------------------------------------------------------

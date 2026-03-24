@@ -1,4 +1,4 @@
-"""Unit tests for DuckDB schema and CRUD helpers."""
+"""Unit tests for PostgreSQL schema and CRUD helpers."""
 
 import pytest
 from src.database import (
@@ -24,7 +24,7 @@ from src.database import (
 class TestSchemaCreation:
     def test_all_core_tables_exist(self, db_conn):
         tables = db_conn.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
         ).fetchall()
         table_names = {t[0] for t in tables}
         expected = {
@@ -36,7 +36,7 @@ class TestSchemaCreation:
 
     def test_all_metadata_tables_exist(self, db_conn):
         tables = db_conn.execute(
-            "SELECT table_name FROM information_schema.tables WHERE table_schema='main'"
+            "SELECT table_name FROM information_schema.tables WHERE table_schema='public'"
         ).fetchall()
         table_names = {t[0] for t in tables}
         expected = {
@@ -185,11 +185,11 @@ class TestPipelineRuns:
     def test_lifecycle(self, db_conn):
         run_id = "run_test_001"
         start_pipeline_run(db_conn, run_id)
-        rows = db_conn.execute(
-            "SELECT * FROM pipeline_runs WHERE id=?", [run_id]
-        ).fetchall()
-        assert len(rows) == 1
-        assert rows[0][3] == "running"  # status column
+        row = db_conn.execute(
+            "SELECT status FROM pipeline_runs WHERE id=?", [run_id]
+        ).fetchone()
+        assert row is not None
+        assert row[0] == "running"
 
         finish_pipeline_run(db_conn, run_id, "ok", 6, 0, "All steps passed")
         row = db_conn.execute(

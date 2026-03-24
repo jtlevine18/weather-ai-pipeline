@@ -7,14 +7,12 @@ Each check returns (passed: bool, message: str).
 
 from __future__ import annotations
 import logging
-from typing import List, Tuple
-
-import duckdb
+from typing import Any, List, Tuple
 
 log = logging.getLogger(__name__)
 
 
-def check_row_count(conn: duckdb.DuckDBPyConnection, table: str,
+def check_row_count(conn: Any, table: str,
                     min_expected: int) -> Tuple[bool, str]:
     """Verify table has at least min_expected rows."""
     count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
@@ -23,7 +21,7 @@ def check_row_count(conn: duckdb.DuckDBPyConnection, table: str,
     return passed, msg
 
 
-def check_null_rate(conn: duckdb.DuckDBPyConnection, table: str,
+def check_null_rate(conn: Any, table: str,
                     column: str, max_null_pct: float) -> Tuple[bool, str]:
     """Verify null rate for a column is below threshold."""
     row = conn.execute(f"""
@@ -40,7 +38,7 @@ def check_null_rate(conn: duckdb.DuckDBPyConnection, table: str,
     return passed, msg
 
 
-def check_value_range(conn: duckdb.DuckDBPyConnection, table: str,
+def check_value_range(conn: Any, table: str,
                       column: str, min_val: float, max_val: float) -> Tuple[bool, str]:
     """Verify all non-null values in column are within [min_val, max_val]."""
     row = conn.execute(f"""
@@ -56,7 +54,7 @@ def check_value_range(conn: duckdb.DuckDBPyConnection, table: str,
     return passed, msg
 
 
-def check_freshness(conn: duckdb.DuckDBPyConnection, table: str,
+def check_freshness(conn: Any, table: str,
                     ts_column: str, max_age_hours: float) -> Tuple[bool, str]:
     """Verify most recent row is not older than max_age_hours."""
     row = conn.execute(f"""
@@ -77,7 +75,7 @@ def check_freshness(conn: duckdb.DuckDBPyConnection, table: str,
     return passed, msg
 
 
-def run_all_checks(conn: duckdb.DuckDBPyConnection) -> List[Tuple[bool, str]]:
+def run_all_checks(conn: Any) -> List[Tuple[bool, str]]:
     """Run all quality checks and return results."""
     results = []
 

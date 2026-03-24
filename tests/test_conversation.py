@@ -1,5 +1,6 @@
 """Tests for the conversation engine (state machine, language, memory, tools)."""
 
+import os
 import pytest
 
 
@@ -83,13 +84,14 @@ def test_tool_execution_soil():
     from src.dpi.simulator import get_registry
     import json
 
+    database_url = os.environ.get("DATABASE_URL", "")
     reg = get_registry()
     farmers = reg.list_farmers()
     phone = farmers[0]["phone"]
     profile = reg.lookup_by_phone(phone)
     aadhaar_id = profile.aadhaar.aadhaar_id
 
-    result = execute_conversation_tool("get_soil_health", {"aadhaar_id": aadhaar_id}, "weather.duckdb")
+    result = execute_conversation_tool("get_soil_health", {"aadhaar_id": aadhaar_id}, database_url)
     data = json.loads(result)
     assert "pH" in data
     assert "nitrogen_kg_ha" in data
@@ -100,11 +102,12 @@ def test_tool_execution_insurance():
     from src.dpi.simulator import get_registry
     import json
 
+    database_url = os.environ.get("DATABASE_URL", "")
     reg = get_registry()
     farmers = reg.list_farmers()
     profile = reg.lookup_by_phone(farmers[0]["phone"])
 
-    result = execute_conversation_tool("get_insurance_status", {"aadhaar_id": profile.aadhaar.aadhaar_id}, "weather.duckdb")
+    result = execute_conversation_tool("get_insurance_status", {"aadhaar_id": profile.aadhaar.aadhaar_id}, database_url)
     data = json.loads(result)
     assert "status" in data
     assert "insured_crops" in data
@@ -115,11 +118,12 @@ def test_tool_execution_subsidy():
     from src.dpi.simulator import get_registry
     import json
 
+    database_url = os.environ.get("DATABASE_URL", "")
     reg = get_registry()
     farmers = reg.list_farmers()
     profile = reg.lookup_by_phone(farmers[0]["phone"])
 
-    result = execute_conversation_tool("get_subsidy_history", {"aadhaar_id": profile.aadhaar.aadhaar_id}, "weather.duckdb")
+    result = execute_conversation_tool("get_subsidy_history", {"aadhaar_id": profile.aadhaar.aadhaar_id}, database_url)
     data = json.loads(result)
     assert "pmkisan" in data or "kcc" in data
 
@@ -135,25 +139,15 @@ def test_conversational_agent_init():
     assert agent.farmer_profile is None
 
 
-def test_followup_scheduling():
+def test_followup_scheduling(db_conn):
     """Test followup scheduling (requires DB)."""
-    import duckdb
     from src.conversation.followup import schedule_followup, get_pending_followups, followups_to_context
 
-    conn = duckdb.connect(":memory:")
-    conn.execute("""
-        CREATE TABLE scheduled_followups (
-            id VARCHAR PRIMARY KEY, aadhaar_id VARCHAR, session_id VARCHAR,
-            trigger_type VARCHAR, trigger_value VARCHAR, message_template VARCHAR,
-            status VARCHAR DEFAULT 'pending', fired_at TIMESTAMP, created_at TIMESTAMP
-        )
-    """)
-
-    fid = schedule_followup(conn, "XXXX-XXXX-1234", "time", "2026-03-25T10:00:00",
+    fid = schedule_followup(db_conn, "XXXX-XXXX-1234", "time", "2026-03-25T10:00:00",
                             "Check on your pepper crop after the heavy rain", "session-1")
     assert fid
 
-    pending = get_pending_followups(conn, "XXXX-XXXX-1234")
+    pending = get_pending_followups(db_conn, "XXXX-XXXX-1234")
     assert len(pending) == 1
     assert "pepper" in pending[0]["message_template"]
 
@@ -161,25 +155,16 @@ def test_followup_scheduling():
     assert "PENDING FOLLOW-UPS" in ctx
 
 
-def test_memory_context_building():
+def test_memory_context_building(db_conn):
     """Test memory context building (requires DB)."""
-    import duckdb
     from src.conversation.memory import save_memories, build_memory_context
-
-    conn = duckdb.connect(":memory:")
-    conn.execute("""
-        CREATE TABLE conversation_memory (
-            id VARCHAR PRIMARY KEY, aadhaar_id VARCHAR, session_id VARCHAR,
-            memory_type VARCHAR, content VARCHAR, expires_at TIMESTAMP, created_at TIMESTAMP
-        )
-    """)
 
     memories = [
         {"type": "topic", "content": "Asked about pepper disease management", "expires_days": None},
         {"type": "advisory_given", "content": "Recommended copper fungicide spray", "expires_days": 30},
     ]
-    save_memories(conn, "XXXX-XXXX-1234", "session-1", memories)
+    save_memories(db_conn, "XXXX-XXXX-1234", "session-1", memories)
 
-    ctx = build_memory_context(conn, "XXXX-XXXX-1234")
+    ctx = build_memory_context(db_conn, "XXXX-XXXX-1234")
     assert "CONVERSATION MEMORY" in ctx
     assert "pepper" in ctx
