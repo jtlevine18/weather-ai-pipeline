@@ -300,41 +300,59 @@ class NeuralGCMClient:
             (np.datetime64("now") - init_time) / np.timedelta64(1, "h")
         ))
         total_forecast_hours = era5_age_h + self.forecast_hours
-        # Round up to nearest 6h (output cadence)
-        inner_steps = 6
-        outer_steps = max(1, -(-total_forecast_hours // inner_steps))  # ceiling division
+        inner_steps = 6  # output every 6 hours
+        total_steps = max(1, -(-total_forecast_hours // inner_steps))  # ceiling division
         timedelta = np.timedelta64(inner_steps, "h")
 
+        # Chain short unrolls to avoid GPU OOM.
+        # A single unroll of 28 steps stores all intermediate predictions (~66 GB).
+        # Instead, run 4-step chunks: discard catch-up predictions, keep only the
+        # final chunk that covers now → now + forecast_hours.
+        chunk_size = 4  # 4 × 6h = 24h per chunk — fits comfortably in 24 GB VRAM
+        forecast_steps = max(1, -(-self.forecast_hours // inner_steps))  # steps for actual forecast
+        catchup_steps = max(0, total_steps - forecast_steps)
+
         log.info(
-            "Running NeuralGCM: ERA5 age=%dh + horizon=%dh = %dh total | %d steps × %dh...",
-            era5_age_h, self.forecast_hours, outer_steps * inner_steps,
-            outer_steps, inner_steps,
+            "NeuralGCM plan: ERA5 age=%dh | catch-up=%d steps, forecast=%d steps "
+            "(chunks of %d) | total=%dh",
+            era5_age_h, catchup_steps, forecast_steps, chunk_size,
+            total_steps * inner_steps,
         )
 
         t0 = time_mod.time()
-        final_state, predictions = model.unroll(
-            initial_state,
-            all_forcings,
-            steps=outer_steps,
-            timedelta=timedelta,
-            start_with_input=True,
+        state = initial_state
+
+        # Phase 1: Catch-up — unroll to present, discard predictions to save memory
+        steps_done = 0
+        while steps_done < catchup_steps:
+            n = min(chunk_size, catchup_steps - steps_done)
+            state, _discarded = model.unroll(
+                state, all_forcings, steps=n, timedelta=timedelta,
+                start_with_input=(steps_done == 0),
+            )
+            steps_done += n
+            elapsed_h = (steps_done) * inner_steps
+            log.info("  Catch-up: %d/%d steps done (%dh / %dh)",
+                     steps_done, catchup_steps, elapsed_h, catchup_steps * inner_steps)
+            del _discarded  # free GPU memory
+
+        # Phase 2: Forecast — unroll the future portion and keep predictions
+        state, predictions = model.unroll(
+            state, all_forcings, steps=forecast_steps, timedelta=timedelta,
+            start_with_input=(catchup_steps == 0),
         )
         inference_s = time_mod.time() - t0
         log.info("NeuralGCM inference completed in %.1fs", inference_s)
 
-        # Convert JAX arrays back to xarray
+        # Convert JAX arrays back to xarray — only the forecast portion
+        forecast_start = init_time + np.timedelta64(catchup_steps * inner_steps, "h")
         times = [
-            init_time + np.timedelta64(i * inner_steps, "h")
-            for i in range(outer_steps + 1)
+            forecast_start + np.timedelta64(i * inner_steps, "h")
+            for i in range(forecast_steps + 1)
         ]
         output_ds = model.data_to_xarray(predictions, times=times)
-
-        # Trim to only future timesteps (drop the historical catch-up portion)
-        now = np.datetime64("now")
-        future_mask = output_ds.time >= now - np.timedelta64(6, "h")  # keep nearest 6h before now
-        output_ds = output_ds.sel(time=future_mask)
-        log.info("Trimmed to %d future timesteps (from %s onward)",
-                 output_ds.sizes["time"], output_ds.time[0].values)
+        log.info("Output: %d timesteps from %s to %s",
+                 output_ds.sizes["time"], times[0], times[-1])
 
         return output_ds, inference_s
 
