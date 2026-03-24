@@ -226,14 +226,21 @@ class NeuralGCMClient:
         model = self._model
 
         # Regrid ERA5 (0.25°) to model's native grid (1.4° Gaussian)
+        # Grid returns radians; ERA5 uses degrees — interp in degrees, then assign radians
         target_grid = model.data_coords.horizontal
-        target_lats = np.array(target_grid.latitudes)
-        target_lons = np.array(target_grid.longitudes)
+        target_lats_rad = np.array(target_grid.latitudes)
+        target_lons_rad = np.array(target_grid.longitudes)
+        target_lats_deg = np.degrees(target_lats_rad)
+        target_lons_deg = np.degrees(target_lons_rad)
         log.info("Regridding ERA5 (%d×%d) → model grid (%d×%d)...",
                  len(init_ds.longitude), len(init_ds.latitude),
-                 len(target_lons), len(target_lats))
+                 len(target_lons_deg), len(target_lats_deg))
         init_ds = init_ds.interp(
-            latitude=target_lats, longitude=target_lons, method="linear",
+            latitude=target_lats_deg, longitude=target_lons_deg, method="linear",
+        )
+        # Reassign coordinates in radians (what the model expects)
+        init_ds = init_ds.assign_coords(
+            latitude=target_lats_rad, longitude=target_lons_rad,
         )
         # Fill any NaN introduced at grid edges after interpolation
         for var in init_ds.data_vars:
