@@ -513,14 +513,16 @@ class NeuralGCMClient:
 
 def is_neuralgcm_available() -> bool:
     """Check if NeuralGCM and its dependencies (JAX, etc.) are installed."""
-    try:
-        import neuralgcm  # noqa: F401
-        import jax         # noqa: F401
-        import gcsfs       # noqa: F401
-        import xarray      # noqa: F401
-        return True
-    except ImportError:
+    missing = []
+    for pkg in ("neuralgcm", "jax", "gcsfs", "xarray"):
+        try:
+            __import__(pkg)
+        except ImportError:
+            missing.append(pkg)
+    if missing:
+        log.warning("NeuralGCM unavailable — missing packages: %s", ", ".join(missing))
         return False
+    return True
 
 
 def get_neuralgcm_device() -> str:

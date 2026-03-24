@@ -49,11 +49,16 @@ class WeatherPipeline:
         self.open_meteo    = OpenMeteoClient()
         self.nasa_power    = NASAPowerClient()
         self.neuralgcm     = None
-        if config.neuralgcm.enabled and is_neuralgcm_available():
+        if not config.neuralgcm.enabled:
+            log.info("NeuralGCM disabled by config (use default or remove --no-neuralgcm)")
+        elif not is_neuralgcm_available():
+            log.warning("NeuralGCM enabled but packages missing — falling back to Open-Meteo")
+        else:
             self.neuralgcm = NeuralGCMClient(
                 model_name=config.neuralgcm.model_name,
                 forecast_hours=config.neuralgcm.forecast_hours,
             )
+            log.info("NeuralGCM ready: %s", config.neuralgcm.model_name)
 
         # Processing components
         self.rule_healer   = RuleBasedFallback()
