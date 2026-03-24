@@ -60,9 +60,9 @@ st.divider()
 # Helpers
 # ---------------------------------------------------------------------------
 SOURCE_STYLE = {
-    "imd_api":    ("IMD API",    "#2E7D32"),
-    "imdlib":     ("imdlib",     "#1565C0"),
-    "synthetic":  ("Synthetic",  "#888"),
+    "imd_api":    ("India Met Dept",       "#2E7D32"),
+    "imdlib":     ("IMD Gridded Archive",  "#1565C0"),
+    "synthetic":  ("Synthetic",            "#888"),
 }
 
 HEAL_STYLE = {
@@ -289,9 +289,9 @@ with tab_stations:
     <div style="background:#fff;border:1px solid #e0dcd5;border-radius:8px;padding:16px;margin-top:16px;">
         <div style="font-weight:600;color:#1a1a1a;margin-bottom:8px;">Data Sources</div>
         <div style="font-size:0.85rem;color:#555;line-height:1.8;">
-            <strong>IMD API</strong> — Real-time station data from India Meteorological Department (today's max/min temp, humidity, rainfall)<br/>
-            <strong>imdlib</strong> — IMD gridded archive at 0.25° resolution (T-1 day lag, temperature + rainfall only)<br/>
-            <strong>Tomorrow.io</strong> — Used for cross-validation and to fill fields IMD doesn't provide (wind, pressure, humidity)
+            <strong>India Meteorological Department</strong> — Real-time station data scraped from city.imd.gov.in (today's max/min temp, humidity, rainfall)<br/>
+            <strong>IMD Gridded Archive</strong> — Historical gridded data at 0.25° resolution via imdlib (T-1 day lag, temperature + rainfall only)<br/>
+            <strong>Tomorrow.io</strong> — Used for cross-validation and to fill fields IMD doesn't provide (wind speed, pressure, humidity)
         </div>
     </div>
     """, unsafe_allow_html=True)

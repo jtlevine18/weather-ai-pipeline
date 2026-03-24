@@ -437,6 +437,14 @@ def load_pipeline_stage_stats() -> Dict[str, Any]:
                     "SELECT COUNT(*) FROM forecasts WHERE model_used = 'hybrid_mos'"
                 ).fetchone()
                 stats["mos_count"] = row[0] if row else 0
+                row = conn.execute(
+                    "SELECT COUNT(DISTINCT station_id) FROM forecasts"
+                ).fetchone()
+                stats["fc_stations"] = row[0] if row else 0
+                row = conn.execute(
+                    "SELECT AVG(confidence) FROM forecasts WHERE confidence IS NOT NULL"
+                ).fetchone()
+                stats["avg_confidence"] = round(row[0], 2) if row and row[0] else 0.0
 
             if table_exists(conn, "agricultural_alerts"):
                 row = conn.execute("SELECT COUNT(*) FROM agricultural_alerts").fetchone()

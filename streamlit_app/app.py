@@ -194,7 +194,6 @@ _arrow = (
 
 # Build all three cards + arrows as a single HTML block
 cards_html = '<div style="display:flex;align-items:stretch;gap:0;max-width:100%;">'
-
 for idx, stage in enumerate(STAGES):
     stats_html = "".join(
         f'<div style="display:flex;justify-content:space-between;padding:3px 0;">'
