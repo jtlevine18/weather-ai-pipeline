@@ -222,31 +222,28 @@ class NeuralGCMClient:
         """
         import jax
         import numpy as np
+        from dinosaur import spherical_harmonic, horizontal_interpolation
+        from dinosaur import xarray_utils
 
         model = self._model
 
-        # Regrid ERA5 (0.25°) to model's native grid (1.4° Gaussian)
-        # 1. Convert ERA5 coordinates from degrees to radians
-        # 2. Interpolate to model grid (already in radians)
-        target_grid = model.data_coords.horizontal
-        target_lats = np.array(target_grid.latitudes)   # radians
-        target_lons = np.array(target_grid.longitudes)   # radians
-
-        # Convert ERA5 coords to radians first
-        init_ds = init_ds.assign_coords(
-            latitude=np.radians(init_ds.latitude.values),
-            longitude=np.radians(init_ds.longitude.values),
+        # Regrid ERA5 (0.25°) to model's native grid using dinosaur
+        # (same approach as official NeuralGCM inference demo)
+        era5_grid = spherical_harmonic.Grid(
+            latitude_nodes=init_ds.sizes["latitude"],
+            longitude_nodes=init_ds.sizes["longitude"],
+            latitude_spacing=xarray_utils.infer_latitude_spacing(init_ds.latitude),
+            longitude_offset=xarray_utils.infer_longitude_offset(init_ds.longitude),
+        )
+        regridder = horizontal_interpolation.ConservativeRegridder(
+            era5_grid, model.data_coords.horizontal, skipna=True,
         )
         log.info("Regridding ERA5 (%d×%d) → model grid (%d×%d)...",
-                 len(init_ds.longitude), len(init_ds.latitude),
-                 len(target_lons), len(target_lats))
-        init_ds = init_ds.interp(
-            latitude=target_lats, longitude=target_lons, method="linear",
-        )
-        # Fill any NaN introduced at grid edges after interpolation
-        for var in init_ds.data_vars:
-            if init_ds[var].isnull().any():
-                init_ds[var] = init_ds[var].fillna(init_ds[var].mean(skipna=True))
+                 era5_grid.longitude_nodes, era5_grid.latitude_nodes,
+                 model.data_coords.horizontal.longitude_nodes,
+                 model.data_coords.horizontal.latitude_nodes)
+        init_ds = xarray_utils.regrid(init_ds, regridder)
+        init_ds = xarray_utils.fill_nan_with_nearest(init_ds)
 
         log.info("Encoding initial state...")
         inputs = model.inputs_from_xarray(init_ds)
