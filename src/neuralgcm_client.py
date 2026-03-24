@@ -251,6 +251,61 @@ class NeuralGCMClient:
         return data, init_time
 
     # ------------------------------------------------------------------
+    # Prediction structure fixup
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _fix_pred_pytree(pred):
+        """Recursively stack Python lists of arrays into JAX arrays.
+
+        NeuralGCM's model.unroll() sometimes returns predictions as dicts
+        whose values are Python lists of per-step arrays rather than stacked
+        JAX arrays.  model.data_to_xarray() expects array leaves with a
+        leading time dimension, so we stack them here.
+        """
+        import jax.numpy as jnp
+
+        if isinstance(pred, dict):
+            return {k: NeuralGCMClient._fix_pred_pytree(v)
+                    for k, v in pred.items()}
+        if isinstance(pred, (list, tuple)):
+            if len(pred) == 0:
+                return pred
+            first = pred[0]
+            # List of arrays → stack into single array
+            if hasattr(first, "shape"):
+                return jnp.stack(pred, axis=0)
+            # List of dicts → merge into dict of stacked arrays
+            if isinstance(first, dict):
+                keys = first.keys()
+                return {k: NeuralGCMClient._fix_pred_pytree([d[k] for d in pred])
+                        for k in keys}
+            # Other nested structure — recurse
+            return type(pred)(NeuralGCMClient._fix_pred_pytree(x) for x in pred)
+        return pred
+
+    @staticmethod
+    def _log_pred_structure(pred, prefix="pred"):
+        """Log the structure of a prediction pytree for debugging."""
+        if isinstance(pred, dict):
+            for k, v in pred.items():
+                NeuralGCMClient._log_pred_structure(v, f"{prefix}.{k}")
+        elif isinstance(pred, (list, tuple)):
+            kind = "list" if isinstance(pred, list) else "tuple"
+            if len(pred) > 0 and hasattr(pred[0], "shape"):
+                log.info("  %s: %s[%d] of arrays, first shape=%s dtype=%s",
+                         prefix, kind, len(pred), pred[0].shape, pred[0].dtype)
+            elif len(pred) > 0 and isinstance(pred[0], dict):
+                log.info("  %s: %s[%d] of dicts", prefix, kind, len(pred))
+                NeuralGCMClient._log_pred_structure(pred[0], f"{prefix}[0]")
+            else:
+                log.info("  %s: %s[%d]", prefix, kind, len(pred))
+        elif hasattr(pred, "shape"):
+            log.info("  %s: array shape=%s dtype=%s", prefix, pred.shape, pred.dtype)
+        else:
+            log.info("  %s: %s", prefix, type(pred).__name__)
+
+    # ------------------------------------------------------------------
     # Inference
     # ------------------------------------------------------------------
 
@@ -342,12 +397,10 @@ class NeuralGCMClient:
                      steps_done, catchup_steps, elapsed_h, catchup_steps * inner_steps)
             del _discarded  # free GPU memory
 
-        # Phase 2: Forecast — convert each chunk to xarray immediately.
-        # NeuralGCM's data_to_xarray() handles its own unroll output format,
-        # but concatenating raw JAX predictions across chunks fails because
-        # the pytree structure contains Python lists that break jnp.concatenate.
-        # Solution: let data_to_xarray convert each chunk, then xr.concat.
+        # Phase 2: Forecast — unroll in chunks, fix prediction pytree,
+        # convert each chunk to xarray, then concatenate.
         import xarray as xr
+        import jax.numpy as jnp
 
         forecast_start = init_time + np.timedelta64(catchup_steps * inner_steps, "h")
         chunk_datasets = []
@@ -360,12 +413,26 @@ class NeuralGCMClient:
                 start_with_input=is_first,
             )
 
-            # Convert this chunk to xarray immediately.
+            # Log raw prediction structure (first chunk only)
+            if forecast_steps_done == 0:
+                log.info("Raw unroll prediction structure (steps=%d, start_with_input=%s):",
+                         n, is_first)
+                self._log_pred_structure(chunk_pred)
+
+            # Fix prediction pytree: stack Python lists → JAX arrays
+            chunk_pred = self._fix_pred_pytree(chunk_pred)
+
+            if forecast_steps_done == 0:
+                log.info("Fixed prediction structure:")
+                self._log_pred_structure(chunk_pred)
+
+            # Convert to xarray.
             # start_with_input=True → n+1 outputs (includes initial state)
             # start_with_input=False → n outputs (steps only)
             # Try both since behavior may vary by model version.
             chunk_start = forecast_start + np.timedelta64(forecast_steps_done * inner_steps, "h")
             chunk_ds = None
+            last_err = None
             for num_times, offset in [(n + 1, 0), (n, 1)]:
                 try:
                     chunk_times = [
@@ -373,15 +440,17 @@ class NeuralGCMClient:
                         for j in range(num_times)
                     ]
                     chunk_ds = model.data_to_xarray(chunk_pred, times=chunk_times)
+                    log.info("  data_to_xarray succeeded with %d times", num_times)
                     break
                 except Exception as e:
-                    log.debug("data_to_xarray with %d times failed: %s", num_times, e)
+                    last_err = e
+                    log.info("  data_to_xarray with %d times failed: %s", num_times, e)
                     continue
 
             if chunk_ds is None:
                 raise RuntimeError(
-                    f"data_to_xarray failed for chunk at step {forecast_steps_done}, "
-                    f"pred type={type(chunk_pred).__name__}"
+                    f"data_to_xarray failed for chunk at step {forecast_steps_done}: "
+                    f"{last_err}"
                 )
 
             chunk_datasets.append(chunk_ds)
