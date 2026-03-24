@@ -249,8 +249,13 @@ class WeatherPipeline:
                     )
                     return clean
                 else:
-                    log.warning("AI healing returned fallback_used=True, using rule-based")
+                    console.print(
+                        f"  [yellow]⚠[/yellow] AI healing fell back to rule-based "
+                        f"(used {result.tokens_in}+{result.tokens_out} tokens, "
+                        f"{result.latency_s:.1f}s, {len(result.tool_calls)} tool calls)"
+                    )
             except Exception as e:
+                console.print(f"  [red]✗[/red] AI healing failed: {e}")
                 log.warning("AI healing failed, falling back to rule-based: %s", e)
 
         # Fallback to rule-based
