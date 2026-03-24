@@ -12,12 +12,14 @@ def insert_forecast(conn: duckdb.DuckDBPyConnection, record: Dict[str, Any]) -> 
     conn.execute(
         """INSERT OR REPLACE INTO forecasts
            (id, station_id, issued_at, valid_for_ts, temperature, humidity,
-            wind_speed, rainfall, condition, model_used, nwp_temp, correction, confidence)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)""",
+            wind_speed, rainfall, condition, model_used, nwp_source, nwp_temp,
+            correction, confidence)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)""",
         [record["id"], record["station_id"], record["issued_at"], record["valid_for_ts"],
          record.get("temperature"), record.get("humidity"), record.get("wind_speed"),
          record.get("rainfall"), record.get("condition", "clear"),
          record.get("model_used", "persistence"),
+         record.get("nwp_source", "open_meteo"),
          record.get("nwp_temp"), record.get("correction", 0.0),
          record.get("confidence", 0.7)],
     )

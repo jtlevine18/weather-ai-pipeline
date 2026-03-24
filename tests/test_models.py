@@ -85,8 +85,20 @@ class TestForecast:
         )
         assert model.condition == "clear"
         assert model.model_used == "persistence"
+        assert model.nwp_source == "open_meteo"
         assert model.confidence == 0.7
         assert model.correction == 0.0
+
+    def test_neuralgcm_nwp_source(self):
+        model = Forecast(
+            id="fc_001", station_id="KL_TVM",
+            issued_at="2026-03-23T12:00:00",
+            valid_for_ts="2026-03-23T18:00:00",
+            nwp_source="neuralgcm",
+            model_used="neuralgcm_mos",
+        )
+        assert model.nwp_source == "neuralgcm"
+        assert model.model_used == "neuralgcm_mos"
 
 
 class TestDownscaledForecast:

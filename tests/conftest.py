@@ -83,6 +83,7 @@ def sample_forecast():
         "rainfall": 1.2,
         "condition": "clear",
         "model_used": "hybrid_mos",
+        "nwp_source": "open_meteo",
         "nwp_temp": 31.0,
         "correction": -0.8,
         "confidence": 0.82,
@@ -132,6 +133,36 @@ def mock_open_meteo():
         "pressure": 1008.0,
         "rainfall": 0.0,
     })
+
+
+@pytest.fixture
+def sample_healing_record():
+    """A realistic healing_log record from the AI agent."""
+    return {
+        "id": "heal_KL_TVM_20260323_abc123",
+        "pipeline_run_id": "run_001",
+        "reading_id": "KL_TVM_20260323120000_abc123",
+        "station_id": "KL_TVM",
+        "assessment": "corrected",
+        "reasoning": "Temperature 290°C is a decimal-place typo — corrected to 29.0°C. "
+                     "Cross-validated against Tomorrow.io reference (29.3°C).",
+        "corrections": '{"temperature": 29.0}',
+        "quality_score": 0.85,
+        "tools_used": "get_station_metadata,get_reference_comparison",
+        "original_values": '{"temperature": 290.0}',
+        "model": "claude-sonnet-4-6",
+        "tokens_in": 3500,
+        "tokens_out": 2000,
+        "latency_s": 8.2,
+        "fallback_used": False,
+    }
+
+
+@pytest.fixture
+def sample_raw_reading_typo(sample_raw_reading):
+    """A raw reading with a decimal-place typo (290 instead of 29)."""
+    return {**sample_raw_reading, "temperature": 290.0, "fault_type": "typo",
+            "id": "KL_TVM_20260323120000_typo"}
 
 
 @pytest.fixture

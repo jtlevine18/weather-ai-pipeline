@@ -14,6 +14,10 @@ from src.database import (
     get_recent_forecasts,
     get_recent_alerts,
     get_station_health,
+    insert_healing_log,
+    get_healing_log,
+    get_healing_log_for_reading,
+    get_healing_stats,
 )
 
 
@@ -26,6 +30,7 @@ class TestSchemaCreation:
         expected = {
             "raw_telemetry", "clean_telemetry", "forecasts",
             "agricultural_alerts", "delivery_log", "pipeline_runs",
+            "healing_log",
         }
         assert expected.issubset(table_names), f"Missing: {expected - table_names}"
 
@@ -85,6 +90,20 @@ class TestForecasts:
         assert forecasts[0]["station_id"] == "KL_TVM"
         assert forecasts[0]["confidence"] == 0.82
 
+    def test_nwp_source_persisted(self, db_conn, sample_forecast):
+        insert_forecast(db_conn, sample_forecast)
+        forecasts = get_recent_forecasts(db_conn, limit=10)
+        assert forecasts[0]["nwp_source"] == "open_meteo"
+
+    def test_neuralgcm_nwp_source(self, db_conn, sample_forecast):
+        fc = {**sample_forecast, "id": "fc_ngcm_001",
+              "nwp_source": "neuralgcm", "model_used": "neuralgcm_mos"}
+        insert_forecast(db_conn, fc)
+        forecasts = get_recent_forecasts(db_conn, limit=10)
+        ngcm = [f for f in forecasts if f["nwp_source"] == "neuralgcm"]
+        assert len(ngcm) == 1
+        assert ngcm[0]["model_used"] == "neuralgcm_mos"
+
 
 class TestAlerts:
     def test_insert_and_query(self, db_conn):
@@ -119,6 +138,47 @@ class TestDeliveryLog:
         insert_delivery_log(db_conn, log_entry)
         rows = db_conn.execute("SELECT * FROM delivery_log").fetchall()
         assert len(rows) == 1
+
+
+class TestHealingLog:
+    def test_insert_and_query(self, db_conn, sample_healing_record):
+        insert_healing_log(db_conn, [sample_healing_record])
+        logs = get_healing_log(db_conn, limit=10)
+        assert len(logs) == 1
+        assert logs[0]["station_id"] == "KL_TVM"
+        assert logs[0]["assessment"] == "corrected"
+        assert logs[0]["model"] == "claude-sonnet-4-6"
+
+    def test_query_by_reading(self, db_conn, sample_healing_record):
+        insert_healing_log(db_conn, [sample_healing_record])
+        logs = get_healing_log_for_reading(db_conn, sample_healing_record["reading_id"])
+        assert len(logs) == 1
+        assert logs[0]["reasoning"].startswith("Temperature 290")
+
+    def test_stats_aggregation(self, db_conn, sample_healing_record):
+        # Insert two records with different assessments
+        rec2 = {**sample_healing_record, "id": "heal_002", "reading_id": "r_002",
+                "station_id": "TN_CHN", "assessment": "good", "quality_score": 0.95}
+        insert_healing_log(db_conn, [sample_healing_record, rec2])
+        stats = get_healing_stats(db_conn)
+        assert stats["total_assessments"] == 2
+        assert "corrected" in stats["assessment_distribution"]
+        assert "good" in stats["assessment_distribution"]
+        assert stats["latest_run"] is not None
+        assert stats["latest_run"]["model"] == "claude-sonnet-4-6"
+
+    def test_tool_usage_tracking(self, db_conn, sample_healing_record):
+        insert_healing_log(db_conn, [sample_healing_record])
+        stats = get_healing_stats(db_conn)
+        assert "get_station_metadata" in stats["tool_usage"]
+        assert "get_reference_comparison" in stats["tool_usage"]
+
+    def test_fallback_flag(self, db_conn, sample_healing_record):
+        rec = {**sample_healing_record, "id": "heal_fb", "fallback_used": True,
+               "model": None, "tokens_in": None, "tokens_out": None}
+        insert_healing_log(db_conn, [rec])
+        logs = get_healing_log(db_conn, limit=10)
+        assert logs[0]["fallback_used"] is True
 
 
 class TestPipelineRuns:

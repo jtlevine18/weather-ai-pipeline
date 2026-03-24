@@ -9,7 +9,7 @@ from dagster import ConfigurableResource
 import duckdb
 
 from src.weather_clients import TomorrowIOClient, OpenMeteoClient, NASAPowerClient
-from src.database import DDL
+from src.database import init_db
 
 
 class DuckDBResource(ConfigurableResource):
@@ -21,11 +21,11 @@ class DuckDBResource(ConfigurableResource):
         arbitrary_types_allowed = True
 
     def get_connection(self) -> duckdb.DuckDBPyConnection:
-        conn = duckdb.connect(self.db_path)
         if not DuckDBResource._ddl_done:
-            conn.execute(DDL)
+            conn = init_db(self.db_path)
             DuckDBResource._ddl_done = True
-        return conn
+            return conn
+        return duckdb.connect(self.db_path)
 
 
 class TomorrowIOResource(ConfigurableResource):

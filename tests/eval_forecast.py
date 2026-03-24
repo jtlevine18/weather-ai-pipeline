@@ -75,6 +75,7 @@ def pair_forecasts_with_actuals(conn, limit=2000):
             pairs.append({
                 "station_id": sid,
                 "model_used": f.get("model_used", "unknown"),
+                "nwp_source": f.get("nwp_source", "open_meteo"),
                 "forecast_temp": f.get("temperature"),
                 "forecast_humidity": f.get("humidity"),
                 "forecast_wind": f.get("wind_speed"),
@@ -181,6 +182,32 @@ def run_forecast_eval(db_path=DB_PATH):
         imp = (nwp_m["mae"] - mos_m["mae"]) / nwp_m["mae"] * 100
         console.print(f"  MOS improvement: {imp:+.1f}% MAE reduction")
 
+    # By NWP source (NeuralGCM vs Open-Meteo)
+    nwp_sources = sorted(set(p["nwp_source"] for p in pairs))
+    if len(nwp_sources) > 1 or "neuralgcm" in nwp_sources:
+        by_nwp = {}
+        tbl_nwp = Table(title="\nTemperature Accuracy by NWP Source")
+        tbl_nwp.add_column("NWP Source", style="bold")
+        tbl_nwp.add_column("N", justify="right")
+        tbl_nwp.add_column("MAE (C)", justify="right")
+        tbl_nwp.add_column("RMSE (C)", justify="right")
+        tbl_nwp.add_column("Bias (C)", justify="right")
+        for src in nwp_sources:
+            errors = [p["forecast_temp"] - p["actual_temp"]
+                      for p in pairs if p["nwp_source"] == src
+                      and p["forecast_temp"] is not None and p["actual_temp"] is not None]
+            m = compute_metrics(errors)
+            by_nwp[src] = m
+            tbl_nwp.add_row(src, str(m["n"]), _fmt(m["mae"]), _fmt(m["rmse"]),
+                            _fmt(m["bias"], "+.2f") if m["bias"] is not None else "---")
+        console.print(tbl_nwp)
+
+        if "neuralgcm" in by_nwp and "open_meteo" in by_nwp:
+            ng, om = by_nwp["neuralgcm"], by_nwp["open_meteo"]
+            if ng["mae"] and om["mae"]:
+                diff = om["mae"] - ng["mae"]
+                console.print(f"  NeuralGCM vs Open-Meteo: {diff:+.2f}C MAE difference")
+
     # By station
     stations = sorted(set(p["station_id"] for p in pairs))
     by_station = {}
@@ -203,10 +230,16 @@ def run_forecast_eval(db_path=DB_PATH):
 
     # Save
     os.makedirs(RESULTS_DIR, exist_ok=True)
+    # NWP source distribution
+    nwp_dist = defaultdict(int)
+    for p in pairs:
+        nwp_dist[p["nwp_source"]] += 1
+
     results = {
         "eval_name": "forecast",
         "timestamp": datetime.utcnow().isoformat(),
         "total_pairs": len(pairs),
+        "nwp_source_distribution": dict(nwp_dist),
         "overall": overall,
         "by_model": by_model,
         "nwp_vs_mos": {"nwp": nwp_m, "mos": mos_m},

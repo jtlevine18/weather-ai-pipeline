@@ -2,10 +2,12 @@
 Level 1A — Self-Healing Data Quality Evaluation
 
 Measures detection precision/recall per fault type and imputation accuracy
-against synthetic ground truth.
+against synthetic ground truth. Evaluates both the AI healing agent
+(Claude Sonnet with 5 investigation tools) and the rule-based fallback.
 
 Usage:
-    python tests/eval_healing.py
+    python tests/eval_healing.py              # Rule-based only
+    python tests/eval_healing.py --ai         # AI agent (requires ANTHROPIC_API_KEY)
 """
 
 import json
@@ -21,7 +23,7 @@ from rich.table import Table
 
 from config import STATIONS, FaultInjectionConfig
 from src.ingestion import _baseline, _inject_fault
-from src.healing import RuleBasedFallback
+from src.healing import RuleBasedFallback, HealingAgent
 
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "eval_results")
 N_PER_STATION = 50
@@ -208,6 +210,131 @@ def run_healing_eval(n_per_station=N_PER_STATION, seed=42):
     return results
 
 
+def run_ai_healing_eval(n_per_station=5, seed=42):
+    """Evaluate HealingAgent (Claude) on synthetic faulted readings.
+
+    Uses a small sample (default 5 per station = 100 total) to control cost.
+    Requires ANTHROPIC_API_KEY in environment.
+    """
+    api_key = os.getenv("ANTHROPIC_API_KEY", "")
+    if not api_key:
+        print("ANTHROPIC_API_KEY not set — skipping AI healing eval")
+        return None
+
+    random.seed(seed)
+    console = Console()
+    agent = HealingAgent(api_key)
+
+    fault_config = FaultInjectionConfig(
+        typo_rate=0.15, offline_rate=0.15, drift_rate=0.15, missing_rate=0.15
+    )
+
+    # Generate all readings + ground truth
+    all_readings = []
+    ground_truths = {}
+    references = {}
+    for station in STATIONS:
+        for _ in range(n_per_station):
+            reading, ground_truth = generate_pair(station, fault_config)
+            all_readings.append(reading)
+            ground_truths[reading["id"]] = ground_truth
+            references[station.station_id] = make_reference(ground_truth)
+
+    # Run AI agent (batch mode)
+    import duckdb
+    from src.database import DDL
+    conn = duckdb.connect(":memory:")
+    conn.execute(DDL)
+
+    result = agent.heal_batch(all_readings, references, conn)
+    conn.close()
+
+    console.print(f"\n[bold]Level 1A — AI Healing Agent Eval[/bold]")
+    console.print(f"Model: {result.model}")
+    console.print(f"Tokens: {result.tokens_in} in / {result.tokens_out} out")
+    console.print(f"Latency: {result.latency_s:.1f}s")
+    console.print(f"Fallback used: {result.fallback_used}")
+    console.print(f"Assessments: {len(result.assessments)}")
+
+    # Confusion: fault_type -> assessment
+    readings_by_id = {r["id"]: r for r in all_readings}
+    confusion = defaultdict(lambda: defaultdict(int))
+    imputation_errors = defaultdict(list)
+    quality_scores = defaultdict(list)
+    for a in result.assessments:
+        rid = a.get("reading_id", "")
+        gt = ground_truths.get(rid, {})
+        orig_reading = readings_by_id.get(rid, {})
+        fault = orig_reading.get("fault_type") or "clean"
+        assessment = a.get("assessment", "unknown")
+        confusion[fault][assessment] += 1
+        quality_scores[fault].append(a.get("quality_score", 0))
+
+        corrections = a.get("corrections", {})
+        if isinstance(corrections, str):
+            try:
+                corrections = json.loads(corrections)
+            except (json.JSONDecodeError, TypeError):
+                corrections = {}
+
+        for field in ("temperature", "humidity", "wind_speed"):
+            gt_val = gt.get(field)
+            corrected_val = corrections.get(field)
+            if corrected_val is not None and gt_val is not None:
+                imputation_errors[fault].append(abs(corrected_val - gt_val))
+
+    # Assessment distribution table
+    all_assessments = sorted({a for f in confusion.values() for a in f})
+    tbl = Table(title="AI Agent: fault_type -> assessment")
+    tbl.add_column("fault_type", style="bold")
+    for a in all_assessments:
+        tbl.add_column(a, justify="right")
+    tbl.add_column("total", justify="right", style="dim")
+    fault_types = ["clean", "typo", "offline", "drift", "missing_field"]
+    for fault in fault_types:
+        row = [fault]
+        rt = sum(confusion[fault].values())
+        for a in all_assessments:
+            row.append(str(confusion[fault].get(a, 0)))
+        row.append(str(rt))
+        tbl.add_row(*row)
+    console.print(tbl)
+
+    # Tool usage summary
+    tool_counts = defaultdict(int)
+    for a in result.assessments:
+        tools = a.get("tools_used", [])
+        if isinstance(tools, str):
+            tools = [t.strip() for t in tools.split(",") if t.strip()]
+        for t in tools:
+            tool_counts[t] += 1
+    if tool_counts:
+        console.print("\n[bold]Tool Usage[/bold]")
+        for tool, cnt in sorted(tool_counts.items(), key=lambda x: -x[1]):
+            console.print(f"  {tool}: {cnt}")
+
+    # Save results
+    os.makedirs(RESULTS_DIR, exist_ok=True)
+    ai_results = {
+        "eval_name": "healing_ai",
+        "timestamp": datetime.utcnow().isoformat(),
+        "model": result.model,
+        "tokens_in": result.tokens_in,
+        "tokens_out": result.tokens_out,
+        "latency_s": result.latency_s,
+        "fallback_used": result.fallback_used,
+        "total_readings": len(all_readings),
+        "total_assessments": len(result.assessments),
+        "confusion": {f: dict(v) for f, v in confusion.items()},
+        "tool_usage": dict(tool_counts),
+    }
+    out = os.path.join(RESULTS_DIR, "healing_ai.json")
+    with open(out, "w") as f:
+        json.dump(ai_results, f, indent=2, default=str)
+    console.print(f"\n[dim]Results saved to {out}[/dim]")
+    return ai_results
+
+
 @pytest.mark.slow
 @pytest.mark.offline
 def test_eval_healing():
@@ -216,5 +343,19 @@ def test_eval_healing():
     assert results is not None
 
 
+@pytest.mark.slow
+def test_eval_healing_ai():
+    """Pytest wrapper for AI agent eval (requires ANTHROPIC_API_KEY)."""
+    if not os.getenv("ANTHROPIC_API_KEY"):
+        pytest.skip("ANTHROPIC_API_KEY not set")
+    results = run_ai_healing_eval(n_per_station=2)
+    assert results is not None
+    assert results["total_assessments"] > 0
+
+
 if __name__ == "__main__":
-    run_healing_eval()
+    import sys
+    if "--ai" in sys.argv:
+        run_ai_healing_eval()
+    else:
+        run_healing_eval()
