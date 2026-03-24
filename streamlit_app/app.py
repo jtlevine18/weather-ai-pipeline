@@ -106,6 +106,26 @@ st.markdown("""
 # ---------------------------------------------------------------------------
 # 3 clickable stage cards
 # ---------------------------------------------------------------------------
+# Compute readable stats for cards
+_fc_total = stats.get("forecasts", 0)
+_mos_total = stats.get("mos_count", 0)
+_ml_pct = f"{100 * _mos_total // max(1, _fc_total)}%" if _fc_total else "—"
+
+# Parse source names from the raw string (e.g. "imd_api:15 · imdlib:3")
+_src_raw = stats.get("sources") or ""
+_src_names = []
+for chunk in _src_raw.split("·"):
+    name = chunk.strip().split(":")[0].strip()
+    if name == "imd_api":
+        _src_names.append("IMD")
+    elif name == "imdlib":
+        _src_names.append("imdlib")
+    elif name == "synthetic":
+        _src_names.append("Synthetic")
+    elif name:
+        _src_names.append(name)
+_src_label = ", ".join(_src_names) if _src_names else "—"
+
 STAGES = [
     {
         "key": "data",
@@ -116,8 +136,9 @@ STAGES = [
         "desc": ("Weather readings from 20 stations across Kerala and Tamil Nadu, "
                  "automatically cleaned and quality-checked"),
         "stats": [
-            ("Active Stations", "20"),
-            ("Avg Quality Score", f"{stats.get('avg_quality', 0):.0%}"),
+            ("Stations", "20"),
+            ("Data Sources", _src_label),
+            ("Avg Quality", f"{stats.get('avg_quality', 0):.0%}"),
         ],
     },
     {
@@ -129,8 +150,8 @@ STAGES = [
         "desc": ("7-day forecasts corrected with machine learning, "
                  "personalized to each farmer's location and elevation"),
         "stats": [
-            ("Stations Covered", f"{stats.get('fc_stations', 0)}/20"),
-            ("Avg Confidence", f"{stats.get('avg_confidence', 0):.0%}"),
+            ("Forecasts", str(_fc_total)),
+            ("ML Model Used", _ml_pct),
         ],
     },
     {
@@ -157,7 +178,6 @@ _arrow = (
 
 # Build all three cards + arrows as a single HTML block
 cards_html = '<div style="display:flex;align-items:stretch;gap:0;max-width:100%;">'
-
 for idx, stage in enumerate(STAGES):
     stats_html = "".join(
         f'<div style="display:flex;justify-content:space-between;padding:3px 0;">'

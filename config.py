@@ -54,6 +54,13 @@ class WeatherDataConfig:
 
 
 @dataclass
+class NeuralGCMConfig:
+    enabled: bool = True                            # On by default; falls back to Open-Meteo if no GPU
+    model_name: str = "deterministic_1_4_deg"       # 1.4° resolution, ~48s on L4
+    forecast_hours: int = 24                        # Hours to forecast ahead
+
+
+@dataclass
 class DPIConfig:
     simulation: bool = True   # True = use simulated DPI registry, False = real APIs
 
@@ -63,6 +70,7 @@ class PipelineConfig:
     weather: WeatherDataConfig = field(default_factory=WeatherDataConfig)
     delivery: DeliveryConfig = field(default_factory=DeliveryConfig)
     translation: TranslationConfig = field(default_factory=TranslationConfig)
+    neuralgcm: NeuralGCMConfig = field(default_factory=NeuralGCMConfig)
     dpi: DPIConfig = field(default_factory=DPIConfig)
     db_path: str = "weather.duckdb"
     tomorrow_io_key: str = field(default_factory=lambda: os.getenv("TOMORROW_IO_API_KEY", ""))

@@ -76,6 +76,7 @@ CREATE TABLE IF NOT EXISTS forecasts (
     rainfall      DOUBLE,
     condition     VARCHAR,
     model_used    VARCHAR,
+    nwp_source    VARCHAR DEFAULT 'open_meteo',
     nwp_temp      DOUBLE,
     correction    DOUBLE,
     confidence    DOUBLE DEFAULT 0.7,
@@ -230,7 +231,24 @@ CREATE TABLE IF NOT EXISTS scheduled_followups (
 def init_db(db_path: str = "weather.duckdb") -> duckdb.DuckDBPyConnection:
     conn = duckdb.connect(db_path)
     conn.execute(DDL)
+    # Schema migrations for existing databases
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: duckdb.DuckDBPyConnection) -> None:
+    """Apply schema migrations to existing tables (idempotent)."""
+    _add_column_if_missing(conn, "forecasts", "nwp_source", "VARCHAR DEFAULT 'open_meteo'")
+
+
+def _add_column_if_missing(conn, table: str, column: str, typedef: str) -> None:
+    """Add a column to an existing table if it doesn't exist yet."""
+    try:
+        cols = [r[1] for r in conn.execute(f"PRAGMA table_info('{table}')").fetchall()]
+        if column not in cols:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {typedef}")
+    except Exception:
+        pass
 
 
 from src.database._util import _now, _rows_to_dicts  # noqa: F401

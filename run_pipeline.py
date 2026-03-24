@@ -3,7 +3,8 @@
 Main CLI entry point for the Kerala/Tamil Nadu weather pipeline.
 
 Usage:
-    python run_pipeline.py                    # Single run
+    python run_pipeline.py                    # Single run (NeuralGCM + Open-Meteo fallback)
+    python run_pipeline.py --no-neuralgcm     # Open-Meteo only (no GPU needed)
     python run_pipeline.py --live-delivery    # Enable real SMS
     python run_pipeline.py --schedule 60      # Run every 60 minutes
     python run_pipeline.py --step 1           # Run only step 1
@@ -43,6 +44,8 @@ def parse_args():
     parser.add_argument("--source", choices=["real", "synthetic"],
                         default="real",
                         help="Data source for Step 1 ingestion (default: real)")
+    parser.add_argument("--no-neuralgcm", action="store_true",
+                        help="Disable NeuralGCM and use Open-Meteo only")
     parser.add_argument("--verbose", "-v", action="store_true")
     return parser.parse_args()
 
@@ -63,6 +66,8 @@ def main():
     config = get_config()
     config.db_path = args.db
     config.weather.ingestion_source = args.source
+    if args.no_neuralgcm:
+        config.neuralgcm.enabled = False
 
     if args.schedule:
         from src.scheduler import PipelineScheduler

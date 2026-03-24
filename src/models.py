@@ -56,6 +56,7 @@ class Forecast(BaseModel):
     rainfall: Optional[float] = None
     condition: str = "clear"
     model_used: str = "persistence"
+    nwp_source: str = "open_meteo"   # "neuralgcm" or "open_meteo"
     nwp_temp: Optional[float] = None
     correction: float = 0.0
     confidence: float = Field(default=0.7, ge=0.0, le=1.0)

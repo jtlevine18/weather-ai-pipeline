@@ -31,6 +31,7 @@ from src.downscaling     import IDWDownscaler
 from src.translation     import get_provider, generate_advisory
 from src.delivery        import MultiChannelDelivery, DEFAULT_RECIPIENTS, DeliveryChannel, Recipient
 from src.models          import RawReading, CleanReading, Forecast, Advisory, DeliveryLog
+from src.neuralgcm_client import NeuralGCMClient, is_neuralgcm_available
 
 log = logging.getLogger(__name__)
 console = Console()
@@ -47,6 +48,17 @@ class WeatherPipeline:
         self.tomorrow_io   = TomorrowIOClient(config.tomorrow_io_key)
         self.open_meteo    = OpenMeteoClient()
         self.nasa_power    = NASAPowerClient()
+        self.neuralgcm     = None
+        if not config.neuralgcm.enabled:
+            log.info("NeuralGCM disabled by config (use default or remove --no-neuralgcm)")
+        elif not is_neuralgcm_available():
+            log.warning("NeuralGCM enabled but packages missing — falling back to Open-Meteo")
+        else:
+            self.neuralgcm = NeuralGCMClient(
+                model_name=config.neuralgcm.model_name,
+                forecast_hours=config.neuralgcm.forecast_hours,
+            )
+            log.info("NeuralGCM ready: %s", config.neuralgcm.model_name)
 
         # Processing components
         self.rule_healer   = RuleBasedFallback()
@@ -285,19 +297,45 @@ class WeatherPipeline:
     # Step 3: Forecast
     # ------------------------------------------------------------------
     async def step_forecast(self) -> List[Dict[str, Any]]:
-        console.print("[bold blue]Step 3:[/bold blue] Running MOS forecasts via Open-Meteo...")
-        forecasts = []
+        nwp_label = "NeuralGCM + Open-Meteo fallback" if self.neuralgcm else "Open-Meteo"
+        console.print(f"[bold blue]Step 3:[/bold blue] Running MOS forecasts via {nwp_label}...")
 
-        # Batch Open-Meteo requests (20 at a time, no rate limit)
+        # --- Try NeuralGCM batch (one inference → all 20 stations) ---
+        neuralgcm_nwp: Dict[str, List[Dict[str, Any]]] = {}
+        neuralgcm_meta = None
+        if self.neuralgcm:
+            try:
+                from src.neuralgcm_client import get_neuralgcm_device
+                device = get_neuralgcm_device()
+                console.print(f"  [dim]NeuralGCM: {self.neuralgcm.model_name} on {device}[/dim]")
+
+                neuralgcm_nwp, neuralgcm_meta = await self.neuralgcm.get_forecasts_batch(STATIONS)
+                console.print(
+                    f"  [green]✓[/green] NeuralGCM: {neuralgcm_meta.stations_extracted} stations | "
+                    f"init={neuralgcm_meta.init_time[:19]} | "
+                    f"inference={neuralgcm_meta.inference_time_s}s | "
+                    f"data fetch={neuralgcm_meta.data_fetch_time_s}s"
+                )
+            except Exception as e:
+                log.warning("NeuralGCM failed, falling back to Open-Meteo: %s", e)
+                console.print(f"  [yellow]⚠[/yellow] NeuralGCM failed: {e}")
+                console.print("  [dim]Falling back to Open-Meteo for all stations[/dim]")
+                neuralgcm_nwp = {}
+
+        # --- Build per-station forecast tasks ---
+        forecasts = []
         all_tasks = []
         for station in STATIONS:
             obs = get_latest_clean_for_station(self.conn, station.station_id)
             history = get_clean_history_for_station(self.conn, station.station_id)
+            # Use NeuralGCM NWP if available for this station, else Open-Meteo
+            precomputed = neuralgcm_nwp.get(station.station_id)
             all_tasks.append((station, run_forecast_step(
                 station, obs, self.open_meteo,
                 self.forecast_model, self.persistence,
                 nasa_client=self.nasa_power,
                 station_history=history,
+                precomputed_nwp=precomputed,
             )))
 
         all_results = []
@@ -312,6 +350,7 @@ class WeatherPipeline:
                 await asyncio.sleep(0.1)
 
         mos_count = 0
+        ngcm_count = 0
         for station, result in all_results:
             if isinstance(result, Exception) or result is None:
                 log.warning("Forecast failed for %s: %s", station.station_id, result)
@@ -319,10 +358,16 @@ class WeatherPipeline:
             from src.database import insert_forecast as _if
             _if(self.conn, result)
             forecasts.append(result)
-            if result.get("model_used") == "hybrid_mos":
+            mu = result.get("model_used", "")
+            if "mos" in mu:
                 mos_count += 1
+            if result.get("nwp_source") == "neuralgcm":
+                ngcm_count += 1
 
-        console.print(f"  [green]✓[/green] {len(forecasts)} forecasts | {mos_count} MOS | {len(forecasts)-mos_count} fallback")
+        nwp_summary = f"{ngcm_count} NeuralGCM + {len(forecasts)-ngcm_count} Open-Meteo" if ngcm_count else f"{len(forecasts)} Open-Meteo"
+        console.print(
+            f"  [green]✓[/green] {len(forecasts)} forecasts | {mos_count} MOS | NWP: {nwp_summary}"
+        )
         # Validate stage output
         forecasts = [Forecast(**f).model_dump() for f in forecasts]
         return forecasts
