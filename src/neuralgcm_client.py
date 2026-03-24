@@ -215,23 +215,25 @@ class NeuralGCMClient:
             )
         pl_data = pl_ds[available_pl].sel(time=latest_time).compute()
 
-        # Fetch surface forcings (SST, sea ice)
-        log.info("Fetching surface forcings...")
-        sl_ds = xr.open_zarr(ERA5_SL_PATH, storage_options=gcs_opts, consolidated=True)
-        available_sl = [v for v in FORCING_VARS if v in sl_ds]
-        if available_sl:
-            sl_data = sl_ds[available_sl].sel(
-                time=latest_time, method="nearest"
-            ).compute()
-            # Fill NaN in SST (undefined over land) with nearest-neighbor
-            for var in available_sl:
-                if sl_data[var].isnull().any():
-                    # Simple fill: use global mean where NaN
-                    mean_val = float(sl_data[var].mean(skipna=True).values)
-                    sl_data[var] = sl_data[var].fillna(mean_val)
-            merged = xr.merge([pl_data, sl_data])
-        else:
-            log.warning("No forcing variables found in single-level dataset")
+        # Fetch surface forcings (SST, sea ice) — optional for 24h forecast
+        try:
+            log.info("Fetching surface forcings...")
+            sl_ds = xr.open_zarr(ERA5_SL_PATH, storage_options=gcs_opts, consolidated=False)
+            available_sl = [v for v in FORCING_VARS if v in sl_ds]
+            if available_sl:
+                sl_data = sl_ds[available_sl].sel(
+                    time=latest_time, method="nearest"
+                ).compute()
+                for var in available_sl:
+                    if sl_data[var].isnull().any():
+                        mean_val = float(sl_data[var].mean(skipna=True).values)
+                        sl_data[var] = sl_data[var].fillna(mean_val)
+                merged = xr.merge([pl_data, sl_data])
+            else:
+                log.warning("No forcing variables found in single-level dataset")
+                merged = pl_data
+        except Exception as e:
+            log.warning("Surface forcings unavailable (%s) — proceeding without SST/sea-ice", e)
             merged = pl_data
 
         return merged, latest_time
