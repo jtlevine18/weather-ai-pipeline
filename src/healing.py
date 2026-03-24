@@ -616,7 +616,8 @@ class HealingAgent:
                 try:
                     raw_assessments = self._parse_assessments(full_text)
                 except (ValueError, json.JSONDecodeError) as e:
-                    log.warning("Failed to parse AI healing response: %s", e)
+                    log.warning("Failed to parse AI healing response: %s — text: %s",
+                                e, full_text[:500])
                     return HealingResult(
                         readings=[], assessments=[], tool_calls=all_tool_calls,
                         model=self.model, tokens_in=total_tokens_in,
