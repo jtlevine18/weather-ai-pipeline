@@ -288,22 +288,121 @@ class NeuralGCMClient:
     def _log_pred_structure(pred, prefix="pred"):
         """Log the structure of a prediction pytree for debugging."""
         if isinstance(pred, dict):
+            log.warning("  %s: dict with keys=%s", prefix, list(pred.keys()))
             for k, v in pred.items():
                 NeuralGCMClient._log_pred_structure(v, f"{prefix}.{k}")
         elif isinstance(pred, (list, tuple)):
             kind = "list" if isinstance(pred, list) else "tuple"
             if len(pred) > 0 and hasattr(pred[0], "shape"):
-                log.info("  %s: %s[%d] of arrays, first shape=%s dtype=%s",
+                log.warning("  %s: %s[%d] of arrays, first shape=%s dtype=%s",
                          prefix, kind, len(pred), pred[0].shape, pred[0].dtype)
             elif len(pred) > 0 and isinstance(pred[0], dict):
-                log.info("  %s: %s[%d] of dicts", prefix, kind, len(pred))
+                log.warning("  %s: %s[%d] of dicts", prefix, kind, len(pred))
                 NeuralGCMClient._log_pred_structure(pred[0], f"{prefix}[0]")
             else:
-                log.info("  %s: %s[%d]", prefix, kind, len(pred))
+                log.warning("  %s: %s[%d]", prefix, kind, len(pred))
         elif hasattr(pred, "shape"):
-            log.info("  %s: array shape=%s dtype=%s", prefix, pred.shape, pred.dtype)
+            log.warning("  %s: array shape=%s dtype=%s", prefix, pred.shape, pred.dtype)
         else:
-            log.info("  %s: %s", prefix, type(pred).__name__)
+            log.warning("  %s: %s", prefix, type(pred).__name__)
+
+    def _manual_pred_to_xarray(self, pred, times):
+        """Convert prediction dict to xarray Dataset using model grid coordinates.
+
+        Bypasses model.data_to_xarray() which has internal bugs with list-based
+        prediction pytrees. After _fix_pred_pytree, pred is a dict of JAX/numpy
+        arrays. We flatten nested dicts, infer dimensions from shapes, and build
+        the Dataset manually.
+        """
+        import numpy as np
+        import xarray as xr
+
+        model = self._model
+        horiz = model.data_coords.horizontal
+        lat = np.asarray(horiz.latitudes)
+        lon = np.asarray(horiz.longitudes)
+
+        # Pressure levels
+        levels = None
+        try:
+            levels = np.asarray(model.data_coords.vertical.centers)
+        except Exception:
+            pass
+
+        times_np = np.array(times)
+        n_lat, n_lon = len(lat), len(lon)
+        n_lev = len(levels) if levels is not None else 0
+
+        # Flatten nested dicts into {name: np_array}
+        flat = {}
+
+        def _flatten(d, prefix=""):
+            for k, v in d.items():
+                key = k if not prefix else f"{prefix}/{k}"
+                if isinstance(v, dict):
+                    _flatten(v, key)
+                elif hasattr(v, "shape"):
+                    flat[key] = np.asarray(v)
+                else:
+                    log.debug("Skipping non-array pred var %s: %s", key, type(v).__name__)
+
+        _flatten(pred)
+
+        if not flat:
+            raise RuntimeError("No arrays found in prediction dict after flattening")
+
+        # Infer time dimension from array shapes
+        actual_n_times = None
+        for arr in flat.values():
+            s = arr.shape
+            if len(s) >= 3 and s[-2:] == (n_lat, n_lon):
+                actual_n_times = s[0] if len(s) == 3 else s[0]
+                break
+            if len(s) >= 4 and n_lev and s[-3] == n_lev and s[-2:] == (n_lat, n_lon):
+                actual_n_times = s[0]
+                break
+
+        if actual_n_times is not None and actual_n_times != len(times_np):
+            log.warning("Pred has %d timesteps but %d times provided; adjusting",
+                        actual_n_times, len(times_np))
+            # Rebuild times to match actual array size
+            dt_h = 6  # inner_steps
+            base = times_np[0] if len(times_np) > 0 else np.datetime64("now")
+            times_np = np.array([
+                base + np.timedelta64(i * dt_h, "h") for i in range(actual_n_times)
+            ])
+
+        # Build xarray data_vars
+        data_vars = {}
+        for name, arr in flat.items():
+            s = arr.shape
+            if len(s) >= 2 and s[-2:] == (n_lat, n_lon):
+                if len(s) == 4 and n_lev and s[-3] == n_lev:
+                    data_vars[name] = (["time", "level", "latitude", "longitude"], arr)
+                elif len(s) == 3:
+                    data_vars[name] = (["time", "latitude", "longitude"], arr)
+                elif len(s) == 2:
+                    data_vars[name] = (["time", "latitude", "longitude"], arr[np.newaxis])
+                else:
+                    log.debug("Skipping %s shape=%s", name, s)
+            else:
+                log.debug("Skipping %s shape=%s (doesn't end with %d×%d)",
+                          name, s, n_lat, n_lon)
+
+        coords = {"time": times_np, "latitude": lat, "longitude": lon}
+        if levels is not None:
+            coords["level"] = levels
+
+        log.warning("Manual xarray: %d vars from %d candidates, %d times, grid %d×%d",
+                    len(data_vars), len(flat), len(times_np), n_lat, n_lon)
+
+        if not data_vars:
+            raise RuntimeError(
+                f"No vars matched grid {n_lat}×{n_lon}. "
+                f"Array shapes: {[(k, v.shape) for k, v in flat.items()]}"
+            )
+
+        return xr.Dataset(data_vars, coords=coords)
 
     # ------------------------------------------------------------------
     # Inference
@@ -398,9 +497,8 @@ class NeuralGCMClient:
             del _discarded  # free GPU memory
 
         # Phase 2: Forecast — unroll in chunks, fix prediction pytree,
-        # convert each chunk to xarray, then concatenate.
+        # manually build xarray (bypasses broken data_to_xarray), concatenate.
         import xarray as xr
-        import jax.numpy as jnp
 
         forecast_start = init_time + np.timedelta64(catchup_steps * inner_steps, "h")
         chunk_datasets = []
@@ -413,53 +511,38 @@ class NeuralGCMClient:
                 start_with_input=is_first,
             )
 
-            # Log raw prediction structure (first chunk only)
+            # Log raw prediction structure (first chunk only, at WARNING so it shows)
             if forecast_steps_done == 0:
-                log.info("Raw unroll prediction structure (steps=%d, start_with_input=%s):",
-                         n, is_first)
+                log.warning("Raw unroll prediction (steps=%d, start_with_input=%s):",
+                            n, is_first)
                 self._log_pred_structure(chunk_pred)
 
             # Fix prediction pytree: stack Python lists → JAX arrays
             chunk_pred = self._fix_pred_pytree(chunk_pred)
 
             if forecast_steps_done == 0:
-                log.info("Fixed prediction structure:")
+                log.warning("Fixed prediction structure:")
                 self._log_pred_structure(chunk_pred)
 
-            # Convert to xarray.
-            # start_with_input=True → n+1 outputs (includes initial state)
-            # start_with_input=False → n outputs (steps only)
-            # Try both since behavior may vary by model version.
+            # Build time coordinates for this chunk.
+            # Over-provide times; _manual_pred_to_xarray adjusts to actual array size.
             chunk_start = forecast_start + np.timedelta64(forecast_steps_done * inner_steps, "h")
-            chunk_ds = None
-            last_err = None
-            for num_times, offset in [(n + 1, 0), (n, 1)]:
-                try:
-                    chunk_times = [
-                        chunk_start + np.timedelta64((j + offset) * inner_steps, "h")
-                        for j in range(num_times)
-                    ]
-                    chunk_ds = model.data_to_xarray(chunk_pred, times=chunk_times)
-                    log.info("  data_to_xarray succeeded with %d times", num_times)
-                    break
-                except Exception as e:
-                    last_err = e
-                    log.info("  data_to_xarray with %d times failed: %s", num_times, e)
-                    continue
+            max_times = n + 1  # start_with_input=True may give n+1
+            chunk_times = [
+                chunk_start + np.timedelta64(j * inner_steps, "h")
+                for j in range(max_times)
+            ]
 
-            if chunk_ds is None:
-                raise RuntimeError(
-                    f"data_to_xarray failed for chunk at step {forecast_steps_done}: "
-                    f"{last_err}"
-                )
+            # Primary: manual xarray construction (bypasses data_to_xarray bugs)
+            chunk_ds = self._manual_pred_to_xarray(chunk_pred, chunk_times)
 
             chunk_datasets.append(chunk_ds)
             del chunk_pred  # free GPU memory
 
             forecast_steps_done += n
-            log.info("  Forecast: %d/%d steps done (%dh / %dh)",
-                     forecast_steps_done, forecast_steps,
-                     forecast_steps_done * inner_steps, forecast_steps * inner_steps)
+            log.warning("  Forecast: %d/%d steps done (%dh / %dh)",
+                        forecast_steps_done, forecast_steps,
+                        forecast_steps_done * inner_steps, forecast_steps * inner_steps)
 
         inference_s = time_mod.time() - t0
         log.info("NeuralGCM inference completed in %.1fs", inference_s)
