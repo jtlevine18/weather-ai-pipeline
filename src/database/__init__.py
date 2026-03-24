@@ -46,6 +46,25 @@ CREATE TABLE IF NOT EXISTS clean_telemetry (
     created_at   TIMESTAMP DEFAULT current_timestamp
 );
 
+CREATE TABLE IF NOT EXISTS healing_log (
+    id              VARCHAR PRIMARY KEY,
+    pipeline_run_id VARCHAR,
+    reading_id      VARCHAR NOT NULL,
+    station_id      VARCHAR NOT NULL,
+    assessment      VARCHAR,
+    reasoning       VARCHAR,
+    corrections     VARCHAR,
+    quality_score   DOUBLE,
+    tools_used      VARCHAR,
+    original_values VARCHAR,
+    model           VARCHAR,
+    tokens_in       INTEGER,
+    tokens_out      INTEGER,
+    latency_s       DOUBLE,
+    fallback_used   BOOLEAN DEFAULT FALSE,
+    created_at      TIMESTAMP DEFAULT current_timestamp
+);
+
 CREATE TABLE IF NOT EXISTS forecasts (
     id            VARCHAR PRIMARY KEY,
     station_id    VARCHAR NOT NULL,
@@ -251,4 +270,10 @@ from src.database.conversation import (  # noqa: E402, F401
 )
 from src.database.health import (  # noqa: E402, F401
     get_station_health,
+)
+from src.database.healing import (  # noqa: E402, F401
+    insert_healing_log,
+    get_healing_log,
+    get_healing_log_for_reading,
+    get_healing_stats,
 )

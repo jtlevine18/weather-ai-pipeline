@@ -23,7 +23,8 @@ from src.database import (init_db, insert_clean_telemetry, insert_forecast,
                             get_clean_history_for_station)
 from src.ingestion       import ingest_all_stations
 from src.weather_clients import TomorrowIOClient, OpenMeteoClient, NASAPowerClient
-from src.healing         import RuleBasedFallback, ObservabilityAgent, SelfHealingAgent
+from src.healing         import RuleBasedFallback, HealingAgent
+from src.database        import insert_healing_log
 from src.forecasting     import create_forecast_model, PersistenceModel, run_forecast_step
 from src.downscaling     import IDWDownscaler
 from src.translation     import get_provider, generate_advisory
@@ -48,8 +49,6 @@ class WeatherPipeline:
 
         # Processing components
         self.rule_healer   = RuleBasedFallback()
-        self.obs_agent     = ObservabilityAgent(config.anthropic_key)
-        self.heal_agent    = SelfHealingAgent(config.anthropic_key)
         self.forecast_model = create_forecast_model(config.models_dir)
         self.persistence   = PersistenceModel()
         self.downscaler    = IDWDownscaler(self.nasa_power)
@@ -86,15 +85,11 @@ class WeatherPipeline:
     # ------------------------------------------------------------------
     # Step 2: Heal
     # ------------------------------------------------------------------
-    async def step_heal(self, raw_readings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        console.print("[bold blue]Step 2:[/bold blue] Cross-validating via Tomorrow.io...")
-        clean = []
-        skipped = 0
-
-        # Fetch Tomorrow.io references in batches of 2 (free tier bursts trigger 429)
+    async def _fetch_references(self, raw_readings: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """Fetch Tomorrow.io references in batches of 10, NASA POWER fallback."""
         station_ids = [r["station_id"] for r in raw_readings if r["station_id"] in STATION_MAP]
         references: Dict[str, Any] = {}
-        batch_size = 2
+        batch_size = 10
         for i in range(0, len(station_ids), batch_size):
             batch = station_ids[i:i + batch_size]
             results = await asyncio.gather(*[
@@ -104,7 +99,14 @@ class WeatherPipeline:
             for sid, res in zip(batch, results):
                 references[sid] = res if isinstance(res, dict) else None
             if i + batch_size < len(station_ids):
-                await asyncio.sleep(2.0)
+                await asyncio.sleep(0.2)
+        return references
+
+    async def _rule_based_heal(self, raw_readings: List[Dict[str, Any]],
+                                references: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """Original three-phase healing: fault-based → NULL-fill → cross-validate."""
+        clean = []
+        skipped = 0
 
         for reading in raw_readings:
             ref = references.get(reading["station_id"])
@@ -122,7 +124,7 @@ class WeatherPipeline:
                             ref = ref or nasa_ref
                     if healed is None:
                         skipped += 1
-                        continue  # Never fabricate
+                        continue
             else:
                 healed = dict(reading)
 
@@ -130,7 +132,6 @@ class WeatherPipeline:
             if ref is not None:
                 healed = self.rule_healer.cross_validate(healed, ref)
             else:
-                # No reference — try NASA POWER as cross-validation fallback
                 station = STATION_MAP.get(reading["station_id"])
                 if station and fault is None:
                     nasa_ref = await self.nasa_power.get_current(station.lat, station.lon)
@@ -147,6 +148,78 @@ class WeatherPipeline:
                 healed["id"] = reading.get("id", str(uuid.uuid4()))
             clean.append(healed)
 
+        if skipped:
+            console.print(f"  [dim]{skipped} readings skipped (unfixable)[/dim]")
+        return clean
+
+    def _store_healing_log(self, result) -> None:
+        """Persist AI healing assessments to healing_log table."""
+        import json as _json
+        records = []
+        for a in result.assessments:
+            records.append({
+                "id": str(uuid.uuid4()),
+                "pipeline_run_id": self.run_id,
+                "reading_id": a.reading_id,
+                "station_id": a.station_id,
+                "assessment": a.assessment,
+                "reasoning": a.reasoning,
+                "corrections": _json.dumps(a.corrections, default=str),
+                "quality_score": a.quality_score,
+                "tools_used": ",".join(a.tools_used),
+                "original_values": _json.dumps(a.original_values, default=str),
+                "model": result.model,
+                "tokens_in": result.tokens_in,
+                "tokens_out": result.tokens_out,
+                "latency_s": result.latency_s,
+                "fallback_used": result.fallback_used,
+            })
+        if records:
+            insert_healing_log(self.conn, records)
+
+    async def step_heal(self, raw_readings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        console.print("[bold blue]Step 2:[/bold blue] Healing + cross-validating via Tomorrow.io...")
+
+        references = await self._fetch_references(raw_readings)
+
+        # Try AI healing first (if API key available)
+        if self.config.anthropic_key:
+            try:
+                agent = HealingAgent(self.config.anthropic_key)
+                result = agent.heal_batch(raw_readings, references, self.conn)
+                if not result.fallback_used:
+                    self._store_healing_log(result)
+                    clean = result.readings
+
+                    # Validate stage output
+                    clean = [CleanReading(**r).model_dump() for r in clean]
+                    insert_clean_telemetry(self.conn, clean)
+
+                    # Summary
+                    n_good = sum(1 for a in result.assessments if a.assessment == "good")
+                    n_corrected = sum(1 for a in result.assessments if a.assessment == "corrected")
+                    n_filled = sum(1 for a in result.assessments if a.assessment == "filled")
+                    n_flagged = sum(1 for a in result.assessments if a.assessment == "flagged")
+                    n_dropped = sum(1 for a in result.assessments if a.assessment == "dropped")
+                    avg_q = sum(r.get("quality_score", 1.0) for r in clean) / max(len(clean), 1)
+                    console.print(
+                        f"  [green]✓[/green] AI healer ({result.model}): "
+                        f"{len(clean)} clean | {n_good} good | {n_corrected} corrected | "
+                        f"{n_filled} filled | {n_flagged} flagged | {n_dropped} dropped | "
+                        f"avg quality {avg_q:.2f} | "
+                        f"{result.tokens_in}+{result.tokens_out} tokens | "
+                        f"{result.latency_s:.1f}s"
+                    )
+                    return clean
+                else:
+                    log.warning("AI healing returned fallback_used=True, using rule-based")
+            except Exception as e:
+                log.warning("AI healing failed, falling back to rule-based: %s", e)
+
+        # Fallback to rule-based
+        console.print("  [dim]Using rule-based fallback[/dim]")
+        clean = await self._rule_based_heal(raw_readings, references)
+
         # Validate stage output
         clean = [CleanReading(**r).model_dump() for r in clean]
         insert_clean_telemetry(self.conn, clean)
@@ -157,9 +230,9 @@ class WeatherPipeline:
         n_flagged = sum(1 for r in clean if "anomaly_flagged" in (r.get("heal_action") or ""))
         avg_q = sum(r.get("quality_score", 1.0) for r in clean) / max(len(clean), 1)
         console.print(
-            f"  [green]✓[/green] {len(clean)} clean | "
+            f"  [green]✓[/green] {len(clean)} clean (rule-based) | "
             f"{n_xval} validated | {n_filled} null-filled | {n_flagged} flagged | "
-            f"avg quality {avg_q:.2f} | {skipped} skipped"
+            f"avg quality {avg_q:.2f}"
         )
         return clean
 
@@ -170,7 +243,7 @@ class WeatherPipeline:
         console.print("[bold blue]Step 3:[/bold blue] Running MOS forecasts via Open-Meteo...")
         forecasts = []
 
-        # Batch Open-Meteo requests (5 at a time, 1s sleep) to avoid 429s
+        # Batch Open-Meteo requests (20 at a time, no rate limit)
         all_tasks = []
         for station in STATIONS:
             obs = get_latest_clean_for_station(self.conn, station.station_id)
@@ -183,7 +256,7 @@ class WeatherPipeline:
             )))
 
         all_results = []
-        om_batch_size = 5
+        om_batch_size = 20
         for i in range(0, len(all_tasks), om_batch_size):
             batch = all_tasks[i:i + om_batch_size]
             batch_results = await asyncio.gather(
@@ -191,7 +264,7 @@ class WeatherPipeline:
             )
             all_results.extend(zip([s for s, _ in batch], batch_results))
             if i + om_batch_size < len(all_tasks):
-                await asyncio.sleep(1.0)
+                await asyncio.sleep(0.1)
 
         mos_count = 0
         for station, result in all_results:
@@ -218,11 +291,15 @@ class WeatherPipeline:
 
         recipient_map = {r.station_id: r for r in DEFAULT_RECIPIENTS}
 
-        for forecast in forecasts:
+        # Build parallel downscale tasks
+        passthrough = []
+        ds_tasks = []
+        ds_indices = []
+        for idx, forecast in enumerate(forecasts):
             sid     = forecast["station_id"]
             station = STATION_MAP.get(sid)
             if station is None:
-                downscaled.append(forecast)
+                passthrough.append((idx, forecast))
                 continue
 
             recipient = recipient_map.get(sid)
@@ -230,10 +307,25 @@ class WeatherPipeline:
             farmer_lon = recipient.lon if hasattr(recipient, "lon") else station.lon + 0.05
             farmer_alt = recipient.alt_m if recipient else None
 
-            ds = await self.downscaler.downscale(
+            ds_tasks.append(self.downscaler.downscale(
                 forecast, station, farmer_lat, farmer_lon, farmer_alt
-            )
-            downscaled.append(ds)
+            ))
+            ds_indices.append(idx)
+
+        # Run all downscale calls in parallel
+        ds_results = await asyncio.gather(*ds_tasks, return_exceptions=True)
+
+        # Reassemble in original order
+        result_map: Dict[int, Dict[str, Any]] = {}
+        for idx, forecast in passthrough:
+            result_map[idx] = forecast
+        for idx, res in zip(ds_indices, ds_results):
+            if isinstance(res, Exception):
+                log.warning("Downscale failed for forecast %d: %s", idx, res)
+                result_map[idx] = forecasts[idx]
+            else:
+                result_map[idx] = res
+        downscaled = [result_map[i] for i in range(len(forecasts))]
 
         n_ds = sum(1 for f in downscaled if f.get("downscaled"))
         console.print(f"  [green]✓[/green] {len(downscaled)} forecasts | {n_ds} downscaled")

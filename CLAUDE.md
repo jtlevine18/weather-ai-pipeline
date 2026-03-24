@@ -58,13 +58,23 @@ Claude API           → Step 5 Translate   (RAG advisory + Tamil/Malayalam)
 | Step | Output table | What it does |
 |---|---|---|
 | 1 Ingest | `raw_telemetry` | Real IMD station data (scraper → imdlib → synthetic fallback) |
-| 2 Heal | `clean_telemetry` | Tomorrow.io cross-validation, NULL-fill (wind/pressure), anomaly flagging, quality scoring |
+| 2 Heal | `clean_telemetry` + `healing_log` | Claude Sonnet agentic healer (5 tools: station metadata, historical normals, Tomorrow.io reference, neighboring stations, seasonal context) with rule-based fallback |
 | 3 Forecast | `forecasts` | Open-Meteo NWP + XGBoost MOS correction (12-feature vector) |
 | 4 Downscale | `forecasts` (updated) | NASA POWER IDW interpolation + lapse-rate elevation correction |
 | 5 Translate | `agricultural_alerts` | Hybrid RAG (FAISS+BM25) + Claude advisory + translation |
 | 6 Deliver | `delivery_log` | Console SMS (Twilio dry-run) |
 
+### Parallelization
+- Step 2 Heal: Tomorrow.io fetched in batches of 10 with 0.2s sleep
+- Step 3 Forecast: Open-Meteo fetched in single batch of 20 (no rate limit)
+- Step 4 Downscale: all 20 stations downscaled in parallel via `asyncio.gather()`
+- Step 5 Translate: all 20 advisories generated in parallel via `asyncio.gather()`
+
+### Quality score design
+Quality score measures **accuracy of compared fields only** (how well IMD temp/rainfall match Tomorrow.io reference). NULL-filling from Tomorrow.io is expected enrichment (IMD never provides wind/pressure/humidity) and does NOT penalize quality. `cross_validated` and `null_filled` coexist as independent heal actions. `fields_filled` count tracked per reading.
+
 ### Degradation chain (independent, never cascades)
+- Claude healing agent unavailable → rule-based fallback (identical output, no reasoning logged)
 - IMD scraper down → imdlib gridded (T-1 day) → synthetic fallback
 - NWP unavailable → persistence model (last obs + diurnal adjustment)
 - XGBoost not trained → raw NWP passthrough
@@ -94,18 +104,19 @@ weather AI 2/
 │   ├── config.toml            # Theme + server config
 │   └── secrets.toml           # API keys for Streamlit Cloud (never commit)
 ├── src/
-│   ├── pipeline.py            # WeatherPipeline orchestrator (6-step linear)
+│   ├── pipeline.py            # WeatherPipeline orchestrator (6-step, parallelized async)
 │   ├── database/              # DuckDB lakehouse (15 tables)
-│   │   ├── __init__.py        # DDL, init_db(), re-exports all public names
+│   │   ├── __init__.py        # DDL (16 tables), init_db(), re-exports all public names
 │   │   ├── telemetry.py       # raw/clean telemetry CRUD + paired join
 │   │   ├── forecasts.py       # forecast CRUD + actuals join
 │   │   ├── alerts.py          # agricultural_alerts CRUD
 │   │   ├── delivery.py        # delivery_log + delivery_metrics CRUD
 │   │   ├── pipeline_runs.py   # start/finish pipeline run
 │   │   ├── conversation.py    # conversation_log CRUD
-│   │   └── health.py          # station health aggregation query
+│   │   ├── health.py          # station health aggregation query
+│   │   └── healing.py         # healing_log CRUD (AI agent assessment persistence)
 │   ├── models.py              # Pydantic v2 data contracts (stage boundary validation)
-│   ├── healing.py             # RuleBasedFallback (cross-validation + NULL-fill + anomaly flagging) + Claude agents
+│   ├── healing.py             # HealingAgent (Claude Sonnet tool-use agentic healer, 5 tools, 24-entry seasonal context) + RuleBasedFallback (quality score = accuracy of compared fields only, no fill penalty)
 │   ├── ingestion.py           # IMD scraper + imdlib gridded + synthetic fallback
 │   ├── weather_clients.py     # Tomorrow.io, Open-Meteo, NASA POWER, IMD JSON API + imdlib clients
 │   ├── forecasting.py         # HybridNWPModel: NWP + XGBoost MOS + persistence fallback
@@ -140,13 +151,14 @@ weather AI 2/
 │   │   ├── models.py          # Dataclasses: AadhaarProfile, LandRecord, SoilHealthCard, etc.
 │   │   ├── simulator.py       # SimulatedDPIRegistry: 40+ farmers across 20 stations
 │   │   └── services.py        # DPIService protocol + SimulatedDPIService + factory
+│   ├── daily_scheduler.py     # Singleton daily scheduler (APScheduler, toggle via System tab, auto-resumes)
 │   ├── event_bus.py           # File-based pub/sub event bus
 │   ├── quality_checks.py      # Post-pipeline data quality checks (row count, nulls, ranges, freshness)
 │   ├── health.py              # FastAPI /health endpoint (DuckDB connectivity, pipeline freshness)
 │   ├── webhook_receiver.py    # FastAPI webhook receiver (POST /webhook, GET /webhook/history)
 │   ├── scheduler.py           # APScheduler-based pipeline scheduling
 │   ├── monitor.py             # Station health monitor
-│   └── architecture.py        # Dynamic Mermaid diagram generator
+│   └── architecture.py        # Dynamic Mermaid diagram + get_pipeline_stages() (3 stages: Data/Forecasts/Advisories)
 ├── dagster_pipeline/          # Dagster orchestration (alternative to run_pipeline.py)
 │   ├── __init__.py            # Dagster definitions
 │   ├── resources.py           # Dagster resources (API clients)
@@ -168,15 +180,15 @@ weather AI 2/
 │   ├── export_training_data.py # DVC stage: DuckDB → Parquet
 │   └── train_mos.py           # DVC stage: Parquet → XGBoost model + metrics
 ├── streamlit_app/
-│   ├── app.py                 # Homepage: clickable pipeline diagram, key stats, run history
-│   ├── data_helpers.py        # Shared DB queries + Streamlit secrets injection
-│   ├── style.py               # Shared CSS (Inter font, cream/gold theme, pipeline cards)
-│   ├── chat_widget.py         # Floating chat toggle (sidebar panel, used on every page)
+│   ├── app.py                 # Homepage: 3 clickable stage cards, intro text, how-it-works, run history
+│   ├── data_helpers.py        # Shared DB queries (@st.cache_data) + Streamlit secrets injection
+│   ├── style.py               # Shared CSS (Source Serif 4 + DM Sans, cream/gold theme, STATUS_COLOR)
+│   ├── chat_widget.py         # Floating chat toggle (sidebar panel on every page, farmer ID, agent dispatch)
 │   └── pages/
-│       ├── 1_Data.py          # Ingest+Heal: station map, sources, healing, health
-│       ├── 2_Forecasts.py     # Forecast+Downscale: station forecasts, model perf, downscaling
-│       ├── 3_Advisories.py    # Translate+Deliver: advisory feed, lineage, farmers/DPI, delivery
-│       └── _4_System.py       # System (hidden from sidebar): architecture, runs, cost
+│       ├── 1_Data.py          # Ingest+Heal: station map, data sources, healing before/after, station health
+│       ├── 2_Forecasts.py     # Forecast+Downscale: station forecasts, model perf, downscaling demo
+│       ├── 3_Advisories.py    # Translate+Deliver: advisory feed, lineage, farmers/DPI profiles, delivery log
+│       └── _System.py         # System (hidden from sidebar): architecture, scheduler, runs, delivery, cost, evals
 ├── tests/
 │   ├── conftest.py            # Shared fixtures (sample_station, fault_config, etc.)
 │   ├── test_pipeline_stages.py  # Unit tests: ingestion, healing, forecasting, downscaling, advisory
@@ -206,12 +218,13 @@ Crop contexts: verified per-district from state agriculture department data.
 
 ---
 
-## Database (DuckDB — 15 tables)
+## Database (DuckDB — 16 tables)
 
 | Table | Domain | Purpose |
 |---|---|---|
 | `raw_telemetry` | telemetry | Real IMD station readings (or synthetic with injected faults) |
-| `clean_telemetry` | telemetry | Cross-validated readings with quality scores, NULL fields filled from Tomorrow.io |
+| `clean_telemetry` | telemetry | AI-healed or rule-based cross-validated readings with quality scores |
+| `healing_log` | telemetry | Per-reading AI agent assessments: reasoning, corrections, tools used, tokens, latency |
 | `forecasts` | forecasts | MOS-corrected forecasts (station + farmer-level) |
 | `agricultural_alerts` | alerts | Bilingual advisories (advisory_en + advisory_local) |
 | `delivery_log` | delivery | SMS delivery records |
@@ -281,6 +294,17 @@ Aadhaar eKYC, Land Records, Soil Health Card, PM-KISAN, PMFBY crop insurance, Ki
 
 ---
 
+## Daily Scheduler
+
+`src/daily_scheduler.py` — singleton APScheduler background thread that runs the full pipeline once daily at 06:00 IST (00:30 UTC).
+
+- Toggle on/off from **System → Scheduler** tab in the dashboard
+- State persists in `scheduler_state.json` — auto-resumes after HF Spaces restarts
+- Auto-imported by `app.py` on startup (`import src.daily_scheduler`)
+- Manual controls in System tab: Run Full Pipeline, Ingest+Heal, Forecast→Deliver, Retrain MOS
+
+---
+
 ## Dagster Orchestration
 
 Alternative to `run_pipeline.py` — same 6 steps as Dagster assets with:
@@ -289,6 +313,23 @@ Alternative to `run_pipeline.py` — same 6 steps as Dagster assets with:
 - Schedules, sensors, hooks
 - Asset checks (data quality validation)
 - Launch via `dagster dev -m dagster_pipeline`
+
+---
+
+## Dashboard (Streamlit)
+
+Pages map to pipeline stages. Chat is a floating sidebar toggle, System is hidden from the sidebar nav.
+
+| Page | Pipeline Steps | Tabs |
+|------|---------------|------|
+| **Home** (`app.py`) | Overview | Descriptive title, "What is this?" explainer, 3 clickable stage cards (Data/Forecasts/Advisories), key metrics, run history |
+| **Data** (`1_Data.py`) | Ingest + Heal | Map, Sources (IMD/imdlib/synthetic distribution), Healing (before/after + quality), Station Health |
+| **Forecasts** (`2_Forecasts.py`) | Forecast + Downscale | Station Forecasts, Model Performance, Downscaling (IDW + lapse-rate demo) |
+| **Advisories** (`3_Advisories.py`) | Translate + Deliver | Advisory Feed (hover-to-English), Lineage (forecast→advisory), Farmers & DPI (6 services), Delivery log |
+| **System** (`_System.py`) | Operations | Architecture, Scheduler, Pipeline Runs, Delivery Log, Cost, Evals, Agent Log, Delivery Funnel |
+| **Chat** (`chat_widget.py`) | All pages | Sidebar toggle → farmer lookup → NLAgent or ConversationalAgent |
+
+Style: Source Serif 4 (headings) + DM Sans (body), cream background (`#faf8f5`), gold accents (`#d4a019`), subtle warm gradient background. CSS in `style.py`, shared constants: `STATUS_COLOR`, `CONDITION_COLOR`, `CONDITION_EMOJI`. Home page cards are `<a>` elements with color-coded top borders (green/blue/gold) linking to `/Data`, `/Forecasts`, `/Advisories`.
 
 ---
 
@@ -313,7 +354,7 @@ NASA POWER 5x5 grid (~0.5 deg radius around station) → IDW interpolation to fa
 
 | Key | Used for | Free tier |
 |---|---|---|
-| `ANTHROPIC_API_KEY` | Claude advisory generation + translation | Pay-per-use (~$0.12/run) |
+| `ANTHROPIC_API_KEY` | Claude healing agent + advisory generation + translation | Pay-per-use (~$0.27/run: ~$0.15 healing + ~$0.12 advisory) |
 | `TOMORROW_IO_API_KEY` | Anomaly healing cross-validation | 500 calls/day free |
 
 NASA POWER, Open-Meteo, IMD city weather (scraping), and imdlib are fully free, no key needed.

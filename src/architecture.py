@@ -97,18 +97,12 @@ DATABASE: DuckDB embedded (weather.duckdb) — 6 tables
 
 
 def get_pipeline_stages() -> List[Dict[str, str]]:
-    """Pipeline stage metadata for the clickable home page diagram."""
+    """Pipeline stage metadata (3 stages matching dashboard pages)."""
     return [
-        {"name": "Ingest",    "step": "1", "page": "pages/1_Data.py",
-         "desc": "IMD stations + imdlib backup"},
-        {"name": "Heal",      "step": "2", "page": "pages/1_Data.py",
-         "desc": "Cross-validate via Tomorrow.io"},
-        {"name": "Forecast",  "step": "3", "page": "pages/2_Forecasts.py",
-         "desc": "NWP + XGBoost MOS"},
-        {"name": "Downscale", "step": "4", "page": "pages/2_Forecasts.py",
-         "desc": "IDW + lapse-rate to farmer GPS"},
-        {"name": "Translate", "step": "5", "page": "pages/3_Advisories.py",
-         "desc": "RAG + Claude advisory"},
-        {"name": "Deliver",   "step": "6", "page": "pages/3_Advisories.py",
-         "desc": "Console + SMS delivery"},
+        {"name": "Data",       "steps": "1-2", "page": "pages/1_Data.py",
+         "desc": "Ingest IMD observations + cross-validate via Tomorrow.io"},
+        {"name": "Forecasts",  "steps": "3-4", "page": "pages/2_Forecasts.py",
+         "desc": "NWP + XGBoost MOS correction, downscaled to farmer GPS"},
+        {"name": "Advisories", "steps": "5-6", "page": "pages/3_Advisories.py",
+         "desc": "RAG + Claude advisory in Tamil/Malayalam, SMS delivery"},
     ]

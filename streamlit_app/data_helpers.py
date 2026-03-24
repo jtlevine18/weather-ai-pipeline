@@ -135,6 +135,8 @@ def load_pipeline_runs(limit: int = 20) -> pd.DataFrame:
 @st.cache_data(ttl=60)
 def load_station_health() -> pd.DataFrame:
     try:
+        from config import STATIONS
+        valid_ids = [s.station_id for s in STATIONS]
         with _db() as conn:
             if not table_exists(conn, "clean_telemetry"):
                 return pd.DataFrame()
@@ -145,8 +147,9 @@ def load_station_health() -> pd.DataFrame:
                        AVG(quality_score) as avg_quality,
                        SUM(CASE WHEN heal_action != 'none' THEN 1 ELSE 0 END) as healed_count
                 FROM clean_telemetry
+                WHERE station_id IN (SELECT UNNEST(?::VARCHAR[]))
                 GROUP BY station_id
-            """).df()
+            """, [valid_ids]).df()
     except Exception:
         return pd.DataFrame()
 
@@ -336,6 +339,71 @@ def load_farmer_profile_detail(phone: str) -> Optional[Dict]:
 
 
 @st.cache_data(ttl=60)
+def load_healing_log(limit: int = 200) -> pd.DataFrame:
+    """Load latest healing assessments with agent reasoning."""
+    try:
+        with _db() as conn:
+            if not table_exists(conn, "healing_log"):
+                return pd.DataFrame()
+            return conn.execute(
+                "SELECT * FROM healing_log ORDER BY created_at DESC LIMIT ?", [limit]
+            ).df()
+    except Exception:
+        return pd.DataFrame()
+
+
+@st.cache_data(ttl=60)
+def load_healing_stats() -> Dict[str, Any]:
+    """Aggregate healing stats: assessment distribution, tool usage, avg quality."""
+    try:
+        with _db() as conn:
+            if not table_exists(conn, "healing_log"):
+                return {}
+
+            # Assessment distribution
+            dist_rows = conn.execute(
+                """SELECT assessment, COUNT(*) as cnt, AVG(quality_score) as avg_q
+                   FROM healing_log GROUP BY assessment"""
+            ).fetchall()
+            dist = {r[0]: {"count": r[1], "avg_quality": round(r[2], 3) if r[2] else None}
+                    for r in dist_rows}
+
+            # Tool usage frequency
+            tool_rows = conn.execute(
+                """SELECT tools_used FROM healing_log
+                   WHERE tools_used IS NOT NULL AND tools_used != ''"""
+            ).fetchall()
+            tool_counts: Dict[str, int] = {}
+            for (tools_str,) in tool_rows:
+                for t in tools_str.split(","):
+                    t = t.strip()
+                    if t:
+                        tool_counts[t] = tool_counts.get(t, 0) + 1
+
+            # Latest run stats
+            latest = conn.execute(
+                """SELECT model, tokens_in, tokens_out, latency_s, fallback_used, created_at
+                   FROM healing_log ORDER BY created_at DESC LIMIT 1"""
+            ).fetchall()
+            latest_run = None
+            if latest:
+                r = latest[0]
+                latest_run = {
+                    "model": r[0], "tokens_in": r[1], "tokens_out": r[2],
+                    "latency_s": r[3], "fallback_used": r[4], "created_at": str(r[5]),
+                }
+
+            return {
+                "assessment_distribution": dist,
+                "tool_usage": tool_counts,
+                "latest_run": latest_run,
+                "total_assessments": sum(d["count"] for d in dist.values()),
+            }
+    except Exception:
+        return {}
+
+
+@st.cache_data(ttl=60)
 def load_pipeline_stage_stats() -> Dict[str, Any]:
     """Load live counts for the home page pipeline diagram."""
     stats: Dict[str, Any] = {
@@ -369,6 +437,14 @@ def load_pipeline_stage_stats() -> Dict[str, Any]:
                     "SELECT COUNT(*) FROM forecasts WHERE model_used = 'hybrid_mos'"
                 ).fetchone()
                 stats["mos_count"] = row[0] if row else 0
+                row = conn.execute(
+                    "SELECT COUNT(DISTINCT station_id) FROM forecasts"
+                ).fetchone()
+                stats["fc_stations"] = row[0] if row else 0
+                row = conn.execute(
+                    "SELECT AVG(confidence) FROM forecasts WHERE confidence IS NOT NULL"
+                ).fetchone()
+                stats["avg_confidence"] = round(row[0], 2) if row and row[0] else 0.0
 
             if table_exists(conn, "agricultural_alerts"):
                 row = conn.execute("SELECT COUNT(*) FROM agricultural_alerts").fetchone()
