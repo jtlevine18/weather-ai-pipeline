@@ -300,6 +300,15 @@ These are tropical/subtropical stations. Normal ranges differ dramatically from 
 - NULL fields (wind_speed, pressure especially — IMD often omits these) can be filled from Tomorrow.io reference — this is legitimate, not fabrication, because it's a real measurement from an independent source.
 - Quality score should reflect your confidence: 0.95+ for clean IMD data confirmed by Tomorrow.io, 0.7-0.9 for corrected data, 0.5-0.7 for filled/estimated data, <0.5 for flagged.
 
+## Efficiency — IMPORTANT
+
+You have 5 investigation tools but do NOT call all of them for every station. Be selective:
+- For readings that look normal (reasonable temperature, no NULLs): just call `get_reference_comparison` to cross-validate. If IMD and Tomorrow.io agree, mark as "good" immediately.
+- Only call `check_neighboring_stations` or `get_historical_normals` when a reading looks suspicious or diverges from reference.
+- Only call `get_seasonal_context` when you need to judge whether an extreme value is normal for the season.
+- You can call multiple tools in a single turn — batch tool calls for different stations together.
+- Do NOT investigate a reading more than 2 rounds. If you've called 2 tools for a station and still aren't sure, flag it and move on.
+
 ## Output Format
 
 After investigating, return your final assessment as a JSON array (one object per reading) wrapped in ```json fences. Each object must have these fields:
@@ -541,10 +550,15 @@ class HealingAgent:
 
         raise ValueError("Could not find JSON assessment array in response")
 
+    BATCH_SIZE = 10  # Process readings in batches to avoid token limits
+
     def heal_batch(self, readings: List[Dict[str, Any]],
                     references: Dict[str, Any],
                     conn) -> HealingResult:
         """Main entry point: assess and heal a batch of raw readings.
+
+        Splits readings into sub-batches of BATCH_SIZE to avoid hitting
+        token limits on the Claude API.
 
         Args:
             readings: Raw readings from Step 1 (Ingest)
@@ -555,6 +569,47 @@ class HealingAgent:
             HealingResult with healed readings, assessments, and trace
         """
         t0 = time.time()
+
+        # Split into sub-batches
+        batches = [readings[i:i + self.BATCH_SIZE]
+                   for i in range(0, len(readings), self.BATCH_SIZE)]
+
+        all_healed: List[Dict[str, Any]] = []
+        all_assessments: List[ReadingAssessment] = []
+        all_tool_calls: List[Dict[str, Any]] = []
+        total_tokens_in = 0
+        total_tokens_out = 0
+        any_fallback = False
+
+        for batch_num, batch in enumerate(batches):
+            log.info("AI healing batch %d/%d (%d readings)",
+                     batch_num + 1, len(batches), len(batch))
+            result = self._heal_sub_batch(batch, readings, references, conn)
+            all_healed.extend(result.readings)
+            all_assessments.extend(result.assessments)
+            all_tool_calls.extend(result.tool_calls)
+            total_tokens_in += result.tokens_in
+            total_tokens_out += result.tokens_out
+            if result.fallback_used:
+                any_fallback = True
+
+        return HealingResult(
+            readings=all_healed,
+            assessments=all_assessments,
+            tool_calls=all_tool_calls,
+            model=self.model,
+            tokens_in=total_tokens_in,
+            tokens_out=total_tokens_out,
+            latency_s=time.time() - t0,
+            fallback_used=any_fallback,
+        )
+
+    def _heal_sub_batch(self, batch: List[Dict[str, Any]],
+                         all_readings: List[Dict[str, Any]],
+                         references: Dict[str, Any],
+                         conn) -> HealingResult:
+        """Process a single sub-batch of readings through Claude."""
+        t0 = time.time()
         total_tokens_in = 0
         total_tokens_out = 0
         all_tool_calls: List[Dict[str, Any]] = []
@@ -562,13 +617,13 @@ class HealingAgent:
         client = self._get_client()
         context = {
             "references": references,
-            "batch_readings": readings,
+            "batch_readings": all_readings,  # Full batch for neighbor lookups
             "conn": conn,
         }
 
-        # Build user message with all readings
+        # Build user message with batch readings
         readings_payload = []
-        for r in readings:
+        for r in batch:
             readings_payload.append({
                 "id": r.get("id", ""),
                 "station_id": r["station_id"],
@@ -586,20 +641,20 @@ class HealingAgent:
         now = datetime.utcnow()
         user_msg = (
             f"Current date/time: {now.isoformat()} UTC (month={now.month})\n\n"
-            f"Here are {len(readings)} raw IMD station readings to assess and heal:\n\n"
+            f"Here are {len(batch)} raw IMD station readings to assess and heal:\n\n"
             f"```json\n{json.dumps(readings_payload, indent=2, default=str)}\n```\n\n"
             "Investigate any suspicious readings using your tools, then return "
             "your assessment for ALL readings."
         )
 
         messages = [{"role": "user", "content": user_msg}]
-        system_prompt = self._build_system_prompt(len(readings))
+        system_prompt = self._build_system_prompt(len(batch))
 
         # Agentic tool-use loop
         for round_num in range(self.MAX_TOOL_ROUNDS):
             response = client.messages.create(
                 model=self.model,
-                max_tokens=4096,
+                max_tokens=16384,
                 system=system_prompt,
                 tools=HEALING_TOOLS,
                 messages=messages,
@@ -628,7 +683,7 @@ class HealingAgent:
                 # Build ReadingAssessment objects and apply corrections
                 assessments = []
                 healed_readings = []
-                readings_by_id = {r.get("id", ""): r for r in readings}
+                readings_by_id = {r.get("id", ""): r for r in batch}
 
                 for a in raw_assessments:
                     rid = a.get("reading_id", "")
