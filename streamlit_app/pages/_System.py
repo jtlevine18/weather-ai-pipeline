@@ -144,7 +144,7 @@ with tab_sched:
     bc1, bc2, bc3, bc4 = st.columns(4)
 
     with bc1:
-        if st.button("Run Full Pipeline", use_container_width=True,
+        if st.button("Run Full Pipeline", width="stretch",
                       help="All 6 steps: ingest → heal → forecast → downscale → translate → deliver"):
             with st.spinner("Running all 6 steps..."):
                 try:
@@ -159,7 +159,7 @@ with tab_sched:
                     st.error(f"Pipeline error: {exc}")
 
     with bc2:
-        if st.button("Ingest + Heal", use_container_width=True,
+        if st.button("Ingest + Heal", width="stretch",
                       help="Steps 1–2: fetch fresh IMD data and cross-validate"):
             with st.spinner("Running ingest + heal..."):
                 try:
@@ -180,7 +180,7 @@ with tab_sched:
                     st.error(f"Error: {exc}")
 
     with bc3:
-        if st.button("Forecast → Deliver", use_container_width=True,
+        if st.button("Forecast → Deliver", width="stretch",
                       help="Steps 3–6: forecast, downscale, translate, deliver from existing data"):
             with st.spinner("Running forecast → deliver..."):
                 try:
@@ -203,7 +203,7 @@ with tab_sched:
                     st.error(f"Error: {exc}")
 
     with bc4:
-        if st.button("Retrain MOS Model", use_container_width=True,
+        if st.button("Retrain MOS Model", width="stretch",
                       help="Export training data from DuckDB and retrain the XGBoost MOS model"):
             with st.spinner("Exporting data and training model..."):
                 try:

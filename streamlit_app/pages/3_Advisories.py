@@ -111,7 +111,7 @@ with tab_feed:
     )
 
     for _, row in filtered.head(20).iterrows():
-        cond = row.get("condition", "clear")
+        cond = row.get("condition") or "clear"
         emoji = CONDITION_EMOJI.get(cond, "")
         lang = row.get("language", "en")
         provider = row.get("provider", "?")
@@ -203,13 +203,13 @@ with tab_lineage:
 
             fc_temp = row.get("fc_temperature")
             fc_rain = row.get("fc_rainfall")
-            fc_cond = row.get("fc_condition", "?")
-            fc_model = row.get("fc_model", "?")
+            fc_cond = row.get("fc_condition") or "unknown"
+            fc_model = row.get("fc_model") or "?"
             fc_conf = row.get("fc_confidence")
 
-            alert_cond = row.get("alert_condition", "?")
-            provider = row.get("provider", "?")
-            lang = row.get("language", "?")
+            alert_cond = row.get("alert_condition") or "?"
+            provider = row.get("provider") or "?"
+            lang = row.get("language") or "?"
             advisory_local = str(row.get("advisory_local", "") or "")
             advisory_en = str(row.get("advisory_en", "") or "")
 
@@ -361,7 +361,7 @@ with tab_farmers:
                     st.markdown('<div class="section-header">Latest Advisory for This Farmer</div>',
                                 unsafe_allow_html=True)
                     latest = station_alerts.iloc[0]
-                    cond = latest.get("condition", "clear")
+                    cond = latest.get("condition") or "clear"
                     color = CONDITION_COLOR.get(cond, "#888")
                     text = str(latest.get("advisory_local") or latest.get("advisory_en", ""))
                     st.markdown(f"""
@@ -411,10 +411,10 @@ with tab_delivery:
         if "status" in df_del.columns:
             st.dataframe(
                 df_del.style.map(_status_style, subset=["status"]),
-                use_container_width=True, hide_index=True,
+                width="stretch", hide_index=True,
             )
         else:
-            st.dataframe(df_del, use_container_width=True, hide_index=True)
+            st.dataframe(df_del, width="stretch", hide_index=True)
 
 # Chat toggle
 from streamlit_app.chat_widget import render_chat_toggle

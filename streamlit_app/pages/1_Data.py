@@ -1,4 +1,4 @@
-"""Data page — Ingestion and Healing pipeline stages."""
+"""Data page — station weather readings, quality, and healing."""
 
 import os
 import sys
@@ -6,22 +6,25 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 
 import streamlit as st
 import pandas as pd
+import json
 
 from streamlit_app.style import inject_css
 from streamlit_app.data_helpers import (
     get_station_coords, get_station_name_map, load_station_health,
     load_raw_telemetry, load_clean_telemetry,
     load_data_source_distribution, load_per_station_source,
+    load_healing_log, load_healing_stats,
 )
 
 st.set_page_config(page_title="Data", page_icon="D", layout="wide")
 inject_css()
 
 st.title("Data")
-st.caption("Ingestion and healing pipeline — 20 stations across Kerala and Tamil Nadu")
+st.caption("Weather station readings across Kerala and Tamil Nadu — raw ingestion, quality scores, and healing")
 
 stations = get_station_coords()
 health = load_station_health()
+station_names = get_station_name_map()
 
 # Merge health data
 if not health.empty and "station_id" in health.columns:
@@ -32,12 +35,455 @@ else:
     stations["record_count"] = 0
     stations["avg_quality"] = 0.0
 
+# Load telemetry
+df_raw = load_raw_telemetry(limit=500)
+df_clean = load_clean_telemetry(limit=500)
+
+# ---------------------------------------------------------------------------
+# Top metrics
+# ---------------------------------------------------------------------------
+total = len(stations)
+active = int((stations["record_count"] > 0).sum())
+avg_q = stations.loc[stations["record_count"] > 0, "avg_quality"].mean() if active > 0 else 0
+raw_count = len(df_raw)
+clean_count = len(df_clean)
+
+mc1, mc2, mc3, mc4 = st.columns(4)
+mc1.metric("Active Stations", f"{active}/{total}")
+mc2.metric("Avg Quality", f"{avg_q:.0%}")
+mc3.metric("Raw Readings", raw_count)
+mc4.metric("Healed Readings", clean_count)
+
+st.divider()
+
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+SOURCE_STYLE = {
+    "imd_api":    ("IMD API",    "#2E7D32"),
+    "imdlib":     ("imdlib",     "#1565C0"),
+    "synthetic":  ("Synthetic",  "#888"),
+}
+
+HEAL_STYLE = {
+    "cross_validated":       ("Validated",  "#2a9d8f"),
+    "null_filled":           ("Filled",     "#d4a019"),
+    "ai_validated":          ("AI OK",      "#2a9d8f"),
+    "ai_corrected":          ("AI Fixed",   "#4361ee"),
+    "ai_filled":             ("AI Filled",  "#d4a019"),
+    "ai_flagged":            ("AI Flagged", "#e76f51"),
+    "anomaly_flagged":       ("Anomaly",    "#e63946"),
+    "typo_corrected":        ("Typo Fix",   "#4361ee"),
+    "imputed_from_reference":("Imputed",    "#e76f51"),
+    "none":                  ("Original",   "#888"),
+}
+
+
+def _source_badge(src: str) -> str:
+    label, color = SOURCE_STYLE.get(src or "", (src or "—", "#888"))
+    return (
+        f'<span style="background:{color}18;color:{color};border:1px solid {color}44;'
+        f'padding:2px 8px;border-radius:4px;font-size:0.76rem;font-weight:600;">'
+        f'{label}</span>'
+    )
+
+
+def _quality_badge(q) -> str:
+    if q is None or (hasattr(q, '__class__') and str(q) == 'nan'):
+        return "—"
+    pct = int(float(q) * 100)
+    color = "#2a9d8f" if pct >= 85 else "#d4a019" if pct >= 70 else "#e63946"
+    return (
+        f'<div style="display:inline-flex;align-items:center;gap:6px;">'
+        f'<div style="background:#e0dcd5;border-radius:4px;height:8px;width:60px;">'
+        f'<div style="background:{color};height:8px;border-radius:4px;width:{pct}%;"></div></div>'
+        f'<span style="font-size:0.82rem;font-weight:600;color:{color};">{pct}%</span></div>'
+    )
+
+
+def _heal_badge(action: str) -> str:
+    # Handle composite actions like "null_filled,cross_validated"
+    if not action or action == "none":
+        label, color = "Original", "#888"
+    else:
+        parts = [a.strip() for a in action.split(",") if a.strip()]
+        badges = []
+        for p in parts:
+            l, c = HEAL_STYLE.get(p, (p, "#888"))
+            badges.append(
+                f'<span style="background:{c}18;color:{c};border:1px solid {c}44;'
+                f'padding:1px 6px;border-radius:3px;font-size:0.72rem;font-weight:600;">{l}</span>'
+            )
+        return " ".join(badges)
+    return (
+        f'<span style="background:{color}18;color:{color};border:1px solid {color}44;'
+        f'padding:1px 6px;border-radius:3px;font-size:0.72rem;font-weight:600;">{label}</span>'
+    )
+
+
+def _val(v, unit="", fmt=".1f") -> str:
+    if v is None or (hasattr(v, '__class__') and str(v) == 'nan'):
+        return '<span style="color:#ccc;">—</span>'
+    return f'{v:{fmt}}{unit}'
+
+
 # ---------------------------------------------------------------------------
 # Tabs
 # ---------------------------------------------------------------------------
-tab_map, tab_sources, tab_healing, tab_health = st.tabs(
-    ["Map", "Sources", "Healing", "Station Health"]
-)
+tab_stations, tab_healing, tab_map = st.tabs(["Station Readings", "Healing", "Map"])
+
+# ========================== STATION READINGS ==========================
+with tab_stations:
+    # View toggle
+    view_cols = st.columns([2, 2, 2, 6])
+    with view_cols[0]:
+        view_mode = st.radio("View", ["Clean (healed)", "Raw (original)"],
+                             horizontal=True, label_visibility="collapsed")
+    with view_cols[1]:
+        state_opts = ["All States"] + sorted(stations["state"].dropna().unique().tolist())
+        sel_state = st.selectbox("State", state_opts, key="data_state")
+
+    is_raw = "Raw" in view_mode
+    df = df_raw if is_raw else df_clean
+
+    if df.empty:
+        st.info("No telemetry data yet. Run the pipeline first.")
+    else:
+        # Add station names
+        df = df.copy()
+        df["station_name"] = df["station_id"].map(station_names).fillna(df["station_id"])
+        df["state"] = df["station_id"].map(
+            {row["station_id"]: row["state"] for _, row in stations.iterrows()}
+        )
+
+        # Filter
+        if sel_state != "All States":
+            df = df[df["state"] == sel_state]
+
+        if df.empty:
+            st.warning("No readings match the current filters.")
+        else:
+            # Latest reading per station
+            latest = (
+                df.sort_values("ts", ascending=False)
+                .drop_duplicates(subset="station_id", keep="first")
+                .sort_values(["state", "station_name"])
+            )
+
+            th = ("padding:10px 12px;text-align:left;font-size:0.76rem;"
+                  "text-transform:uppercase;letter-spacing:1px;color:#666;")
+
+            for state_name, group in latest.groupby("state", sort=True):
+                st.markdown(
+                    f'<p style="font-size:0.8rem;font-weight:600;text-transform:uppercase;'
+                    f'letter-spacing:1.5px;color:#666;border-bottom:2px solid #d4a019;'
+                    f'padding-bottom:6px;margin-top:24px;display:inline-block;">'
+                    f'{state_name}</p>',
+                    unsafe_allow_html=True,
+                )
+
+                rows_html = ""
+                for _, row in group.iterrows():
+                    temp = row.get("temperature")
+                    rain = row.get("rainfall")
+                    humid = row.get("humidity")
+                    wind = row.get("wind_speed")
+
+                    # Color-code temperature
+                    temp_color = "#1a1a1a"
+                    if temp is not None:
+                        try:
+                            t = float(temp)
+                            if t >= 40:   temp_color = "#C62828"
+                            elif t >= 36: temp_color = "#E65100"
+                            elif t <= 15: temp_color = "#0277BD"
+                        except (ValueError, TypeError):
+                            pass
+
+                    rain_color = "#1a1a1a"
+                    if rain is not None:
+                        try:
+                            r = float(rain)
+                            if r >= 20:  rain_color = "#1565C0"
+                            elif r >= 5: rain_color = "#1976D2"
+                        except (ValueError, TypeError):
+                            pass
+
+                    # Source badge (raw has source column)
+                    source_html = _source_badge(row.get("source", "")) if is_raw else ""
+
+                    # Quality + heal action (clean only)
+                    quality_html = ""
+                    heal_html = ""
+                    if not is_raw:
+                        quality_html = _quality_badge(row.get("quality_score"))
+                        heal_html = _heal_badge(str(row.get("heal_action", "none")))
+
+                    ts_str = str(row.get("ts", ""))[:16]
+
+                    rows_html += (
+                        f'<tr style="border-bottom:1px solid #e0dcd5;">'
+                        f'<td style="padding:10px 12px;font-weight:600;color:#1a1a1a;">'
+                        f'{row["station_name"]}'
+                        f'<div style="font-size:0.72rem;color:#999;font-weight:400;">{row["station_id"]}</div></td>'
+                        f'<td style="padding:10px 12px;font-weight:600;color:{temp_color};font-variant-numeric:tabular-nums;">'
+                        f'{_val(temp, " °C")}</td>'
+                        f'<td style="padding:10px 12px;font-variant-numeric:tabular-nums;">{_val(humid, "%")}</td>'
+                        f'<td style="padding:10px 12px;font-variant-numeric:tabular-nums;color:{rain_color};font-weight:600;">'
+                        f'{_val(rain, " mm")}</td>'
+                        f'<td style="padding:10px 12px;font-variant-numeric:tabular-nums;">{_val(wind, " m/s")}</td>'
+                    )
+                    if is_raw:
+                        rows_html += f'<td style="padding:10px 12px;">{source_html}</td>'
+                    else:
+                        rows_html += (
+                            f'<td style="padding:10px 8px;">{quality_html}</td>'
+                            f'<td style="padding:10px 8px;">{heal_html}</td>'
+                        )
+                    rows_html += (
+                        f'<td style="padding:10px 12px;color:#999;font-size:0.82rem;">{ts_str}</td>'
+                        f'</tr>'
+                    )
+
+                # Build header based on mode
+                if is_raw:
+                    header = (
+                        f'<th style="{th}">Station</th><th style="{th}">Temp</th>'
+                        f'<th style="{th}">Humidity</th><th style="{th}">Rainfall</th>'
+                        f'<th style="{th}">Wind</th><th style="{th}">Source</th>'
+                        f'<th style="{th}">Time</th>'
+                    )
+                else:
+                    header = (
+                        f'<th style="{th}">Station</th><th style="{th}">Temp</th>'
+                        f'<th style="{th}">Humidity</th><th style="{th}">Rainfall</th>'
+                        f'<th style="{th}">Wind</th><th style="{th}">Quality</th>'
+                        f'<th style="{th}">Healing</th><th style="{th}">Time</th>'
+                    )
+
+                st.html(
+                    f'<table style="width:100%;border-collapse:collapse;background:#fff;'
+                    f'border:1px solid #e0dcd5;border-radius:8px;overflow:hidden;margin-bottom:16px;">'
+                    f'<thead><tr style="background:#f5f3ef;border-bottom:2px solid #e0dcd5;">'
+                    f'{header}</tr></thead><tbody>{rows_html}</tbody></table>'
+                )
+
+            # Full data expander
+            with st.expander("View all readings"):
+                if is_raw:
+                    show = [c for c in ["station_id", "ts", "temperature", "humidity",
+                                        "wind_speed", "rainfall", "pressure", "source"]
+                            if c in df.columns]
+                else:
+                    show = [c for c in ["station_id", "ts", "temperature", "humidity",
+                                        "wind_speed", "rainfall", "pressure",
+                                        "quality_score", "heal_action", "fields_filled"]
+                            if c in df.columns]
+                st.dataframe(
+                    df[show].sort_values("ts", ascending=False),
+                    width="stretch", height=400, hide_index=True,
+                )
+
+    # Data source info card
+    st.markdown("""
+    <div style="background:#fff;border:1px solid #e0dcd5;border-radius:8px;padding:16px;margin-top:16px;">
+        <div style="font-weight:600;color:#1a1a1a;margin-bottom:8px;">Data Sources</div>
+        <div style="font-size:0.85rem;color:#555;line-height:1.8;">
+            <strong>IMD API</strong> — Real-time station data from India Meteorological Department (today's max/min temp, humidity, rainfall)<br/>
+            <strong>imdlib</strong> — IMD gridded archive at 0.25° resolution (T-1 day lag, temperature + rainfall only)<br/>
+            <strong>Tomorrow.io</strong> — Used for cross-validation and to fill fields IMD doesn't provide (wind, pressure, humidity)
+        </div>
+    </div>
+    """, unsafe_allow_html=True)
+
+# ========================== HEALING ==========================
+with tab_healing:
+    healing_log = load_healing_log(limit=200)
+    healing_stats = load_healing_stats()
+    has_ai_data = not healing_log.empty
+
+    if df_raw.empty and df_clean.empty:
+        st.info("No telemetry data yet. Run the pipeline first.")
+    else:
+        # AI agent status
+        if has_ai_data and healing_stats.get("latest_run"):
+            lr = healing_stats["latest_run"]
+            sc1, sc2, sc3, sc4 = st.columns(4)
+            sc1.metric("Model", lr.get("model", "—"))
+            tokens_in = lr.get("tokens_in") or 0
+            tokens_out = lr.get("tokens_out") or 0
+            sc2.metric("Tokens", f"{tokens_in + tokens_out:,}")
+            sc3.metric("Latency", f"{lr.get('latency_s', 0):.1f}s")
+            cost = (tokens_in * 3.0 / 1_000_000) + (tokens_out * 15.0 / 1_000_000)
+            sc4.metric("Est. Cost", f"${cost:.3f}")
+
+            if lr.get("fallback_used"):
+                st.warning("Rule-based fallback was used (AI agent unavailable)")
+        elif not has_ai_data:
+            st.markdown(
+                '<div style="background:#fff8e6;border:1px solid #e0dcd5;border-radius:8px;padding:12px;'
+                'font-size:0.85rem;color:#8a6d00;margin-bottom:16px;">'
+                'No AI healing data yet. Run the pipeline with an Anthropic API key to enable the Claude healing agent.'
+                '</div>', unsafe_allow_html=True,
+            )
+
+        # Assessment distribution as badges
+        if has_ai_data and healing_stats.get("assessment_distribution"):
+            st.markdown(
+                '<p style="font-size:0.8rem;font-weight:600;text-transform:uppercase;'
+                'letter-spacing:1.5px;color:#666;border-bottom:2px solid #d4a019;'
+                'padding-bottom:6px;display:inline-block;">Assessment Summary</p>',
+                unsafe_allow_html=True,
+            )
+
+            assessment_colors = {
+                "good": "#2a9d8f", "corrected": "#4361ee", "filled": "#d4a019",
+                "flagged": "#e76f51", "dropped": "#e63946",
+            }
+            dist = healing_stats["assessment_distribution"]
+            badge_html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">'
+            for atype in ["good", "corrected", "filled", "flagged", "dropped"]:
+                info = dist.get(atype, {"count": 0, "avg_quality": None})
+                cnt = info["count"]
+                color = assessment_colors.get(atype, "#888")
+                badge_html += (
+                    f'<div style="background:{color}15;border:1px solid {color}40;border-radius:6px;'
+                    f'padding:8px 14px;text-align:center;min-width:90px;">'
+                    f'<div style="font-size:1.4rem;font-weight:700;color:{color};">{cnt}</div>'
+                    f'<div style="font-size:0.72rem;text-transform:uppercase;letter-spacing:1px;color:{color}99;">'
+                    f'{atype}</div></div>'
+                )
+            badge_html += '</div>'
+            st.markdown(badge_html, unsafe_allow_html=True)
+
+        # Heal action breakdown as a table (replaces ugly bar chart)
+        if not df_clean.empty and "heal_action" in df_clean.columns:
+            st.markdown(
+                '<p style="font-size:0.8rem;font-weight:600;text-transform:uppercase;'
+                'letter-spacing:1.5px;color:#666;border-bottom:2px solid #d4a019;'
+                'padding-bottom:6px;display:inline-block;margin-top:16px;">Healing Actions</p>',
+                unsafe_allow_html=True,
+            )
+
+            action_counts = df_clean["heal_action"].value_counts()
+            total_actions = action_counts.sum()
+            th = ("padding:10px 12px;text-align:left;font-size:0.76rem;"
+                  "text-transform:uppercase;letter-spacing:1px;color:#666;")
+
+            action_rows = ""
+            for action_name, count in action_counts.items():
+                pct = count / total_actions * 100
+                # Parse composite actions for badge display
+                badge = _heal_badge(str(action_name))
+                bar_color = "#2a9d8f" if "validated" in str(action_name) else "#d4a019" if "filled" in str(action_name) else "#e63946" if "flagged" in str(action_name) or "anomaly" in str(action_name) else "#888"
+                action_rows += (
+                    f'<tr style="border-bottom:1px solid #e0dcd5;">'
+                    f'<td style="padding:10px 12px;">{badge}</td>'
+                    f'<td style="padding:10px 12px;font-weight:600;font-variant-numeric:tabular-nums;">{count}</td>'
+                    f'<td style="padding:10px 12px;">'
+                    f'<div style="display:flex;align-items:center;gap:8px;">'
+                    f'<div style="background:#e0dcd5;border-radius:4px;height:8px;width:120px;">'
+                    f'<div style="background:{bar_color};height:8px;border-radius:4px;width:{pct}%;"></div></div>'
+                    f'<span style="font-size:0.82rem;color:#666;">{pct:.0f}%</span>'
+                    f'</div></td>'
+                    f'</tr>'
+                )
+
+            st.html(
+                f'<table style="width:100%;border-collapse:collapse;background:#fff;'
+                f'border:1px solid #e0dcd5;border-radius:8px;overflow:hidden;">'
+                f'<thead><tr style="background:#f5f3ef;border-bottom:2px solid #e0dcd5;">'
+                f'<th style="{th}">Action</th><th style="{th}">Count</th>'
+                f'<th style="{th}">Distribution</th>'
+                f'</tr></thead><tbody>{action_rows}</tbody></table>'
+            )
+
+        # Per-reading AI assessments (expandable)
+        if has_ai_data:
+            st.markdown(
+                '<p style="font-size:0.8rem;font-weight:600;text-transform:uppercase;'
+                'letter-spacing:1.5px;color:#666;border-bottom:2px solid #d4a019;'
+                'padding-bottom:6px;display:inline-block;margin-top:24px;">Per-Reading Assessments</p>',
+                unsafe_allow_html=True,
+            )
+            st.caption("Claude's reasoning for each station reading — click to expand")
+
+            for _, row in healing_log.iterrows():
+                sid = row.get("station_id", "")
+                sname = station_names.get(sid, sid)
+                assessment = row.get("assessment", "unknown")
+                color = assessment_colors.get(assessment, "#888") if has_ai_data else "#888"
+                quality = row.get("quality_score", 0)
+                reasoning = row.get("reasoning", "")
+                tools = row.get("tools_used", "")
+
+                try:
+                    corrections = json.loads(row.get("corrections", "{}") or "{}")
+                except (json.JSONDecodeError, TypeError):
+                    corrections = {}
+                try:
+                    originals = json.loads(row.get("original_values", "{}") or "{}")
+                except (json.JSONDecodeError, TypeError):
+                    originals = {}
+
+                emoji = {'good': '🟢', 'corrected': '🔵', 'filled': '🟡',
+                         'flagged': '🟠', 'dropped': '🔴'}.get(assessment, '⚪')
+
+                with st.expander(
+                    f"{sname} — {emoji} {assessment} (Q: {quality:.2f})",
+                    expanded=assessment in ("corrected", "flagged", "dropped"),
+                ):
+                    st.markdown(
+                        f'<div style="font-size:0.9rem;color:#333;line-height:1.6;margin-bottom:12px;">'
+                        f'{reasoning}</div>', unsafe_allow_html=True,
+                    )
+
+                    if corrections:
+                        ba_html = '<div style="display:flex;gap:24px;margin-bottom:8px;">'
+                        for field_name, new_val in corrections.items():
+                            old_val = originals.get(field_name, "—")
+                            old_disp = f"{old_val:.1f}" if isinstance(old_val, (int, float)) and old_val is not None else str(old_val)
+                            new_disp = f"{new_val:.1f}" if isinstance(new_val, (int, float)) and new_val is not None else str(new_val)
+                            ba_html += (
+                                f'<div style="background:#fff;border:1px solid #e0dcd5;border-radius:6px;padding:8px 12px;">'
+                                f'<div style="font-size:0.72rem;text-transform:uppercase;color:#888;letter-spacing:1px;">{field_name}</div>'
+                                f'<span style="color:#e63946;text-decoration:line-through;">{old_disp}</span>'
+                                f' → <span style="color:#2a9d8f;font-weight:600;">{new_disp}</span></div>'
+                            )
+                        ba_html += '</div>'
+                        st.markdown(ba_html, unsafe_allow_html=True)
+
+                    if tools:
+                        tool_list = [t.strip() for t in tools.split(",") if t.strip()]
+                        pills = " ".join(
+                            f'<span style="background:#f0ede8;border:1px solid #d0ccc5;border-radius:12px;'
+                            f'padding:2px 10px;font-size:0.72rem;color:#666;">{t}</span>'
+                            for t in tool_list
+                        )
+                        st.markdown(pills, unsafe_allow_html=True)
+
+        # Healing legend
+        with st.expander("Healing Actions Reference"):
+            legend_items = [
+                ("cross_validated", "Reading matches Tomorrow.io reference within thresholds"),
+                ("null_filled", "Missing fields filled from Tomorrow.io (expected — IMD doesn't provide wind/pressure/humidity)"),
+                ("ai_validated", "AI agent confirmed reading quality against reference and seasonal norms"),
+                ("ai_corrected", "AI agent corrected a value (e.g. decimal typo) with contextual reasoning"),
+                ("ai_filled", "AI agent filled missing fields from reference data"),
+                ("ai_flagged", "AI agent flagged a suspicious reading it couldn't confidently correct"),
+                ("anomaly_flagged", "Reading diverges beyond acceptable threshold from reference"),
+                ("typo_corrected", "Decimal-place error corrected (e.g. 320°C → 32.0°C)"),
+                ("imputed_from_reference", "Station offline — entire reading sourced from reference"),
+            ]
+            for action, desc in legend_items:
+                is_ai = action.startswith("ai_")
+                bg = "#e8f4fd" if is_ai else "#f0ede8"
+                st.markdown(
+                    f'<div style="margin-bottom:6px;font-size:0.85rem;">'
+                    f'<code style="background:{bg};padding:2px 6px;border-radius:3px;">{action}</code> '
+                    f'<span style="color:#555;">— {desc}</span></div>',
+                    unsafe_allow_html=True,
+                )
 
 # ========================== MAP ==========================
 with tab_map:
@@ -90,6 +536,7 @@ with tab_map:
         unsafe_allow_html=True,
     )
 
+    # Station summary table
     st.markdown("<div style='height:16px'></div>", unsafe_allow_html=True)
     show_cols = [c for c in [
         "station_id", "name", "state", "altitude_m", "crop",
@@ -100,174 +547,7 @@ with tab_map:
         df_show["avg_quality"] = df_show["avg_quality"].round(3)
     if "altitude_m" in df_show.columns:
         df_show["altitude_m"] = df_show["altitude_m"].astype(int)
-    st.dataframe(df_show, use_container_width=True, hide_index=True)
-
-# ========================== SOURCES ==========================
-with tab_sources:
-    st.markdown('<div class="section-header">Data Source Distribution</div>',
-                unsafe_allow_html=True)
-    st.caption("Where each station's readings come from: IMD JSON API, imdlib gridded backup, or synthetic fallback")
-
-    src_dist = load_data_source_distribution()
-    if src_dist.empty:
-        st.info("No telemetry data yet. Run the pipeline first.")
-    else:
-        # Source distribution bar
-        st.bar_chart(src_dist.set_index("source")["count"])
-
-        # Per-station breakdown
-        st.markdown('<div class="section-header">Per-Station Sources</div>',
-                    unsafe_allow_html=True)
-        per_station = load_per_station_source()
-        if not per_station.empty:
-            station_names = get_station_name_map()
-            per_station["name"] = per_station["station_id"].map(station_names)
-            show = [c for c in ["station_id", "name", "source", "readings", "last_reading"]
-                    if c in per_station.columns]
-            st.dataframe(per_station[show], use_container_width=True, hide_index=True)
-
-        # Source explanation
-        st.markdown("""
-        <div style="background:#fff;border:1px solid #e0dcd5;border-radius:8px;padding:16px;margin-top:16px;">
-            <div style="font-weight:600;color:#1a1a1a;margin-bottom:8px;">Data Source Chain</div>
-            <div style="font-size:0.85rem;color:#555;line-height:1.8;">
-                <strong>IMD API</strong> — Real-time station data from city.imd.gov.in JSON endpoint (today's max/min temp, humidity, rainfall)<br/>
-                <strong>imdlib</strong> — IMD gridded data at 0.25-0.5 degree resolution (T-1 day lag, temperature + rainfall only)<br/>
-                <strong>synthetic</strong> — Generated fallback with configurable fault injection (used when both real sources fail, or with <code>--source synthetic</code>)
-            </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-# ========================== HEALING ==========================
-with tab_healing:
-    df_raw = load_raw_telemetry(limit=500)
-    df_clean = load_clean_telemetry(limit=500)
-
-    if df_raw.empty and df_clean.empty:
-        st.info("No telemetry data yet. Run the pipeline first.")
-    else:
-        # Metrics row
-        col1, col2, col3, col4 = st.columns(4)
-        raw_count = len(df_raw) if not df_raw.empty else 0
-        clean_count = len(df_clean) if not df_clean.empty else 0
-        col1.metric("Raw Records", raw_count)
-        col2.metric("Clean Records", clean_count)
-
-        healed = 0
-        if not df_clean.empty and "heal_action" in df_clean.columns:
-            healed = (df_clean["heal_action"] != "none").sum()
-        col3.metric("Healed Records", healed)
-        avg_q = df_clean["quality_score"].mean() if not df_clean.empty and "quality_score" in df_clean.columns else 0
-        col4.metric("Avg Quality Score", f"{avg_q:.2f}")
-
-        st.markdown("<div style='height:8px'></div>", unsafe_allow_html=True)
-
-        # Before / After comparison
-        left, right = st.columns(2)
-        with left:
-            st.markdown("**Raw telemetry (before healing)**")
-            if not df_raw.empty:
-                show = [c for c in ["station_id", "ts", "temperature", "humidity",
-                                     "wind_speed", "rainfall", "source"]
-                        if c in df_raw.columns]
-                st.dataframe(df_raw[show].head(50), use_container_width=True,
-                             height=300, hide_index=True)
-        with right:
-            st.markdown("**Clean telemetry (after healing)**")
-            if not df_clean.empty:
-                show = [c for c in ["station_id", "ts", "temperature", "humidity",
-                                     "wind_speed", "rainfall", "quality_score", "heal_action"]
-                        if c in df_clean.columns]
-
-                def _highlight_healed(col):
-                    if col.name == "heal_action":
-                        return ["background-color: rgba(42,157,143,0.15)"
-                                if v and v != "none" else "" for v in col]
-                    return [""] * len(col)
-
-                df_disp = df_clean[show].head(50)
-                if "heal_action" in df_disp.columns:
-                    st.dataframe(df_disp.style.apply(_highlight_healed),
-                                 use_container_width=True, height=300, hide_index=True)
-                else:
-                    st.dataframe(df_disp, use_container_width=True,
-                                 height=300, hide_index=True)
-
-        # Healing breakdown
-        if not df_clean.empty and "heal_action" in df_clean.columns:
-            st.markdown('<div class="section-header">Healing Breakdown</div>',
-                        unsafe_allow_html=True)
-            st.bar_chart(df_clean["heal_action"].value_counts())
-
-        # Quality score distribution
-        if not df_clean.empty and "quality_score" in df_clean.columns:
-            st.markdown('<div class="section-header">Quality Score Distribution</div>',
-                        unsafe_allow_html=True)
-            st.bar_chart(df_clean["quality_score"].round(1).value_counts().sort_index())
-
-        # Heal action legend
-        st.markdown('<div class="section-header">Healing Actions Reference</div>',
-                    unsafe_allow_html=True)
-        legend_items = [
-            ("cross_validated", "Reading matches Tomorrow.io reference — no correction needed"),
-            ("null_filled", "Missing fields (wind, pressure) filled from Tomorrow.io"),
-            ("anomaly_flagged", "Reading diverges from reference beyond threshold — flagged, not corrected"),
-            ("null_filled+anomaly_flagged", "Both null-fill and anomaly flagging applied"),
-            ("typo_corrected", "Decimal-place error detected and corrected (e.g. 320°C → 32.0°C)"),
-            ("imputed_from_reference", "Station offline — entire reading imputed from reference source"),
-            ("none", "No healing needed — reading passed all checks (synthetic mode only)"),
-        ]
-        for action, desc in legend_items:
-            st.markdown(
-                f'<div style="margin-bottom:6px;font-size:0.85rem;">'
-                f'<code style="background:#f0ede8;padding:2px 6px;border-radius:3px;">{action}</code> '
-                f'<span style="color:#555;">— {desc}</span></div>',
-                unsafe_allow_html=True,
-            )
-
-# ========================== STATION HEALTH ==========================
-with tab_health:
-    if health.empty:
-        st.info("No health data yet. Run the pipeline first.")
-    else:
-        col1, col2, col3, col4 = st.columns(4)
-        total = len(stations)
-        active = (stations["record_count"] > 0).sum()
-        low_qual = ((stations["avg_quality"] < 0.7) & (stations["record_count"] > 0)).sum()
-        no_data = (stations["record_count"] == 0).sum()
-        col1.metric("Total Stations", total)
-        col2.metric("Active", int(active))
-        col3.metric("Low Quality", int(low_qual))
-        col4.metric("No Data", int(no_data))
-
-        display_cols = [c for c in [
-            "station_id", "name", "state", "record_count", "avg_quality",
-            "healed_count", "last_seen"
-        ] if c in stations.columns]
-        df_health = stations[display_cols].copy()
-
-        def _quality_style(val):
-            if not isinstance(val, float):
-                return ""
-            if val >= 0.85:
-                return "background-color: rgba(42,157,143,0.15); color: #2a9d8f"
-            elif val >= 0.7:
-                return "background-color: rgba(212,160,25,0.15); color: #b87a1e"
-            return "background-color: rgba(230,57,70,0.12); color: #e63946"
-
-        if "avg_quality" in df_health.columns:
-            df_health["avg_quality"] = df_health["avg_quality"].round(3)
-            styled = df_health.style.map(_quality_style, subset=["avg_quality"])
-            st.dataframe(styled, use_container_width=True, hide_index=True)
-        else:
-            st.dataframe(df_health, use_container_width=True, hide_index=True)
-
-        if "avg_quality" in stations.columns:
-            st.markdown('<div class="section-header">Average Quality by Station</div>',
-                        unsafe_allow_html=True)
-            chart_df = stations.set_index("station_id")[["avg_quality"]]
-            if not chart_df.empty:
-                st.bar_chart(chart_df)
+    st.dataframe(df_show, width="stretch", hide_index=True)
 
 # Chat toggle
 from streamlit_app.chat_widget import render_chat_toggle
