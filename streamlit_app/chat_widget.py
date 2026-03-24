@@ -42,7 +42,7 @@ def render_chat_toggle():
     with st.sidebar:
         st.markdown("---")
         label = "Close Chat" if st.session_state.chat_open else "Chat"
-        if st.button(label, key="_chat_toggle", width="stretch"):
+        if st.button(label, key="_chat_toggle", use_container_width=True):
             st.session_state.chat_open = not st.session_state.chat_open
             st.rerun()
 
