@@ -342,68 +342,71 @@ class NeuralGCMClient:
                      steps_done, catchup_steps, elapsed_h, catchup_steps * inner_steps)
             del _discarded  # free GPU memory
 
-        # Phase 2: Forecast — collect predictions in chunks to manage memory
-        import jax.numpy as jnp
+        # Phase 2: Forecast — convert each chunk to xarray immediately.
+        # NeuralGCM's data_to_xarray() handles its own unroll output format,
+        # but concatenating raw JAX predictions across chunks fails because
+        # the pytree structure contains Python lists that break jnp.concatenate.
+        # Solution: let data_to_xarray convert each chunk, then xr.concat.
+        import xarray as xr
 
-        forecast_predictions = []
+        forecast_start = init_time + np.timedelta64(catchup_steps * inner_steps, "h")
+        chunk_datasets = []
         forecast_steps_done = 0
         while forecast_steps_done < forecast_steps:
             n = min(chunk_size, forecast_steps - forecast_steps_done)
+            is_first = (forecast_steps_done == 0 and catchup_steps == 0)
             state, chunk_pred = model.unroll(
                 state, all_forcings, steps=n, timedelta=timedelta,
-                start_with_input=(forecast_steps_done == 0 and catchup_steps == 0),
+                start_with_input=is_first,
             )
-            forecast_predictions.append(chunk_pred)
+
+            # Convert this chunk to xarray immediately.
+            # start_with_input=True → n+1 outputs (includes initial state)
+            # start_with_input=False → n outputs (steps only)
+            # Try both since behavior may vary by model version.
+            chunk_start = forecast_start + np.timedelta64(forecast_steps_done * inner_steps, "h")
+            chunk_ds = None
+            for num_times, offset in [(n + 1, 0), (n, 1)]:
+                try:
+                    chunk_times = [
+                        chunk_start + np.timedelta64((j + offset) * inner_steps, "h")
+                        for j in range(num_times)
+                    ]
+                    chunk_ds = model.data_to_xarray(chunk_pred, times=chunk_times)
+                    break
+                except Exception as e:
+                    log.debug("data_to_xarray with %d times failed: %s", num_times, e)
+                    continue
+
+            if chunk_ds is None:
+                raise RuntimeError(
+                    f"data_to_xarray failed for chunk at step {forecast_steps_done}, "
+                    f"pred type={type(chunk_pred).__name__}"
+                )
+
+            chunk_datasets.append(chunk_ds)
+            del chunk_pred  # free GPU memory
+
             forecast_steps_done += n
-            # Debug: log prediction structure on first chunk
-            if forecast_steps_done == n:
-                pred_type = type(chunk_pred).__name__
-                if hasattr(chunk_pred, 'keys'):
-                    leaf_info = {k: (type(v).__name__, getattr(v, 'shape', 'no shape'))
-                                 for k, v in (chunk_pred.items() if hasattr(chunk_pred, 'items')
-                                              else enumerate(chunk_pred))}
-                    log.info("  Prediction structure: %s, leaves: %s", pred_type, leaf_info)
-                else:
-                    log.info("  Prediction type: %s", pred_type)
-            elapsed_h = (catchup_steps + forecast_steps_done) * inner_steps
             log.info("  Forecast: %d/%d steps done (%dh / %dh)",
                      forecast_steps_done, forecast_steps,
                      forecast_steps_done * inner_steps, forecast_steps * inner_steps)
 
-        # Concatenate predictions from all forecast chunks
-        if len(forecast_predictions) == 1:
-            predictions = forecast_predictions[0]
-        else:
-            # NeuralGCM predictions are pytrees that may contain Python lists
-            # (e.g., coordinate metadata). jax.tree.map recurses into lists by
-            # default, causing jnp.concatenate to receive non-array leaves.
-            # Use is_leaf to treat lists as opaque values, and skip concat
-            # for anything without a .shape attribute.
-            def _is_array_leaf(x):
-                return isinstance(x, list) or hasattr(x, 'shape')
-
-            def _safe_concat(*arrs):
-                if hasattr(arrs[0], 'shape'):
-                    return jnp.concatenate(arrs, axis=0)
-                return arrs[0]  # non-array metadata — keep first
-
-            predictions = jax.tree.map(
-                _safe_concat,
-                *forecast_predictions,
-                is_leaf=_is_array_leaf,
-            )
         inference_s = time_mod.time() - t0
         log.info("NeuralGCM inference completed in %.1fs", inference_s)
 
-        # Convert JAX arrays back to xarray — only the forecast portion
-        forecast_start = init_time + np.timedelta64(catchup_steps * inner_steps, "h")
-        times = [
-            forecast_start + np.timedelta64(i * inner_steps, "h")
-            for i in range(forecast_steps + 1)
-        ]
-        output_ds = model.data_to_xarray(predictions, times=times)
+        # Concatenate xarray datasets (robust — no JAX tree manipulation)
+        if len(chunk_datasets) == 1:
+            output_ds = chunk_datasets[0]
+        else:
+            output_ds = xr.concat(chunk_datasets, dim="time")
+            # Remove duplicate times at chunk boundaries
+            _, unique_idx = np.unique(output_ds.time.values, return_index=True)
+            output_ds = output_ds.isel(time=sorted(unique_idx))
+
         log.info("Output: %d timesteps from %s to %s",
-                 output_ds.sizes["time"], times[0], times[-1])
+                 output_ds.sizes["time"],
+                 output_ds.time.values[0], output_ds.time.values[-1])
 
         return output_ds, inference_s
 

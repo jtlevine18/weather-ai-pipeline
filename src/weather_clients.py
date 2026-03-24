@@ -18,6 +18,7 @@ from datetime import date, datetime, timedelta
 from typing import Any, Dict, List, Optional, Tuple
 
 import httpx
+from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
 
 log = logging.getLogger(__name__)
 
@@ -246,18 +247,8 @@ class TomorrowIOClient:
                 log.debug("Tomorrow.io cache hit for %s", cache_key)
                 return cached_data
 
-        url = f"{TOMORROW_IO_BASE}/weather/realtime"
-        params = {
-            "location": f"{lat},{lon}",
-            "apikey": self.api_key,
-            "units": "metric",
-            "fields": "temperature,humidity,windSpeed,windDirection,pressureSurfaceLevel,rainIntensity",
-        }
         try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-                resp = await client.get(url, params=params)
-                resp.raise_for_status()
-                data = resp.json()
+            data = await self._fetch(lat, lon)
             values = data["data"]["values"]
             result = {
                 "temperature": values.get("temperature"),
@@ -274,6 +265,22 @@ class TomorrowIOClient:
             log.warning("Tomorrow.io error at (%s,%s): %s", lat, lon, exc)
             return None
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=10),
+           retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TimeoutException)))
+    async def _fetch(self, lat: float, lon: float) -> dict:
+        """HTTP fetch with retry for Tomorrow.io realtime endpoint."""
+        url = f"{TOMORROW_IO_BASE}/weather/realtime"
+        params = {
+            "location": f"{lat},{lon}",
+            "apikey": self.api_key,
+            "units": "metric",
+            "fields": "temperature,humidity,windSpeed,windDirection,pressureSurfaceLevel,rainIntensity",
+        }
+        async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
+            resp = await client.get(url, params=params)
+            resp.raise_for_status()
+            return resp.json()
+
 # ---------------------------------------------------------------------------
 # Open-Meteo — Step 3 (NWP Forecast)
 # ---------------------------------------------------------------------------
@@ -289,6 +296,8 @@ class OpenMeteoClient:
             await asyncio.sleep(0.2)  # rate-limit: avoid 429s
             return await self._fetch_forecast(lat, lon, hours)
 
+    @retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=10),
+           retry=retry_if_exception_type((httpx.HTTPStatusError, httpx.TimeoutException)))
     async def _fetch_forecast(self, lat: float, lon: float,
                                hours: int = 168) -> List[Dict[str, Any]]:
         url = f"{OPEN_METEO_BASE}/forecast"
@@ -332,9 +341,9 @@ class NASAPowerClient:
     NASA_MISSING = -999.0
 
     def __init__(self):
-        self._sem = asyncio.Semaphore(2)   # max 2 concurrent (NASA POWER is very strict)
+        self._sem = asyncio.Semaphore(1)   # strictly sequential — NASA POWER rate limit is ~30/min
         self._cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
-        self._cache_ttl = 3600  # 1 hour — NASA data is daily, no need to refetch
+        self._cache_ttl = 86400  # 24 hours — NASA data is daily, never changes intraday
 
     async def get_current(self, lat: float, lon: float) -> Optional[Dict[str, Any]]:
         """Fetch the most recent valid daily observation from NASA POWER."""
@@ -346,7 +355,7 @@ class NASAPowerClient:
                 return cached_data
 
         async with self._sem:
-            await asyncio.sleep(0.5)  # 0.5s between requests — NASA POWER is strict
+            await asyncio.sleep(2.0)  # 2s between requests — NASA POWER is extremely strict
             result = await self._fetch_current(lat, lon)
             if result is not None:
                 self._cache[cache_key] = (time.time(), result)
@@ -365,39 +374,43 @@ class NASAPowerClient:
             "end":        end.strftime("%Y%m%d"),
             "format":     "JSON",
         }
-        try:
-            async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
-                resp = await client.get(NASA_POWER_BASE, params=params)
-                # Retry once on 429 with longer delay
-                if resp.status_code == 429:
-                    log.info("NASA POWER 429, waiting 5s before retry...")
-                    await asyncio.sleep(5.0)
+        for attempt in range(3):
+            try:
+                async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
                     resp = await client.get(NASA_POWER_BASE, params=params)
-                resp.raise_for_status()
-                data = resp.json()
-            props = data["properties"]["parameter"]
-            # Find most recent date with valid T2M
-            t2m = props.get("T2M", {})
-            for day in sorted(t2m.keys(), reverse=True):
-                temp = t2m[day]
-                if temp != self.NASA_MISSING:
-                    rh   = props.get("RH2M", {}).get(day, self.NASA_MISSING)
-                    ws   = props.get("WS10M", {}).get(day, self.NASA_MISSING)
-                    ps   = props.get("PS", {}).get(day, self.NASA_MISSING)
-                    prec = props.get("PRECTOTCORR", {}).get(day, self.NASA_MISSING)
-                    return {
-                        "temperature": temp,
-                        "humidity":    rh   if rh   != self.NASA_MISSING else None,
-                        "wind_speed":  ws   if ws   != self.NASA_MISSING else None,
-                        "pressure":    ps   if ps   != self.NASA_MISSING else None,
-                        "rainfall":    prec if prec != self.NASA_MISSING else 0.0,
-                        "source":      "nasa_power",
-                        "date":        day,
-                    }
-            return None
-        except Exception as exc:
-            log.warning("NASA POWER error at (%s,%s): %s", lat, lon, exc)
-            return None
+                    if resp.status_code == 429:
+                        wait = 10 * (attempt + 1)  # 10s, 20s, 30s backoff
+                        log.info("NASA POWER 429 (attempt %d), waiting %ds...", attempt + 1, wait)
+                        await asyncio.sleep(wait)
+                        continue
+                    resp.raise_for_status()
+                    data = resp.json()
+                props = data["properties"]["parameter"]
+                t2m = props.get("T2M", {})
+                for day in sorted(t2m.keys(), reverse=True):
+                    temp = t2m[day]
+                    if temp != self.NASA_MISSING:
+                        rh   = props.get("RH2M", {}).get(day, self.NASA_MISSING)
+                        ws   = props.get("WS10M", {}).get(day, self.NASA_MISSING)
+                        ps   = props.get("PS", {}).get(day, self.NASA_MISSING)
+                        prec = props.get("PRECTOTCORR", {}).get(day, self.NASA_MISSING)
+                        return {
+                            "temperature": temp,
+                            "humidity":    rh   if rh   != self.NASA_MISSING else None,
+                            "wind_speed":  ws   if ws   != self.NASA_MISSING else None,
+                            "pressure":    ps   if ps   != self.NASA_MISSING else None,
+                            "rainfall":    prec if prec != self.NASA_MISSING else 0.0,
+                            "source":      "nasa_power",
+                            "date":        day,
+                        }
+                return None
+            except Exception as exc:
+                if attempt < 2:
+                    log.debug("NASA POWER attempt %d failed: %s", attempt + 1, exc)
+                    await asyncio.sleep(5.0)
+                else:
+                    log.warning("NASA POWER error at (%s,%s): %s", lat, lon, exc)
+        return None
 
     async def get_grid(self, lat: float, lon: float,
                         radius_deg: float = 0.5) -> List[Dict[str, Any]]:
