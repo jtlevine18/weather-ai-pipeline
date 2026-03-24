@@ -177,6 +177,43 @@ class WeatherPipeline:
         if records:
             insert_healing_log(self.conn, records)
 
+    def _store_rule_based_log(self, clean_readings: List[Dict[str, Any]]) -> None:
+        """Persist rule-based healing results to healing_log so dashboard shows them."""
+        records = []
+        for r in clean_readings:
+            action = r.get("heal_action", "none")
+            # Map heal_action to assessment category
+            if "anomaly_flagged" in action:
+                assessment = "flagged"
+            elif "null_filled" in action:
+                assessment = "filled"
+            elif "cross_validated" in action:
+                assessment = "good"
+            elif "typo_corrected" in action or "ai_corrected" in action:
+                assessment = "corrected"
+            else:
+                assessment = "good"
+
+            records.append({
+                "id": str(uuid.uuid4()),
+                "pipeline_run_id": self.run_id,
+                "reading_id": r.get("id", str(uuid.uuid4())),
+                "station_id": r.get("station_id", ""),
+                "assessment": assessment,
+                "reasoning": f"Rule-based: {action}",
+                "corrections": "{}",
+                "quality_score": r.get("quality_score", 1.0),
+                "tools_used": "",
+                "original_values": "{}",
+                "model": "rule-based",
+                "tokens_in": 0,
+                "tokens_out": 0,
+                "latency_s": 0.0,
+                "fallback_used": True,
+            })
+        if records:
+            insert_healing_log(self.conn, records)
+
     async def step_heal(self, raw_readings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         console.print("[bold blue]Step 2:[/bold blue] Healing + cross-validating via Tomorrow.io...")
 
@@ -223,6 +260,9 @@ class WeatherPipeline:
         # Validate stage output
         clean = [CleanReading(**r).model_dump() for r in clean]
         insert_clean_telemetry(self.conn, clean)
+
+        # Log rule-based assessments to healing_log so dashboard shows them
+        self._store_rule_based_log(clean)
 
         # Summary stats
         n_xval = sum(1 for r in clean if "cross_validated" in (r.get("heal_action") or ""))
@@ -381,7 +421,10 @@ class WeatherPipeline:
         alert_map = {a["station_id"]: a for a in alerts}
         total = 0
 
-        for recipient in DEFAULT_RECIPIENTS:
+        # Build recipients from farmer registry (covers all 20 stations)
+        recipients = self._build_recipients()
+
+        for recipient in recipients:
             alert = alert_map.get(recipient.station_id)
             if alert is None:
                 continue
@@ -392,6 +435,34 @@ class WeatherPipeline:
 
         console.print(f"  [green]✓[/green] {total} delivery attempts")
         return total
+
+    def _build_recipients(self) -> List[Recipient]:
+        """Pull one recipient per station from the farmer registry."""
+        try:
+            from src.dpi.simulator import get_registry
+            registry = get_registry()
+            farmers = registry.list_farmers()
+            # Pick one farmer per station
+            seen_stations: set = set()
+            recipients = []
+            for f in farmers:
+                sid = f.get("station", "")
+                if sid and sid not in seen_stations:
+                    seen_stations.add(sid)
+                    profile = registry.lookup_by_phone(f["phone"])
+                    lang = profile.aadhaar.language if profile else "en"
+                    recipients.append(Recipient(
+                        name=f["name"],
+                        phone=f["phone"],
+                        station_id=sid,
+                        language=lang,
+                    ))
+            if recipients:
+                return recipients
+        except Exception as e:
+            log.warning("Could not load farmer registry for delivery: %s", e)
+        # Fallback to hardcoded demo recipients
+        return DEFAULT_RECIPIENTS
 
     # ------------------------------------------------------------------
     # Full pipeline run
