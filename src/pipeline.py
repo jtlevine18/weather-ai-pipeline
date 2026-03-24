@@ -99,8 +99,11 @@ class WeatherPipeline:
     # Step 2: Heal
     # ------------------------------------------------------------------
     async def _fetch_references(self, raw_readings: List[Dict[str, Any]]) -> Dict[str, Any]:
-        """Fetch Tomorrow.io references in batches of 10, NASA POWER fallback."""
-        station_ids = [r["station_id"] for r in raw_readings if r["station_id"] in STATION_MAP]
+        """Fetch Tomorrow.io references in batches of 10, NASA POWER fallback.
+        Skips remaining batches if first batch all fails (rate-limited)."""
+        station_ids = list(dict.fromkeys(
+            r["station_id"] for r in raw_readings if r["station_id"] in STATION_MAP
+        ))
         references: Dict[str, Any] = {}
         batch_size = 10
         for i in range(0, len(station_ids), batch_size):
@@ -109,8 +112,19 @@ class WeatherPipeline:
                 self.tomorrow_io.get_current(STATION_MAP[sid].lat, STATION_MAP[sid].lon)
                 for sid in batch
             ], return_exceptions=True)
+            all_failed = True
             for sid, res in zip(batch, results):
-                references[sid] = res if isinstance(res, dict) else None
+                if isinstance(res, dict):
+                    references[sid] = res
+                    all_failed = False
+                else:
+                    references[sid] = None
+            # If entire first batch failed (e.g. 429), skip remaining
+            if i == 0 and all_failed:
+                log.warning("Tomorrow.io: first batch all failed — skipping remaining stations")
+                for sid in station_ids[len(batch):]:
+                    references[sid] = None
+                break
             if i + batch_size < len(station_ids):
                 await asyncio.sleep(0.2)
         return references

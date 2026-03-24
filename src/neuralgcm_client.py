@@ -184,7 +184,8 @@ class NeuralGCMClient:
         model = self._model
 
         log.info("Opening ARCO ERA5 Zarr...")
-        full_ds = xr.open_zarr(ERA5_PATH, storage_options=gcs_opts, consolidated=True)
+        full_ds = xr.open_zarr(ERA5_PATH, chunks=None,
+                               storage_options=gcs_opts, consolidated=True)
 
         # Find latest available timestep
         latest_time = full_ds.time[-1].values
@@ -199,15 +200,12 @@ class NeuralGCMClient:
         if len(available) < 4:
             raise ValueError(f"ARCO ERA5 missing critical variables. Found: {available}")
 
-        log.info("Fetching %d variables for single timestep...", len(available))
-        data = full_ds[available].sel(time=latest_time).compute()
+        log.info("Fetching %d variables at latest timestep...", len(available))
+        # Keep time dim as a length-1 slice (regridder and model expect it)
+        data = full_ds[available].sel(time=slice(latest_time, latest_time)).compute()
 
-        # Fill NaN in surface variables (SST is undefined over land)
-        for var in model.forcing_variables:
-            if var in data and data[var].isnull().any():
-                mean_val = float(data[var].mean(skipna=True).values)
-                data[var] = data[var].fillna(mean_val)
-                log.info("Filled NaN in %s with global mean %.2f", var, mean_val)
+        log.info("ERA5 data shape: %s, vars: %s",
+                 {d: data.sizes[d] for d in data.dims}, list(data.data_vars))
 
         return data, latest_time
 
@@ -238,19 +236,28 @@ class NeuralGCMClient:
         regridder = horizontal_interpolation.ConservativeRegridder(
             era5_grid, model.data_coords.horizontal, skipna=True,
         )
-        log.info("Regridding ERA5 (%d×%d) → model grid (%d×%d)...",
+        log.info("Regridding ERA5 (%d×%d) → model grid (%d×%d), spacing=%s...",
                  era5_grid.longitude_nodes, era5_grid.latitude_nodes,
                  model.data_coords.horizontal.longitude_nodes,
-                 model.data_coords.horizontal.latitude_nodes)
+                 model.data_coords.horizontal.latitude_nodes,
+                 xarray_utils.infer_latitude_spacing(init_ds.latitude))
         init_ds = xarray_utils.regrid(init_ds, regridder)
         init_ds = xarray_utils.fill_nan_with_nearest(init_ds)
 
+        # Log post-regrid state for debugging
+        nan_vars = [v for v in init_ds.data_vars if init_ds[v].isnull().any()]
+        log.info("Post-regrid: dims=%s, nan_vars=%s",
+                 {d: init_ds.sizes[d] for d in init_ds.dims}, nan_vars)
+
         log.info("Encoding initial state...")
-        inputs = model.inputs_from_xarray(init_ds)
-        forcings = model.forcings_from_xarray(init_ds)
+        inputs = model.inputs_from_xarray(init_ds.isel(time=0))
+        forcings = model.forcings_from_xarray(init_ds.isel(time=0))
 
         rng_key = jax.random.key(42)
         initial_state = model.encode(inputs, forcings, rng_key)
+
+        # Persistent forcings for unroll (SST/sea-ice from full time slice)
+        all_forcings = model.forcings_from_xarray(init_ds.head(time=1))
 
         # Forecast configuration: output every 6 hours
         inner_steps = 6
@@ -265,7 +272,7 @@ class NeuralGCMClient:
         t0 = time_mod.time()
         final_state, predictions = model.unroll(
             initial_state,
-            forcings,      # persistent forcings (SST stable over 24h)
+            all_forcings,
             steps=outer_steps,
             timedelta=timedelta,
             start_with_input=True,
