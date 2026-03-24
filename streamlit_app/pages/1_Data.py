@@ -8,7 +8,7 @@ import streamlit as st
 import pandas as pd
 import json
 
-from streamlit_app.style import inject_css, inject_sidebar_nav
+from streamlit_app.style import inject_css, inject_sidebar_nav, ASSESSMENT_COLOR, ASSESSMENT_EMOJI
 from streamlit_app.data_helpers import (
     get_station_coords, get_station_name_map, load_station_health,
     load_raw_telemetry, load_clean_telemetry,
@@ -103,23 +103,20 @@ def _quality_badge(q) -> str:
 
 
 def _heal_badge(action: str) -> str:
-    # Handle composite actions like "null_filled,cross_validated"
     if not action or action == "none":
-        label, color = "Original", "#888"
-    else:
-        parts = [a.strip() for a in action.split(",") if a.strip()]
-        badges = []
-        for p in parts:
-            l, c = HEAL_STYLE.get(p, (p, "#888"))
-            badges.append(
-                f'<span style="background:{c}18;color:{c};border:1px solid {c}44;'
-                f'padding:1px 6px;border-radius:3px;font-size:0.72rem;font-weight:600;">{l}</span>'
-            )
-        return " ".join(badges)
-    return (
-        f'<span style="background:{color}18;color:{color};border:1px solid {color}44;'
-        f'padding:1px 6px;border-radius:3px;font-size:0.72rem;font-weight:600;">{label}</span>'
-    )
+        return (
+            '<span style="background:#88818;color:#888;border:1px solid #88844;'
+            'padding:1px 6px;border-radius:3px;font-size:0.72rem;font-weight:600;">Original</span>'
+        )
+    parts = [a.strip() for a in action.split(",") if a.strip()]
+    badges = []
+    for p in parts:
+        l, c = HEAL_STYLE.get(p, (p, "#888"))
+        badges.append(
+            f'<span style="background:{c}18;color:{c};border:1px solid {c}44;'
+            f'padding:1px 6px;border-radius:3px;font-size:0.72rem;font-weight:600;">{l}</span>'
+        )
+    return " ".join(badges)
 
 
 def _val(v, unit="", fmt=".1f") -> str:
@@ -337,16 +334,12 @@ with tab_healing:
                 unsafe_allow_html=True,
             )
 
-            assessment_colors = {
-                "good": "#2a9d8f", "corrected": "#4361ee", "filled": "#d4a019",
-                "flagged": "#e76f51", "dropped": "#e63946",
-            }
             dist = healing_stats["assessment_distribution"]
             badge_html = '<div style="display:flex;gap:12px;flex-wrap:wrap;margin-bottom:16px;">'
             for atype in ["good", "corrected", "filled", "flagged", "dropped"]:
                 info = dist.get(atype, {"count": 0, "avg_quality": None})
                 cnt = info["count"]
-                color = assessment_colors.get(atype, "#888")
+                color = ASSESSMENT_COLOR.get(atype, "#888")
                 badge_html += (
                     f'<div style="background:{color}15;border:1px solid {color}40;border-radius:6px;'
                     f'padding:8px 14px;text-align:center;min-width:90px;">'
@@ -413,7 +406,7 @@ with tab_healing:
                 sid = row.get("station_id", "")
                 sname = station_names.get(sid, sid)
                 assessment = row.get("assessment", "unknown")
-                color = assessment_colors.get(assessment, "#888") if has_ai_data else "#888"
+                color = ASSESSMENT_COLOR.get(assessment, "#888") if has_ai_data else "#888"
                 quality = row.get("quality_score", 0)
                 reasoning = row.get("reasoning", "")
                 tools = row.get("tools_used", "")
@@ -427,8 +420,7 @@ with tab_healing:
                 except (json.JSONDecodeError, TypeError):
                     originals = {}
 
-                emoji = {'good': '🟢', 'corrected': '🔵', 'filled': '🟡',
-                         'flagged': '🟠', 'dropped': '🔴'}.get(assessment, '⚪')
+                emoji = ASSESSMENT_EMOJI.get(assessment, '⚪')
 
                 with st.expander(
                     f"{sname} — {emoji} {assessment} (Q: {quality:.2f})",
