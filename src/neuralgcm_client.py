@@ -226,22 +226,16 @@ class NeuralGCMClient:
         model = self._model
 
         # Regrid ERA5 (0.25°) to model's native grid (1.4° Gaussian)
-        from dinosaur import horizontal_interpolation, spherical_harmonic
-
         target_grid = model.data_coords.horizontal
-        source_grid = spherical_harmonic.Grid(
-            longitude_nodes=len(init_ds.longitude),
-            latitude_nodes=len(init_ds.latitude),
-            latitude_spacing="equiangular_with_poles",
-        )
-        regridder = horizontal_interpolation.ConservativeRegridder(
-            source_grid, target_grid, skipna=True,
-        )
+        target_lats = np.array(target_grid.latitudes)
+        target_lons = np.array(target_grid.longitudes)
         log.info("Regridding ERA5 (%d×%d) → model grid (%d×%d)...",
-                 source_grid.longitude_nodes, source_grid.latitude_nodes,
-                 target_grid.longitude_nodes, target_grid.latitude_nodes)
-        init_ds = regridder(init_ds)
-        # Fill any NaN introduced at grid edges after regridding
+                 len(init_ds.longitude), len(init_ds.latitude),
+                 len(target_lons), len(target_lats))
+        init_ds = init_ds.interp(
+            latitude=target_lats, longitude=target_lons, method="linear",
+        )
+        # Fill any NaN introduced at grid edges after interpolation
         for var in init_ds.data_vars:
             if init_ds[var].isnull().any():
                 init_ds[var] = init_ds[var].fillna(init_ds[var].mean(skipna=True))
