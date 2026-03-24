@@ -195,11 +195,10 @@ class NeuralGCMClient:
         import xarray as xr
         import numpy as np
 
-        gcs = self._get_gcs()
+        gcs_opts = {"token": "anon"}
 
         log.info("Opening ARCO ERA5 pressure-level Zarr...")
-        pl_store = gcs.get_mapper(ERA5_PL_PATH)
-        pl_ds = xr.open_zarr(pl_store, consolidated=False)
+        pl_ds = xr.open_zarr(ERA5_PL_PATH, storage_options=gcs_opts, consolidated=True)
 
         # Find latest available timestep
         latest_time = pl_ds.time[-1].values
@@ -218,8 +217,7 @@ class NeuralGCMClient:
 
         # Fetch surface forcings (SST, sea ice)
         log.info("Fetching surface forcings...")
-        sl_store = gcs.get_mapper(ERA5_SL_PATH)
-        sl_ds = xr.open_zarr(sl_store, consolidated=False)
+        sl_ds = xr.open_zarr(ERA5_SL_PATH, storage_options=gcs_opts, consolidated=True)
         available_sl = [v for v in FORCING_VARS if v in sl_ds]
         if available_sl:
             sl_data = sl_ds[available_sl].sel(
