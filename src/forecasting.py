@@ -223,8 +223,17 @@ class HybridNWPModel:
             self._model.fit(np.array(X), np.array(y))
             self._trained = True
 
-            os.makedirs(self.models_dir, exist_ok=True)
-            self._model.save_model(self._model_path)
+            # Try to persist model; fall back to /tmp if dir is read-only (HF Spaces)
+            try:
+                os.makedirs(self.models_dir, exist_ok=True)
+                self._model.save_model(self._model_path)
+            except (PermissionError, OSError):
+                tmp_dir = os.path.join("/tmp", self.models_dir)
+                os.makedirs(tmp_dir, exist_ok=True)
+                tmp_path = os.path.join(tmp_dir, "hybrid_mos.json")
+                self._model.save_model(tmp_path)
+                self._model_path = tmp_path
+                log.info("Saved MOS model to %s (primary dir read-only)", tmp_path)
             log.info("MOS model trained on %d samples (alt=%.0fm, sm=%.2f)",
                      len(X), station_altitude, soil_moisture)
         except Exception as exc:
@@ -235,17 +244,23 @@ class HybridNWPModel:
     # ------------------------------------------------------------------
 
     def load_if_exists(self) -> bool:
-        if not os.path.exists(self._model_path):
-            return False
-        try:
-            import xgboost as xgb
-            self._model = xgb.XGBRegressor()
-            self._model.load_model(self._model_path)
-            self._trained = True
-            return True
-        except Exception as exc:
-            log.warning("Failed to load MOS model: %s", exc)
-            return False
+        # Check primary path and /tmp fallback (HF Spaces read-only filesystem)
+        paths = [self._model_path]
+        tmp_path = os.path.join("/tmp", self.models_dir, "hybrid_mos.json")
+        if tmp_path != self._model_path:
+            paths.append(tmp_path)
+        for path in paths:
+            if os.path.exists(path):
+                try:
+                    import xgboost as xgb
+                    self._model = xgb.XGBRegressor()
+                    self._model.load_model(path)
+                    self._trained = True
+                    self._model_path = path
+                    return True
+                except Exception as exc:
+                    log.warning("Failed to load MOS model from %s: %s", path, exc)
+        return False
 
     # ------------------------------------------------------------------
     # Prediction
@@ -304,6 +319,71 @@ def create_forecast_model(models_dir: str = "models") -> HybridNWPModel:
 
 
 # ---------------------------------------------------------------------------
+# Daily aggregation (6-hourly / hourly → 7 daily forecasts)
+# ---------------------------------------------------------------------------
+
+_IST_OFFSET_H = 5.5  # UTC+05:30
+
+
+def aggregate_to_daily(
+    nwp_forecasts: List[Dict[str, Any]],
+    num_days: int = 7,
+) -> List[Dict[str, Any]]:
+    """Aggregate sub-daily NWP timesteps into daily summaries.
+
+    Groups by IST calendar day, computes:
+      temperature → daily max (high)
+      rainfall    → daily sum
+      humidity    → daily mean
+      wind_speed  → daily max
+      pressure    → daily mean
+    Returns up to *num_days* daily dicts, each with ts at noon IST.
+    """
+    from collections import defaultdict
+
+    buckets: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+    for fc in nwp_forecasts:
+        ts_str = fc.get("ts", "")
+        try:
+            dt_utc = datetime.fromisoformat(ts_str.replace("Z", "").replace(" ", "T"))
+        except Exception:
+            continue
+        # Convert to IST day key
+        ist_hour = dt_utc.hour + _IST_OFFSET_H
+        ist_day = dt_utc.date()
+        if ist_hour >= 24:
+            ist_day = ist_day + timedelta(days=1)
+        buckets[str(ist_day)].append(fc)
+
+    # Sort days chronologically, take up to num_days
+    sorted_days = sorted(buckets.keys())[:num_days]
+
+    dailies = []
+    for day_key in sorted_days:
+        entries = buckets[day_key]
+
+        temps = [e.get("temperature") for e in entries if e.get("temperature") is not None]
+        rains = [e.get("rainfall") or 0.0 for e in entries]
+        humids = [e.get("humidity") for e in entries if e.get("humidity") is not None]
+        winds = [e.get("wind_speed") for e in entries if e.get("wind_speed") is not None]
+        pressures = [e.get("pressure") for e in entries if e.get("pressure") is not None]
+
+        daily = {
+            "ts": f"{day_key}T06:30:00",  # noon IST = 06:30 UTC
+            "temperature": round(max(temps), 1) if temps else 25.0,
+            "rainfall": round(sum(rains), 1),
+            "humidity": round(sum(humids) / len(humids), 1) if humids else 60.0,
+            "wind_speed": round(max(winds), 1) if winds else 5.0,
+            "pressure": round(sum(pressures) / len(pressures), 1) if pressures else 1013.0,
+            "source": entries[0].get("source", "open_meteo"),
+        }
+        daily["condition"] = classify_condition(daily)
+        dailies.append(daily)
+
+    return dailies
+
+
+# ---------------------------------------------------------------------------
 # Forecasting step runner
 # ---------------------------------------------------------------------------
 
@@ -316,8 +396,8 @@ async def run_forecast_step(
     nasa_client=None,
     station_history: Optional[List[Dict[str, Any]]] = None,
     precomputed_nwp: Optional[List[Dict[str, Any]]] = None,
-) -> Optional[Dict[str, Any]]:
-    """Run complete forecast for one station. Returns forecast record.
+) -> List[Dict[str, Any]]:
+    """Run 7-day forecast for one station. Returns list of daily forecast records.
 
     If precomputed_nwp is provided (e.g. from NeuralGCM batch), uses that
     instead of calling Open-Meteo.
@@ -326,10 +406,10 @@ async def run_forecast_step(
     if precomputed_nwp:
         nwp_forecasts = precomputed_nwp
     else:
-        nwp_forecasts = await open_meteo_client.get_forecast(station.lat, station.lon, hours=24)
+        nwp_forecasts = await open_meteo_client.get_forecast(station.lat, station.lon, hours=168)
 
     if not clean_reading and not nwp_forecasts:
-        return None
+        return []
 
     # Fetch soil moisture from NASA POWER (reuse existing client, non-blocking)
     soil_moisture = 0.0
@@ -337,20 +417,17 @@ async def run_forecast_step(
         try:
             nasa = await nasa_client.get_current(station.lat, station.lon)
             if nasa and nasa.get("rainfall") is not None:
-                # PRECTOTCORR (mm/day) as a proxy for antecedent soil moisture
                 soil_moisture = min(1.0, (nasa["rainfall"] or 0.0) / 20.0)
         except Exception:
             pass
 
-    # Temperature trend from history (°C/h)
+    # Temperature trend from history
     recent_temp_trend = 0.0
     if station_history and len(station_history) >= 3:
         recent_temps = [h.get("temperature") for h in station_history[-5:]
                         if h.get("temperature") is not None]
         if len(recent_temps) >= 2:
             recent_temp_trend = (recent_temps[-1] - recent_temps[0]) / max(1, len(recent_temps) - 1)
-    elif clean_reading and clean_reading.get("temperature") is not None:
-        recent_temp_trend = 0.0
 
     # Use full station history for training when available
     training_obs = None
@@ -364,44 +441,75 @@ async def run_forecast_step(
     if nwp_forecasts and nwp_forecasts[0].get("source") == "neuralgcm":
         nwp_source = "neuralgcm"
 
-    if nwp_forecasts:
-        if training_obs:
-            model.train(
-                training_obs, nwp_forecasts[:1],
-                station_altitude=station.altitude_m,
-                soil_moisture=soil_moisture,
-            )
+    # Persistence fallback — only day 0
+    if not nwp_forecasts:
+        if clean_reading:
+            forecast = persistence_model.predict(clean_reading)
+            now = datetime.utcnow()
+            return [{
+                "id":           f"{station.station_id}_{now.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:4]}",
+                "station_id":   station.station_id,
+                "issued_at":    now.isoformat(),
+                "valid_for_ts": (now + timedelta(hours=6)).isoformat(),
+                "forecast_day": 0,
+                **{k: v for k, v in forecast.items()
+                   if k in ("temperature","humidity","wind_speed","rainfall",
+                            "condition","model_used","nwp_temp","correction","confidence")},
+                "nwp_source": "persistence",
+            }]
+        return []
+
+    # Train MOS on available observations
+    if training_obs:
+        model.train(
+            training_obs, nwp_forecasts[:1],
+            station_altitude=station.altitude_m,
+            soil_moisture=soil_moisture,
+        )
+
+    # Aggregate sub-daily NWP to 7 daily forecasts
+    dailies = aggregate_to_daily(nwp_forecasts, num_days=7)
+
+    now = datetime.utcnow()
+    results = []
+    for day_idx, daily_nwp in enumerate(dailies):
+        # MOS correction on each daily forecast
         forecast = model.predict(
-            nwp_forecasts[0],
+            daily_nwp,
             station_altitude=station.altitude_m,
             soil_moisture=soil_moisture,
             station_id=station.station_id,
             recent_temp_trend=recent_temp_trend,
         )
-        # Tag the NWP source for downstream tracking
+
+        # Tag NWP source
         if nwp_source == "neuralgcm":
             if forecast.get("model_used") == "hybrid_mos":
                 forecast["model_used"] = "neuralgcm_mos"
             elif forecast.get("model_used") == "nwp_only":
                 forecast["model_used"] = "neuralgcm_only"
         forecast["nwp_source"] = nwp_source
-        # Record error for rolling tracker (observed - predicted, if obs available)
-        if clean_reading and clean_reading.get("temperature") is not None:
+
+        # Confidence decay: MOS trained on day-0 residuals, less accurate further out
+        base_confidence = forecast.get("confidence", 0.7)
+        forecast["confidence"] = round(max(0.3, base_confidence * (1.0 - day_idx * 0.05)), 2)
+
+        # Record error for day 0 only (observed vs predicted)
+        if day_idx == 0 and clean_reading and clean_reading.get("temperature") is not None:
             error = clean_reading["temperature"] - forecast["temperature"]
             model.record_error(station.station_id, error)
-    elif clean_reading:
-        forecast = persistence_model.predict(clean_reading)
-    else:
-        return None
 
-    now = datetime.utcnow()
-    return {
-        "id":           f"{station.station_id}_{now.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:4]}",
-        "station_id":   station.station_id,
-        "issued_at":    now.isoformat(),
-        "valid_for_ts": (now + timedelta(hours=6)).isoformat(),
-        **{k: v for k, v in forecast.items()
-           if k in ("temperature","humidity","wind_speed","rainfall",
-                    "condition","model_used","nwp_temp","correction","confidence",
-                    "nwp_source")},
-    }
+        valid_ts = daily_nwp.get("ts", (now + timedelta(days=day_idx, hours=6)).isoformat())
+        results.append({
+            "id":           f"{station.station_id}_{now.strftime('%Y%m%d%H%M%S')}_d{day_idx}_{uuid.uuid4().hex[:4]}",
+            "station_id":   station.station_id,
+            "issued_at":    now.isoformat(),
+            "valid_for_ts": valid_ts,
+            "forecast_day": day_idx,
+            **{k: v for k, v in forecast.items()
+               if k in ("temperature","humidity","wind_speed","rainfall",
+                        "condition","model_used","nwp_temp","correction","confidence",
+                        "nwp_source")},
+        })
+
+    return results

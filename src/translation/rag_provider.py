@@ -6,7 +6,7 @@ Two-step: English advisory first, then separate translation call.
 from __future__ import annotations
 import logging
 import re
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 log = logging.getLogger(__name__)
 
@@ -154,49 +154,69 @@ class RAGProvider:
             self._client = anthropic.Anthropic(api_key=self.api_key)
         return self._client
 
-    def _query_reformulation(self, forecast: Dict[str, Any],
+    def _query_reformulation(self, forecasts: List[Dict[str, Any]],
                               station) -> str:
-        """Convert forecast dict to natural language retrieval query (Farmer.Chat pattern)."""
-        condition = forecast.get("condition", "clear")
-        temp      = forecast.get("temperature", 25.0)
-        rain      = forecast.get("rainfall", 0.0)
-        crops     = station.crop_context
-        state     = station.state
+        """Convert 7-day forecast list to natural language retrieval query."""
+        crops = station.crop_context
+        state = station.state
+
+        # Extract key events across the week for better RAG retrieval
+        conditions = set()
+        max_rain = 0.0
+        temp_range = [100.0, -100.0]
+        for fc in forecasts:
+            conditions.add((fc.get("condition") or "clear").replace("_", " "))
+            max_rain = max(max_rain, fc.get("rainfall") or 0.0)
+            t = fc.get("temperature")
+            if t is not None:
+                temp_range[0] = min(temp_range[0], t)
+                temp_range[1] = max(temp_range[1], t)
+
+        condition_str = ", ".join(sorted(conditions))
         return (
-            f"{condition.replace('_', ' ')} weather conditions for {crops} in {state}. "
-            f"Temperature {temp:.1f}°C, rainfall {rain:.1f}mm. "
-            f"Agricultural advisory recommendations."
+            f"Weekly outlook: {condition_str} conditions for {crops} in {state}. "
+            f"Temperature range {temp_range[0]:.0f}-{temp_range[1]:.0f}°C, "
+            f"max rainfall {max_rain:.0f}mm. "
+            f"Agricultural advisory recommendations for the week."
         )
 
-    def _generate_english(self, forecast: Dict[str, Any], station,
+    def _generate_english(self, forecasts: List[Dict[str, Any]], station,
                             context_docs: List[str]) -> str:
-        """Step 1: Generate English advisory from RAG context."""
+        """Step 1: Generate English weekly outlook advisory from RAG context."""
         context = "\n---\n".join(context_docs[:TOP_K]) if context_docs else ""
-        condition = forecast.get("condition", "clear")
-        temp      = forecast.get("temperature", 25.0)
-        rain      = forecast.get("rainfall", 0.0)
-        wind      = forecast.get("wind_speed", 0.0)
+
+        # Build 7-day forecast table for the prompt
+        day_labels = ["Today", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7"]
+        forecast_lines = []
+        for i, fc in enumerate(forecasts[:7]):
+            label = day_labels[i] if i < len(day_labels) else f"Day {i+1}"
+            cond = (fc.get("condition") or "clear").replace("_", " ")
+            temp = fc.get("temperature", 25.0) or 25.0
+            rain = fc.get("rainfall", 0.0) or 0.0
+            wind = fc.get("wind_speed", 0.0) or 0.0
+            forecast_lines.append(
+                f"  {label}: {cond}, {temp:.0f}°C, {rain:.0f}mm rain, {wind:.0f}km/h wind"
+            )
 
         system = (
             "You are an agricultural extension advisor for smallholder farmers in India. "
-            "Generate a 2-4 sentence, actionable advisory based on the weather forecast and "
-            "the provided knowledge base excerpts. Be specific to the crops and conditions. "
+            "Generate a concise weekly outlook advisory (4-6 sentences) based on the 7-day "
+            "weather forecast. Reference specific days when giving actionable advice "
+            "(e.g., 'avoid spraying on Day 3-4 due to heavy rain'). "
+            "Be specific to the crops and conditions. "
             "Write in plain English that can be easily understood and translated."
         )
         user = (
-            f"Weather forecast for {station.name}, {station.state}:\n"
-            f"  Condition: {condition}\n"
-            f"  Temperature: {temp:.1f}°C\n"
-            f"  Rainfall: {rain:.1f}mm\n"
-            f"  Wind: {wind:.1f}km/h\n"
-            f"  Crops: {station.crop_context}\n\n"
+            f"7-day weather forecast for {station.name}, {station.state}:\n"
+            + "\n".join(forecast_lines) + "\n\n"
+            f"Crops: {station.crop_context}\n\n"
             f"Knowledge base:\n{context if context else '[No relevant documents found]'}\n\n"
-            "Generate a 2-4 sentence actionable advisory for the farmer:"
+            "Generate a weekly outlook advisory for the farmer:"
         )
         client = self._get_client()
         msg = client.messages.create(
             model=self.config.model,
-            max_tokens=256,
+            max_tokens=400,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
@@ -231,22 +251,24 @@ class RAGProvider:
 
     async def generate_advisory(
         self,
-        forecast: Dict[str, Any],
+        forecasts: Union[Dict[str, Any], List[Dict[str, Any]]],
         station,
     ) -> Dict[str, Any]:
-        """Full RAG advisory generation pipeline."""
+        """Full RAG advisory generation pipeline. Accepts list of daily forecasts."""
+        if isinstance(forecasts, dict):
+            forecasts = [forecasts]
         self._ensure_retriever()
 
         # Retrieval
         context_docs = []
         if self._retriever:
-            query = self._query_reformulation(forecast, station)
+            query = self._query_reformulation(forecasts, station)
             hits  = self._retriever.retrieve(query, top_k=TOP_K,
                                               threshold=self.config.score_threshold)
             context_docs = [text for text, _ in hits]
 
-        # Generate English advisory
-        advisory_en = self._generate_english(forecast, station, context_docs)
+        # Generate English weekly outlook advisory
+        advisory_en = self._generate_english(forecasts, station, context_docs)
 
         # Translate
         advisory_local = self._translate(advisory_en, station.language, station.name)

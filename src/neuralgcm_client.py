@@ -33,7 +33,7 @@ class NeuralGCMResult:
     """Metadata from a NeuralGCM inference run."""
     model_name: str = ""
     init_time: str = ""
-    forecast_hours: int = 24
+    forecast_hours: int = 168
     inference_time_s: float = 0.0
     data_fetch_time_s: float = 0.0
     stations_extracted: int = 0
@@ -128,7 +128,7 @@ class NeuralGCMClient:
     def __init__(
         self,
         model_name: str = "deterministic_1_4_deg",
-        forecast_hours: int = 24,
+        forecast_hours: int = 168,
     ):
         self.model_name = model_name
         self.forecast_hours = forecast_hours  # minimum forecast horizon beyond "now"
@@ -151,6 +151,12 @@ class NeuralGCMClient:
         """Load NeuralGCM checkpoint from GCS (cached after first load)."""
         if self._model is not None:
             return
+
+        # Set XLA memory flags before any JAX operation —
+        # on-demand allocation instead of 90% upfront reservation
+        import os
+        os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+        os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.95")
 
         import neuralgcm
         import pickle
@@ -308,7 +314,7 @@ class NeuralGCMClient:
         # A single unroll of 28 steps stores all intermediate predictions (~66 GB).
         # Instead, run 4-step chunks: discard catch-up predictions, keep only the
         # final chunk that covers now → now + forecast_hours.
-        chunk_size = 4  # 4 × 6h = 24h per chunk — fits comfortably in 24 GB VRAM
+        chunk_size = 1  # single-step unroll — minimizes XLA graph size to fit in GPU VRAM
         forecast_steps = max(1, -(-self.forecast_hours // inner_steps))  # steps for actual forecast
         catchup_steps = max(0, total_steps - forecast_steps)
 
@@ -336,11 +342,32 @@ class NeuralGCMClient:
                      steps_done, catchup_steps, elapsed_h, catchup_steps * inner_steps)
             del _discarded  # free GPU memory
 
-        # Phase 2: Forecast — unroll the future portion and keep predictions
-        state, predictions = model.unroll(
-            state, all_forcings, steps=forecast_steps, timedelta=timedelta,
-            start_with_input=(catchup_steps == 0),
-        )
+        # Phase 2: Forecast — collect predictions in chunks to manage memory
+        import jax.numpy as jnp
+
+        forecast_predictions = []
+        forecast_steps_done = 0
+        while forecast_steps_done < forecast_steps:
+            n = min(chunk_size, forecast_steps - forecast_steps_done)
+            state, chunk_pred = model.unroll(
+                state, all_forcings, steps=n, timedelta=timedelta,
+                start_with_input=(forecast_steps_done == 0 and catchup_steps == 0),
+            )
+            forecast_predictions.append(chunk_pred)
+            forecast_steps_done += n
+            elapsed_h = (catchup_steps + forecast_steps_done) * inner_steps
+            log.info("  Forecast: %d/%d steps done (%dh / %dh)",
+                     forecast_steps_done, forecast_steps,
+                     forecast_steps_done * inner_steps, forecast_steps * inner_steps)
+
+        # Concatenate predictions from all forecast chunks
+        if len(forecast_predictions) == 1:
+            predictions = forecast_predictions[0]
+        else:
+            predictions = jax.tree.map(
+                lambda *arrs: jnp.concatenate(arrs, axis=0),
+                *forecast_predictions,
+            )
         inference_s = time_mod.time() - t0
         log.info("NeuralGCM inference completed in %.1fs", inference_s)
 

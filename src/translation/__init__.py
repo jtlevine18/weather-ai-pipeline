@@ -5,7 +5,7 @@ Selects RAGProvider (Claude+RAG) → ClaudeProvider (Claude only) → LocalProvi
 
 from __future__ import annotations
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, List, Union
 
 from config import TranslationConfig, StationConfig
 
@@ -23,19 +23,33 @@ def get_provider(api_key: str, config: TranslationConfig):
         return LocalProvider()
 
 
+def _normalize_forecast_input(
+    forecast: Union[Dict[str, Any], List[Dict[str, Any]]],
+) -> List[Dict[str, Any]]:
+    """Ensure forecast input is always a list (backward compat for single dicts)."""
+    if isinstance(forecast, dict):
+        return [forecast]
+    return forecast
+
+
 async def generate_advisory(
     provider,
-    forecast: Dict[str, Any],
+    forecast: Union[Dict[str, Any], List[Dict[str, Any]]],
     station: StationConfig,
 ) -> Dict[str, Any]:
-    """Unified dispatch that handles both async RAGProvider and sync LocalProvider."""
+    """Unified dispatch that handles both async RAGProvider and sync LocalProvider.
+
+    Accepts either a single forecast dict or a list of 7 daily forecasts.
+    """
     import inspect
+    fc_list = _normalize_forecast_input(forecast)
+
     try:
         method = getattr(provider, "generate_advisory", None)
         if method is None:
             raise AttributeError("provider has no generate_advisory method")
 
-        result = method(forecast, station)
+        result = method(fc_list, station)
 
         # Await if the method is a coroutine function (async def)
         if inspect.isawaitable(result):
@@ -54,7 +68,7 @@ async def generate_advisory(
         if api_key and config:
             try:
                 from src.translation.claude_provider import ClaudeProvider
-                result2 = ClaudeProvider(api_key=api_key, config=config).generate_advisory(forecast, station)
+                result2 = ClaudeProvider(api_key=api_key, config=config).generate_advisory(fc_list[0], station)
                 log.info("Claude-direct fallback succeeded for %s", station.station_id)
                 return result2
             except Exception as exc2:
@@ -66,4 +80,4 @@ async def generate_advisory(
             log.warning("No api_key on provider — skipping Claude-direct fallback")
         # Level 3: rule-based, zero API cost
         from src.translation.local_provider import LocalProvider
-        return LocalProvider().generate_advisory(forecast, station)
+        return LocalProvider().generate_advisory(fc_list, station)

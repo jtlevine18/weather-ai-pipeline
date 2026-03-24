@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS forecasts (
     nwp_temp      DOUBLE PRECISION,
     correction    DOUBLE PRECISION,
     confidence    DOUBLE PRECISION DEFAULT 0.7,
+    forecast_day  INTEGER DEFAULT 0,
     created_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -93,6 +94,7 @@ CREATE TABLE IF NOT EXISTS agricultural_alerts (
     language       VARCHAR,
     provider       VARCHAR,
     retrieval_docs INTEGER DEFAULT 0,
+    forecast_days  INTEGER DEFAULT 1,
     created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -251,6 +253,8 @@ def init_db(database_url: str = "") -> Any:
 def _migrate(conn) -> None:
     """Apply schema migrations to existing tables (idempotent)."""
     _add_column_if_missing(conn, "forecasts", "nwp_source", "VARCHAR DEFAULT 'open_meteo'")
+    _add_column_if_missing(conn, "forecasts", "forecast_day", "INTEGER DEFAULT 0")
+    _add_column_if_missing(conn, "agricultural_alerts", "forecast_days", "INTEGER DEFAULT 1")
 
 
 def _add_column_if_missing(conn, table: str, column: str, typedef: str) -> None:

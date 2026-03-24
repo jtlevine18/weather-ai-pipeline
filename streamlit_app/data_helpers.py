@@ -73,13 +73,13 @@ def table_exists(conn, name: str) -> bool:
 
 
 @st.cache_data(ttl=60)
-def load_forecasts(limit: int = 200) -> pd.DataFrame:
+def load_forecasts(limit: int = 500) -> pd.DataFrame:
     try:
         with _db() as conn:
             if not table_exists(conn, "forecasts"):
                 return pd.DataFrame()
             return pd.read_sql(
-                "SELECT * FROM forecasts ORDER BY issued_at DESC LIMIT %s",
+                "SELECT * FROM forecasts ORDER BY issued_at DESC, forecast_day ASC LIMIT %s",
                 conn, params=[limit],
             )
     except Exception:

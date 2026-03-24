@@ -60,6 +60,7 @@ class Forecast(BaseModel):
     nwp_temp: Optional[float] = None
     correction: float = 0.0
     confidence: float = Field(default=0.7, ge=0.0, le=1.0)
+    forecast_day: int = 0  # 0=today through 6=day 7
 
 
 class DownscaledForecast(Forecast):
@@ -87,6 +88,7 @@ class Advisory(BaseModel):
     language: str = "en"
     provider: str = "unknown"
     retrieval_docs: int = 0
+    forecast_days: int = 1  # 7 for weekly outlook advisories
 
 
 class DeliveryLog(BaseModel):

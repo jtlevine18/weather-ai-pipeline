@@ -280,7 +280,7 @@ class TomorrowIOClient:
 
 class OpenMeteoClient:
     async def get_forecast(self, lat: float, lon: float,
-                            hours: int = 48) -> List[Dict[str, Any]]:
+                            hours: int = 168) -> List[Dict[str, Any]]:
         """Return hourly NWP forecast from Open-Meteo (GFS/ECMWF)."""
         url = f"{OPEN_METEO_BASE}/forecast"
         params = {

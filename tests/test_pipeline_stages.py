@@ -151,6 +151,91 @@ class TestForecasting:
             "drought_risk", "frost_risk", "high_wind", "foggy",
         ]
 
+    def test_aggregate_to_daily_groups_by_day(self):
+        from src.forecasting import aggregate_to_daily
+        # 4 timesteps across 2 days
+        hourly = [
+            {"ts": "2026-03-24T00:00:00", "temperature": 28.0, "rainfall": 0.0, "humidity": 70.0, "wind_speed": 5.0, "pressure": 1010.0, "source": "open_meteo"},
+            {"ts": "2026-03-24T06:00:00", "temperature": 32.0, "rainfall": 2.0, "humidity": 65.0, "wind_speed": 8.0, "pressure": 1012.0, "source": "open_meteo"},
+            {"ts": "2026-03-24T12:00:00", "temperature": 34.0, "rainfall": 0.0, "humidity": 60.0, "wind_speed": 10.0, "pressure": 1011.0, "source": "open_meteo"},
+            {"ts": "2026-03-25T00:00:00", "temperature": 27.0, "rainfall": 5.0, "humidity": 80.0, "wind_speed": 6.0, "pressure": 1009.0, "source": "open_meteo"},
+        ]
+        result = aggregate_to_daily(hourly, num_days=7)
+        assert len(result) >= 1
+        # Each daily should have condition classified
+        for daily in result:
+            assert "condition" in daily
+            assert "temperature" in daily
+            assert "rainfall" in daily
+
+    def test_aggregate_to_daily_temp_is_max(self):
+        from src.forecasting import aggregate_to_daily
+        hourly = [
+            {"ts": "2026-03-24T00:00:00", "temperature": 25.0, "rainfall": 0.0, "humidity": 70.0, "wind_speed": 5.0, "pressure": 1010.0, "source": "open_meteo"},
+            {"ts": "2026-03-24T06:00:00", "temperature": 35.0, "rainfall": 0.0, "humidity": 60.0, "wind_speed": 8.0, "pressure": 1012.0, "source": "open_meteo"},
+            {"ts": "2026-03-24T12:00:00", "temperature": 30.0, "rainfall": 0.0, "humidity": 65.0, "wind_speed": 6.0, "pressure": 1011.0, "source": "open_meteo"},
+        ]
+        result = aggregate_to_daily(hourly, num_days=7)
+        assert result[0]["temperature"] == 35.0  # daily max
+
+    @pytest.mark.asyncio
+    async def test_run_forecast_step_returns_list(self):
+        from src.forecasting import run_forecast_step, HybridNWPModel, PersistenceModel
+
+        class FakeOpenMeteo:
+            async def get_forecast(self, lat, lon, hours=168):
+                # Return 7 days of hourly data (simplified to 4 per day)
+                results = []
+                for d in range(7):
+                    for h in [0, 6, 12, 18]:
+                        results.append({
+                            "ts": f"2026-03-{24+d:02d}T{h:02d}:00:00",
+                            "temperature": 28.0 + d,
+                            "humidity": 70.0,
+                            "wind_speed": 5.0,
+                            "pressure": 1010.0,
+                            "rainfall": 1.0 if d == 3 else 0.0,
+                            "source": "open_meteo",
+                        })
+                return results
+
+        from config import STATIONS
+        station = STATIONS[0]
+        obs = {"temperature": 29.0, "humidity": 75.0}
+        model = HybridNWPModel()
+        persistence = PersistenceModel()
+
+        result = await run_forecast_step(
+            station, obs, FakeOpenMeteo(), model, persistence,
+        )
+        assert isinstance(result, list)
+        assert len(result) == 7
+        for fc in result:
+            assert "forecast_day" in fc
+            assert fc["forecast_day"] in range(7)
+            assert "valid_for_ts" in fc
+
+    @pytest.mark.asyncio
+    async def test_run_forecast_step_persistence_returns_day0_only(self):
+        from src.forecasting import run_forecast_step, HybridNWPModel, PersistenceModel
+
+        class EmptyOpenMeteo:
+            async def get_forecast(self, lat, lon, hours=168):
+                return []
+
+        from config import STATIONS
+        station = STATIONS[0]
+        obs = {"temperature": 29.0, "humidity": 75.0}
+        model = HybridNWPModel()
+        persistence = PersistenceModel()
+
+        result = await run_forecast_step(
+            station, obs, EmptyOpenMeteo(), model, persistence,
+        )
+        assert isinstance(result, list)
+        assert len(result) == 1
+        assert result[0]["forecast_day"] == 0
+
 
 # ---------------------------------------------------------------------------
 # Step 4: Downscaling

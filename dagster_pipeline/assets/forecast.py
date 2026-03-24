@@ -73,19 +73,25 @@ def forecasts(
     ngcm_count = 0
     mos_count = 0
     for station, result in zip(STATIONS, results):
-        if isinstance(result, Exception) or result is None:
+        if isinstance(result, Exception):
             context.log.warning(f"Forecast failed for {station.station_id}: {result}")
             continue
-        forecast_list.append(result)
-        if result.get("nwp_source") == "neuralgcm":
-            ngcm_count += 1
-        if "mos" in result.get("model_used", ""):
-            mos_count += 1
+        # run_forecast_step now returns List[Dict] (7 daily forecasts)
+        if not result:
+            continue
+        fc_list = result if isinstance(result, list) else [result]
+        for fc in fc_list:
+            forecast_list.append(fc)
+            if fc.get("nwp_source") == "neuralgcm":
+                ngcm_count += 1
+            if "mos" in fc.get("model_used", ""):
+                mos_count += 1
 
     # Validate via Pydantic
     forecast_list = [Forecast(**f).model_dump() for f in forecast_list]
 
+    n_stations = len(set(f["station_id"] for f in forecast_list))
     nwp_summary = (f"{ngcm_count} NeuralGCM + {len(forecast_list) - ngcm_count} Open-Meteo"
                    if ngcm_count else f"{len(forecast_list)} Open-Meteo")
-    context.log.info(f"Generated {len(forecast_list)} forecasts | {nwp_summary} | {mos_count} MOS")
+    context.log.info(f"Generated {len(forecast_list)} daily forecasts ({n_stations} stations) | {nwp_summary} | {mos_count} MOS")
     return forecast_list

@@ -163,14 +163,26 @@ with tab_fc:
     if filtered.empty:
         st.warning("No forecasts match the current filters.")
     else:
-        latest = (
-            filtered
-            .sort_values("issued_at", ascending=False)
-            .drop_duplicates(subset="station_id", keep="first")
-            .sort_values(["state", "station_name"])
-        )
+        # Show 7-day view: latest forecast set per station (all forecast_day values)
+        has_forecast_day = "forecast_day" in filtered.columns
+        if has_forecast_day:
+            # Get latest issued_at per station, then show all 7 days
+            latest_issued = (
+                filtered.sort_values("issued_at", ascending=False)
+                .drop_duplicates(subset="station_id", keep="first")[["station_id", "issued_at"]]
+            )
+            latest = filtered.merge(latest_issued, on=["station_id", "issued_at"])
+            latest = latest.sort_values(["state", "station_name", "forecast_day"])
+        else:
+            latest = (
+                filtered
+                .sort_values("issued_at", ascending=False)
+                .drop_duplicates(subset="station_id", keep="first")
+                .sort_values(["state", "station_name"])
+            )
 
         th = "padding:10px 12px;text-align:left;font-size:0.78rem;text-transform:uppercase;letter-spacing:1px;color:#666;"
+        DAY_LABELS = ["Today", "Day 2", "Day 3", "Day 4", "Day 5", "Day 6", "Day 7"]
 
         for state_name, group in latest.groupby("state", sort=True):
             st.markdown(
@@ -203,9 +215,14 @@ with tab_fc:
                 conf_html  = _confidence_bar(row.get("confidence"))
                 model_html = _model_badge(row.get("model_used", ""))
 
+                # Day label for 7-day forecasts
+                day_idx = int(row.get("forecast_day", 0)) if has_forecast_day else 0
+                day_label = DAY_LABELS[day_idx] if day_idx < len(DAY_LABELS) else f"Day {day_idx+1}"
+
                 rows_html += (
                     f'<tr style="border-bottom:1px solid #e0dcd5;">'
                     f'<td style="padding:10px 12px;font-weight:600;color:#1a1a1a;">{row["station_name"]}</td>'
+                    f'<td style="padding:10px 12px;font-size:0.82rem;color:#888;">{day_label}</td>'
                     f'<td style="padding:10px 12px;font-weight:600;color:{temp_color};font-variant-numeric:tabular-nums;">{temp_str}</td>'
                     f'<td style="padding:10px 12px;font-weight:600;color:{rain_color};font-variant-numeric:tabular-nums;">{rain_str}</td>'
                     f'<td style="padding:10px 12px;">{cond_html}</td>'
@@ -218,7 +235,7 @@ with tab_fc:
                 f'<table style="width:100%;border-collapse:collapse;background:#fff;'
                 f'border:1px solid #e0dcd5;border-radius:8px;overflow:hidden;margin-bottom:16px;">'
                 f'<thead><tr style="background:#f5f3ef;border-bottom:2px solid #e0dcd5;">'
-                f'<th style="{th}">Station</th><th style="{th}">Temp</th>'
+                f'<th style="{th}">Station</th><th style="{th}">Day</th><th style="{th}">Temp</th>'
                 f'<th style="{th}">Rainfall</th><th style="{th}">Condition</th>'
                 f'<th style="{th}">Model</th><th style="{th}">Confidence</th>'
                 f'</tr></thead><tbody>{rows_html}</tbody></table>'

@@ -126,9 +126,18 @@ with tab_feed:
         prov_badge = "RAG+Claude" if provider == "rag_claude" else "Rule-based"
         border_color = badge_color
 
+        # Weekly outlook badge
+        forecast_days = int(row.get("forecast_days", 1)) if "forecast_days" in row.index else 1
+        weekly_badge = ""
+        if forecast_days >= 7:
+            weekly_badge = (
+                '<span style="background:#4361ee;color:white;padding:2px 8px;'
+                'border-radius:10px;font-size:0.7rem;font-weight:600;">WEEKLY OUTLOOK</span>'
+            )
+
         has_en = bool(advisory_en and advisory_en != advisory_local)
         if has_en:
-            en_safe = advisory_en[:200].replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
+            en_safe = advisory_en[:400].replace('"', "&quot;").replace("<", "&lt;").replace(">", "&gt;")
             overlay_html = (
                 f'<div class="en-overlay">'
                 f'<div class="en-label">English translation</div>'
@@ -148,10 +157,11 @@ with tab_feed:
             f"border-left:3px solid {border_color};"
             f"border-radius:8px;padding:10px 14px;margin-bottom:8px;background:#fff;'>"
             f"{overlay_html}"
-            f"<div style='display:flex;align-items:center;gap:8px;margin-bottom:4px;'>"
+            f"<div style='display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap;'>"
             f"<span style='font-size:1.1rem'>{emoji}</span>"
             f"<strong style='color:#1a1a1a;'>{name}</strong>"
             f"<span style='color:#aaa;font-size:0.75rem'>{sid}</span>"
+            f"{weekly_badge}"
             f"<span style='background:{badge_color};color:white;padding:2px 8px;"
             f"border-radius:10px;font-size:0.7rem;font-weight:600'>"
             f"{cond.replace('_', ' ').title()}</span>"
@@ -160,7 +170,7 @@ with tab_feed:
             f"{hint}"
             f"</div>"
             f"<div style='color:#555;font-size:0.85rem;line-height:1.5;margin:4px 0'>"
-            f"{display_text[:200]}{'...' if len(display_text) > 200 else ''}"
+            f"{display_text[:400]}{'...' if len(display_text) > 400 else ''}"
             f"</div>"
             f"<div style='color:#aaa;font-size:0.72rem;margin-top:2px'>{issued}</div>"
             f"</div>",

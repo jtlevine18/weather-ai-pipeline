@@ -366,21 +366,28 @@ class WeatherPipeline:
         mos_count = 0
         ngcm_count = 0
         for station, result in all_results:
-            if isinstance(result, Exception) or result is None:
+            if isinstance(result, Exception):
                 log.warning("Forecast failed for %s: %s", station.station_id, result)
                 continue
+            # run_forecast_step now returns List[Dict] (7 daily forecasts)
+            if not result:
+                continue
+            fc_list = result if isinstance(result, list) else [result]
             from src.database import insert_forecast as _if
-            _if(self.conn, result)
-            forecasts.append(result)
-            mu = result.get("model_used", "")
-            if "mos" in mu:
-                mos_count += 1
-            if result.get("nwp_source") == "neuralgcm":
-                ngcm_count += 1
+            for fc in fc_list:
+                _if(self.conn, fc)
+                forecasts.append(fc)
+                mu = fc.get("model_used", "")
+                if "mos" in mu:
+                    mos_count += 1
+                if fc.get("nwp_source") == "neuralgcm":
+                    ngcm_count += 1
 
+        n_stations = len(set(f["station_id"] for f in forecasts))
+        n_days = max((f.get("forecast_day", 0) for f in forecasts), default=0) + 1 if forecasts else 0
         nwp_summary = f"{ngcm_count} NeuralGCM + {len(forecasts)-ngcm_count} Open-Meteo" if ngcm_count else f"{len(forecasts)} Open-Meteo"
         console.print(
-            f"  [green]✓[/green] {len(forecasts)} forecasts | {mos_count} MOS | NWP: {nwp_summary}"
+            f"  [green]✓[/green] {len(forecasts)} daily forecasts ({n_stations} stations × {n_days} days) | {mos_count} MOS | NWP: {nwp_summary}"
         )
         # Validate stage output
         forecasts = [Forecast(**f).model_dump() for f in forecasts]
@@ -439,42 +446,52 @@ class WeatherPipeline:
     # Step 5: Translate / advisory
     # ------------------------------------------------------------------
     async def step_translate(self, downscaled: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-        console.print("[bold blue]Step 5:[/bold blue] Generating advisories + translating...")
+        console.print("[bold blue]Step 5:[/bold blue] Generating weekly advisories + translating...")
         alerts = []
+
+        # Group forecasts by station (7 daily forecasts → 1 weekly advisory)
+        from collections import defaultdict
+        station_forecasts: Dict[str, List[Dict[str, Any]]] = defaultdict(list)
+        for forecast in downscaled:
+            station_forecasts[forecast["station_id"]].append(forecast)
 
         tasks = []
         stations_list = []
-        for forecast in downscaled:
-            station = STATION_MAP.get(forecast["station_id"])
+        for sid, fc_list in station_forecasts.items():
+            station = STATION_MAP.get(sid)
             if station is None:
                 continue
-            tasks.append(generate_advisory(self.advisory_prov, forecast, station))
-            stations_list.append((forecast, station))
+            fc_list.sort(key=lambda f: f.get("forecast_day", 0))
+            tasks.append(generate_advisory(self.advisory_prov, fc_list, station))
+            stations_list.append((fc_list, station))
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
-        for (forecast, station), result in zip(stations_list, results):
+        for (fc_list, station), result in zip(stations_list, results):
             if isinstance(result, Exception):
                 log.warning("Advisory failed for %s: %s", station.station_id, result)
                 from src.translation.local_provider import LocalProvider
-                result = LocalProvider().generate_advisory(forecast, station)
+                result = LocalProvider().generate_advisory(fc_list, station)
 
+            # Use day-0 forecast for alert metadata
+            day0 = fc_list[0] if fc_list else {}
             alert = {
-                "id":          str(uuid.uuid4()),
-                "station_id":  station.station_id,
-                "farmer_lat":  forecast.get("farmer_lat", station.lat),
-                "farmer_lon":  forecast.get("farmer_lon", station.lon),
-                "issued_at":   datetime.utcnow().isoformat(),
-                "condition":   forecast.get("condition"),
-                "temperature": forecast.get("temperature"),
-                "rainfall":    forecast.get("rainfall"),
+                "id":            str(uuid.uuid4()),
+                "station_id":    station.station_id,
+                "farmer_lat":    day0.get("farmer_lat", station.lat),
+                "farmer_lon":    day0.get("farmer_lon", station.lon),
+                "issued_at":     datetime.utcnow().isoformat(),
+                "condition":     day0.get("condition"),
+                "temperature":   day0.get("temperature"),
+                "rainfall":      day0.get("rainfall"),
+                "forecast_days": len(fc_list),
                 **result,
             }
             insert_alert(self.conn, alert)
             alerts.append(alert)
 
         rag_count = sum(1 for a in alerts if a.get("provider") == "rag_claude")
-        console.print(f"  [green]✓[/green] {len(alerts)} advisories | {rag_count} RAG | {len(alerts)-rag_count} rule-based")
+        console.print(f"  [green]✓[/green] {len(alerts)} weekly advisories | {rag_count} RAG | {len(alerts)-rag_count} rule-based")
         return alerts
 
     # ------------------------------------------------------------------

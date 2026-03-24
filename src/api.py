@@ -108,11 +108,15 @@ def list_stations(user: User = Depends(get_current_user)):
 
 @app.get("/api/forecasts")
 def get_forecasts(limit: int = Query(50, le=500),
+                  forecast_day: int = Query(None, ge=0, le=6),
                   user: User = Depends(get_current_user)):
-    """Recent forecasts across all stations."""
+    """Recent forecasts across all stations. Optional forecast_day filter (0-6)."""
     from src.database import init_db, get_recent_forecasts
     conn = init_db()
-    return get_recent_forecasts(conn, limit=limit)
+    results = get_recent_forecasts(conn, limit=limit)
+    if forecast_day is not None:
+        results = [r for r in results if r.get("forecast_day", 0) == forecast_day]
+    return results
 
 
 @app.get("/api/alerts")

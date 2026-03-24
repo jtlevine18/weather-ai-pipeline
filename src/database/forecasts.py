@@ -11,8 +11,8 @@ def insert_forecast(conn: Any, record: Dict[str, Any]) -> None:
         """INSERT INTO forecasts
            (id, station_id, issued_at, valid_for_ts, temperature, humidity,
             wind_speed, rainfall, condition, model_used, nwp_source, nwp_temp,
-            correction, confidence)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            correction, confidence, forecast_day)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT (id) DO NOTHING""",
         [record["id"], record["station_id"], record["issued_at"], record["valid_for_ts"],
          record.get("temperature"), record.get("humidity"), record.get("wind_speed"),
@@ -20,7 +20,8 @@ def insert_forecast(conn: Any, record: Dict[str, Any]) -> None:
          record.get("model_used", "persistence"),
          record.get("nwp_source", "open_meteo"),
          record.get("nwp_temp"), record.get("correction", 0.0),
-         record.get("confidence", 0.7)],
+         record.get("confidence", 0.7),
+         record.get("forecast_day", 0)],
     )
 
 
