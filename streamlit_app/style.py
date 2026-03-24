@@ -256,3 +256,24 @@ STATUS_COLOR = {
 
 def inject_css():
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)
+
+
+# Shared sidebar nav hidden CSS + explicit page links
+_SIDEBAR_NAV_CSS = """
+<style>
+    [data-testid="stSidebarNav"] { display: none !important; }
+    nav[data-testid="stSidebarNav"] { display: none !important; }
+    [data-testid="stSidebar"] ul[data-testid="stSidebarNavItems"] { display: none !important; }
+</style>
+"""
+
+
+def inject_sidebar_nav():
+    """Hide auto sidebar nav and render our own. Call on every page after inject_css()."""
+    st.markdown(_SIDEBAR_NAV_CSS, unsafe_allow_html=True)
+    with st.sidebar:
+        st.page_link("app.py", label="Home", icon="🏠")
+        st.page_link("pages/1_Data.py", label="Data", icon="📡")
+        st.page_link("pages/2_Forecasts.py", label="Forecasts", icon="🌦")
+        st.page_link("pages/3_Advisories.py", label="Advisories", icon="🌾")
+        st.page_link("pages/_System.py", label="System", icon="⚙")

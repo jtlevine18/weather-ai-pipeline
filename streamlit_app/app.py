@@ -12,7 +12,7 @@ import streamlit as st
 # Auto-resume daily scheduler if previously enabled (survives HF Spaces restarts)
 import src.daily_scheduler  # noqa: F401
 
-from streamlit_app.style import inject_css, STATUS_COLOR
+from streamlit_app.style import inject_css, inject_sidebar_nav, STATUS_COLOR
 from streamlit_app.data_helpers import (
     load_pipeline_runs, load_station_health, load_pipeline_stage_stats,
 )
@@ -23,38 +23,22 @@ st.set_page_config(
     layout="wide",
 )
 inject_css()
+inject_sidebar_nav()
 
-# Hide auto sidebar nav (we build our own) + transparent header
+# Transparent header
 st.markdown("""
 <style>
     header[data-testid="stHeader"] {
         background: transparent !important;
     }
-    [data-testid="stSidebarNav"] {
-        display: none !important;
-    }
-    nav[data-testid="stSidebarNav"] {
-        display: none !important;
-    }
-    /* Hide auto-generated sidebar nav links */
-    [data-testid="stSidebar"] ul[data-testid="stSidebarNavItems"] {
-        display: none !important;
-    }
 </style>
 """, unsafe_allow_html=True)
 
 # ---------------------------------------------------------------------------
-# Sidebar
+# Sidebar extras (metrics below nav)
 # ---------------------------------------------------------------------------
 with st.sidebar:
-    # Navigation — replaces auto-generated sidebar nav
-    st.page_link("app.py", label="Home", icon="🏠")
-    st.page_link("pages/1_Data.py", label="Data", icon="📡")
-    st.page_link("pages/2_Forecasts.py", label="Forecasts", icon="🌦")
-    st.page_link("pages/3_Advisories.py", label="Advisories", icon="🌾")
-    st.page_link("pages/_System.py", label="System", icon="⚙")
     st.divider()
-
     health = load_station_health()
     if not health.empty:
         n_active = health["station_id"].nunique()

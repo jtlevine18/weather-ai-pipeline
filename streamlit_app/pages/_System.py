@@ -9,12 +9,13 @@ import streamlit as st
 import streamlit.components.v1 as components
 import pandas as pd
 
-from streamlit_app.style import inject_css, STATUS_COLOR
+from streamlit_app.style import inject_css, inject_sidebar_nav, STATUS_COLOR
 from streamlit_app.data_helpers import (load_pipeline_runs, load_delivery_log,
                                         load_conversation_log, load_delivery_metrics)
 
 st.set_page_config(page_title="System", page_icon="S", layout="wide")
 inject_css()
+inject_sidebar_nav()
 
 st.title("System Overview")
 st.caption("Architecture, pipeline run history, and cost estimate")

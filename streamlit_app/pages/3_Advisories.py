@@ -7,7 +7,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", ".."))
 import streamlit as st
 import pandas as pd
 
-from streamlit_app.style import inject_css, CONDITION_EMOJI, CONDITION_COLOR
+from streamlit_app.style import inject_css, inject_sidebar_nav, CONDITION_EMOJI, CONDITION_COLOR
 from streamlit_app.data_helpers import (
     load_alerts, load_delivery_log, get_station_name_map,
     load_advisory_lineage, load_farmer_profiles, load_farmer_profile_detail,
@@ -15,6 +15,7 @@ from streamlit_app.data_helpers import (
 
 st.set_page_config(page_title="Advisories", page_icon="A", layout="wide")
 inject_css()
+inject_sidebar_nav()
 
 st.title("Advisories")
 st.caption("Translation, delivery, and farmer context")

@@ -8,11 +8,12 @@ import json
 import streamlit as st
 import pandas as pd
 
-from streamlit_app.style import inject_css, CONDITION_EMOJI, CONDITION_COLOR
+from streamlit_app.style import inject_css, inject_sidebar_nav, CONDITION_EMOJI, CONDITION_COLOR
 from streamlit_app.data_helpers import load_forecasts, get_station_coords
 
 st.set_page_config(page_title="Forecasts", page_icon="F", layout="wide")
 inject_css()
+inject_sidebar_nav()
 
 st.title("Forecasts")
 st.caption("Station-level weather predictions, model performance, and spatial downscaling")
