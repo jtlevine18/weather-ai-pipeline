@@ -226,10 +226,10 @@ class NeuralGCMClient:
         model = self._model
 
         # Regrid ERA5 (0.25°) to model's native grid (1.4° Gaussian)
-        from dinosaur import horizontal_interpolation
+        from dinosaur import horizontal_interpolation, spherical_harmonic
 
         target_grid = model.data_coords.horizontal
-        source_grid = horizontal_interpolation.Grid.from_degrees(
+        source_grid = spherical_harmonic.Grid(
             longitude_nodes=len(init_ds.longitude),
             latitude_nodes=len(init_ds.latitude),
             latitude_spacing="equiangular_with_poles",
