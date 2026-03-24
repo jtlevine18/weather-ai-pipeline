@@ -41,30 +41,11 @@ class NeuralGCMResult:
 
 
 # ---------------------------------------------------------------------------
-# ERA5 data paths (Google Cloud — anonymous access)
+# ERA5 data path (Google Cloud — anonymous access)
+# Both pressure-level and surface variables live in the same store.
 # ---------------------------------------------------------------------------
 
-# Pressure-level data: 37 levels, hourly, 0.25° global
-ERA5_PL_PATH = "gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3"
-# Single-level data: hourly, 0.25° global (SST, sea ice for forcings)
-ERA5_SL_PATH = "gs://gcp-public-data-arco-era5/ar/1h-0p25deg-chunk-1.zarr-v3"
-
-# Variables NeuralGCM needs on pressure levels
-PRESSURE_LEVEL_VARS = [
-    "u_component_of_wind",
-    "v_component_of_wind",
-    "temperature",
-    "geopotential",
-    "specific_humidity",
-    "specific_cloud_ice_water_content",
-    "specific_cloud_liquid_water_content",
-]
-
-# Surface forcing variables
-FORCING_VARS = [
-    "sea_surface_temperature",
-    "sea_ice_cover",
-]
+ERA5_PATH = "gs://gcp-public-data-arco-era5/ar/full_37-1h-0p25deg-chunk-1.zarr-v3"
 
 # Model checkpoint paths on Google Cloud Storage
 CHECKPOINT_BASE = "gs://neuralgcm/models/v1"
@@ -190,53 +171,45 @@ class NeuralGCMClient:
     def _fetch_era5_sync(self) -> Tuple[Any, Any]:
         """Fetch latest ERA5 initial conditions from ARCO Zarr (synchronous).
 
-        Returns (merged_xr_dataset, init_time_np64).
+        Both pressure-level and surface variables (SST, sea ice) live in the
+        same store. We select only the variables the model needs via
+        model.input_variables + model.forcing_variables.
+
+        Returns (xr_dataset, init_time_np64).
         """
         import xarray as xr
         import numpy as np
 
         gcs_opts = {"token": "anon"}
+        model = self._model
 
-        log.info("Opening ARCO ERA5 pressure-level Zarr...")
-        pl_ds = xr.open_zarr(ERA5_PL_PATH, storage_options=gcs_opts, consolidated=True)
+        log.info("Opening ARCO ERA5 Zarr...")
+        full_ds = xr.open_zarr(ERA5_PATH, storage_options=gcs_opts, consolidated=True)
 
         # Find latest available timestep
-        latest_time = pl_ds.time[-1].values
+        latest_time = full_ds.time[-1].values
         log.info("Latest ERA5 time available: %s", latest_time)
 
-        # Select single timestep + required variables
-        log.info("Fetching pressure-level data (%d vars × 37 levels)...",
-                 len(PRESSURE_LEVEL_VARS))
-        # Only fetch variables that exist in the dataset
-        available_pl = [v for v in PRESSURE_LEVEL_VARS if v in pl_ds]
-        if len(available_pl) < 4:
-            raise ValueError(
-                f"ARCO ERA5 missing critical variables. Found: {available_pl}"
-            )
-        pl_data = pl_ds[available_pl].sel(time=latest_time).compute()
+        # Select only the variables the model needs (pressure-level + forcings)
+        all_vars = model.input_variables + model.forcing_variables
+        available = [v for v in all_vars if v in full_ds]
+        missing = [v for v in all_vars if v not in full_ds]
+        if missing:
+            log.warning("ERA5 store missing variables: %s", missing)
+        if len(available) < 4:
+            raise ValueError(f"ARCO ERA5 missing critical variables. Found: {available}")
 
-        # Fetch surface forcings (SST, sea ice) — optional for 24h forecast
-        try:
-            log.info("Fetching surface forcings...")
-            sl_ds = xr.open_zarr(ERA5_SL_PATH, storage_options=gcs_opts, consolidated=False)
-            available_sl = [v for v in FORCING_VARS if v in sl_ds]
-            if available_sl:
-                sl_data = sl_ds[available_sl].sel(
-                    time=latest_time, method="nearest"
-                ).compute()
-                for var in available_sl:
-                    if sl_data[var].isnull().any():
-                        mean_val = float(sl_data[var].mean(skipna=True).values)
-                        sl_data[var] = sl_data[var].fillna(mean_val)
-                merged = xr.merge([pl_data, sl_data])
-            else:
-                log.warning("No forcing variables found in single-level dataset")
-                merged = pl_data
-        except Exception as e:
-            log.warning("Surface forcings unavailable (%s) — proceeding without SST/sea-ice", e)
-            merged = pl_data
+        log.info("Fetching %d variables for single timestep...", len(available))
+        data = full_ds[available].sel(time=latest_time).compute()
 
-        return merged, latest_time
+        # Fill NaN in surface variables (SST is undefined over land)
+        for var in model.forcing_variables:
+            if var in data and data[var].isnull().any():
+                mean_val = float(data[var].mean(skipna=True).values)
+                data[var] = data[var].fillna(mean_val)
+                log.info("Filled NaN in %s with global mean %.2f", var, mean_val)
+
+        return data, latest_time
 
     # ------------------------------------------------------------------
     # Inference
@@ -254,7 +227,6 @@ class NeuralGCMClient:
 
         # Regrid ERA5 (0.25°) to model's native grid (1.4° Gaussian)
         from dinosaur import horizontal_interpolation
-        from neuralgcm import xarray_utils
 
         target_grid = model.data_coords.horizontal
         source_grid = horizontal_interpolation.Grid.from_degrees(
@@ -269,7 +241,10 @@ class NeuralGCMClient:
                  source_grid.longitude_nodes, source_grid.latitude_nodes,
                  target_grid.longitude_nodes, target_grid.latitude_nodes)
         init_ds = regridder(init_ds)
-        init_ds = xarray_utils.fill_nan_with_nearest(init_ds)
+        # Fill any NaN introduced at grid edges after regridding
+        for var in init_ds.data_vars:
+            if init_ds[var].isnull().any():
+                init_ds[var] = init_ds[var].fillna(init_ds[var].mean(skipna=True))
 
         log.info("Encoding initial state...")
         inputs = model.inputs_from_xarray(init_ds)
