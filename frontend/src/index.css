@@ -1,0 +1,245 @@
+@import url('https://fonts.googleapis.com/css2?family=Source+Serif+4:ital,opsz,wght@0,8..60,400;0,8..60,600;0,8..60,700;1,8..60,400&family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  body {
+    @apply min-h-screen bg-cream font-sans text-[#1a1a1a] antialiased;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    @apply font-serif font-semibold text-[#1a1a1a];
+  }
+
+  h1 { @apply font-bold; }
+
+  p, li, td, span, label {
+    color: #555;
+  }
+
+  /* Custom scrollbar — warm tones */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-transparent;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full;
+    background: #d4cfc7;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    background: #b8b3a9;
+  }
+}
+
+@layer components {
+  /* ── Cards ── */
+  .card {
+    @apply bg-white rounded-[10px] border border-warm-border;
+  }
+
+  .card-body {
+    @apply p-5;
+  }
+
+  /* ── Metric cards ── */
+  .metric-card {
+    @apply bg-white rounded-[10px] border border-warm-border p-5;
+  }
+
+  .metric-card .metric-label {
+    @apply uppercase text-[0.72rem] font-sans font-medium text-warm-muted;
+    letter-spacing: 1.2px;
+  }
+
+  .metric-card .metric-value {
+    @apply font-serif font-bold text-[#1a1a1a] text-2xl mt-1;
+  }
+
+  /* ── Buttons ── */
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5
+           font-sans font-semibold text-sm uppercase transition-all duration-150 ease-in-out
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed;
+    letter-spacing: 0.5px;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5
+           font-sans font-semibold text-sm uppercase transition-all duration-150 ease-in-out
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           bg-gold text-white hover:bg-gold-hover
+           focus:ring-gold active:bg-gold-hover;
+    letter-spacing: 0.5px;
+    box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+  }
+
+  .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 8px rgba(212, 160, 25, 0.25);
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-md px-4 py-2.5
+           font-sans font-semibold text-sm uppercase transition-all duration-150 ease-in-out
+           focus:outline-none focus:ring-2 focus:ring-offset-2
+           disabled:opacity-50 disabled:cursor-not-allowed
+           bg-white text-[#555] border border-warm-border
+           hover:bg-warm-header-bg focus:ring-warm-border active:bg-warm-header-bg;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── Inputs ── */
+  .input {
+    @apply block w-full rounded-md border border-warm-border px-3.5 py-2.5
+           text-sm text-[#1a1a1a] font-sans placeholder-[#888]
+           focus:border-gold focus:ring-2 focus:ring-gold/20
+           focus:outline-none transition-colors duration-150;
+  }
+
+  /* ── Badges / pills ── */
+  .badge {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5
+           text-xs font-semibold font-sans;
+  }
+
+  .badge-green {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold font-sans;
+    background: rgba(42, 157, 143, 0.18);
+    color: #2a9d8f;
+    border: 1px solid rgba(42, 157, 143, 0.44);
+  }
+
+  .badge-amber {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold font-sans;
+    background: rgba(212, 160, 25, 0.18);
+    color: #d4a019;
+    border: 1px solid rgba(212, 160, 25, 0.44);
+  }
+
+  .badge-red {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold font-sans;
+    background: rgba(230, 57, 70, 0.18);
+    color: #e63946;
+    border: 1px solid rgba(230, 57, 70, 0.44);
+  }
+
+  .badge-blue {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold font-sans;
+    background: rgba(21, 101, 192, 0.18);
+    color: #1565C0;
+    border: 1px solid rgba(21, 101, 192, 0.44);
+  }
+
+  .badge-slate {
+    @apply inline-flex items-center rounded-full px-2.5 py-0.5 text-xs font-semibold font-sans;
+    background: rgba(136, 136, 136, 0.18);
+    color: #888;
+    border: 1px solid rgba(136, 136, 136, 0.44);
+  }
+
+  /* ── Tables ── */
+  .table-container {
+    @apply overflow-x-auto rounded-[10px] border border-warm-border bg-white;
+  }
+
+  .table-container table {
+    @apply w-full text-sm text-left font-sans;
+  }
+
+  .table-container thead {
+    @apply border-b border-warm-border;
+    background: #f5f3ef;
+  }
+
+  .table-container th {
+    @apply px-4 py-3 font-semibold text-warm-muted text-xs uppercase;
+    letter-spacing: 1.2px;
+  }
+
+  .table-container td {
+    @apply px-4 py-3 border-b border-warm-border/50;
+    color: #555;
+  }
+
+  .table-container tbody tr:last-child td {
+    @apply border-b-0;
+  }
+
+  .table-container tbody tr:hover {
+    background: rgba(250, 248, 245, 0.6);
+  }
+
+  /* ── Tabs (bottom-border style) ── */
+  .page-title {
+    font-size: 2rem;
+    font-weight: 700;
+    font-family: 'Source Serif 4', serif;
+    color: #1a1a1a;
+    line-height: 1.2;
+    margin: 0;
+  }
+
+  .page-caption {
+    font-size: 0.88rem;
+    color: #888;
+    margin-top: 6px;
+  }
+
+  .tab-list {
+    @apply flex border-b border-warm-border gap-0;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tab-list::-webkit-scrollbar { display: none; }
+
+  .tab-item {
+    @apply px-4 py-2.5 text-sm font-sans font-medium text-warm-body cursor-pointer
+           border-b-2 border-transparent transition-colors duration-150
+           hover:text-[#1a1a1a] hover:border-warm-border;
+    white-space: nowrap;
+    flex-shrink: 0;
+  }
+
+  .tab-item.active {
+    @apply text-gold border-gold font-semibold;
+  }
+
+  /* ── Section headers ── */
+  .section-header {
+    @apply uppercase text-[0.78rem] font-sans font-semibold text-warm-muted pb-2 mb-4;
+    letter-spacing: 1.5px;
+    border-bottom: 2px solid #d4a019;
+  }
+}
+
+@layer utilities {
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-out;
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+      transform: translateY(4px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+}
