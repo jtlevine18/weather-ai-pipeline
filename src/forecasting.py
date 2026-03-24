@@ -294,8 +294,6 @@ class HybridNWPModel:
 
         final_temp = nwp_temp + correction
 
-        # Wider confidence interval when correction is large
-        base_uncertainty = 1.5
         confidence = max(0.5, 0.85 - abs(correction) * 0.05)
 
         result = dict(nwp_forecast)

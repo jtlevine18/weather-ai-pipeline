@@ -188,8 +188,11 @@ async def _personalized_advisory(tool_input: Dict) -> str:
 
     # Get latest forecast for station
     conn = init_db()
-    forecasts = get_recent_forecasts(conn, limit=50)
-    station_fc = [f for f in forecasts if f.get("station_id") == station_id]
+    try:
+        forecasts = get_recent_forecasts(conn, limit=50)
+        station_fc = [f for f in forecasts if f.get("station_id") == station_id]
+    finally:
+        conn.close()
     if not station_fc:
         return json.dumps({"advisory": "No recent forecast available for your station. Please run the pipeline first."})
 
@@ -225,9 +228,12 @@ def _schedule(tool_input: Dict, session_id: str) -> str:
     from src.database import init_db
     from src.conversation.followup import schedule_followup
     conn = init_db()
-    fid = schedule_followup(
-        conn, tool_input["aadhaar_id"],
-        tool_input["trigger_type"], tool_input["trigger_value"],
-        tool_input["message"], session_id,
-    )
-    return json.dumps({"status": "scheduled", "followup_id": fid})
+    try:
+        fid = schedule_followup(
+            conn, tool_input["aadhaar_id"],
+            tool_input["trigger_type"], tool_input["trigger_value"],
+            tool_input["message"], session_id,
+        )
+        return json.dumps({"status": "scheduled", "followup_id": fid})
+    finally:
+        conn.close()

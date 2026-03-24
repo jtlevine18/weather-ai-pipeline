@@ -72,32 +72,31 @@ def _execute_tool(tool_name: str, tool_input: Dict[str, Any],
         return json.dumps(statuses, default=str, indent=2)
 
     conn = init_db()
+    try:
+        if tool_name == "query_forecasts":
+            sid   = tool_input.get("station_id", "all")
+            limit = tool_input.get("limit", 10)
+            rows  = get_recent_forecasts(conn, limit=50)
+            if sid != "all":
+                rows = [r for r in rows if r.get("station_id") == sid]
+            return json.dumps(rows[:limit], default=str, indent=2)
 
-    if tool_name == "query_forecasts":
-        sid   = tool_input.get("station_id", "all")
-        limit = tool_input.get("limit", 10)
-        rows  = get_recent_forecasts(conn, limit=50)
-        if sid != "all":
-            rows = [r for r in rows if r.get("station_id") == sid]
-        return json.dumps(rows[:limit], default=str, indent=2)
-
-    if tool_name == "query_alerts":
-        sid   = tool_input.get("station_id", "all")
-        limit = tool_input.get("limit", 5)
-        rows  = get_recent_alerts(conn, limit=50)
-        if sid != "all":
-            rows = [r for r in rows if r.get("station_id") == sid]
-        return json.dumps(rows[:limit], default=str, indent=2)
+        if tool_name == "query_alerts":
+            sid   = tool_input.get("station_id", "all")
+            limit = tool_input.get("limit", 5)
+            rows  = get_recent_alerts(conn, limit=50)
+            if sid != "all":
+                rows = [r for r in rows if r.get("station_id") == sid]
+            return json.dumps(rows[:limit], default=str, indent=2)
+    finally:
+        conn.close()
 
     if tool_name == "run_pipeline":
         import asyncio
         from src.pipeline import WeatherPipeline
         pipeline = WeatherPipeline(config)
         try:
-            loop = asyncio.new_event_loop()
-            result = loop.run_until_complete(pipeline.run())
-            loop.close()
-            return json.dumps(result, default=str)
+            return json.dumps(asyncio.run(pipeline.run()), default=str)
         except Exception as exc:
             return f"Pipeline run failed: {exc}"
 
@@ -108,7 +107,7 @@ class NLAgent:
     def __init__(self, config):
         self.config = config
 
-    def _log_to_db(self, db_path: str, session_id: str, role: str,
+    def _log_to_db(self, session_id: str, role: str,
                     content: Optional[str] = None,
                     tool_name: Optional[str] = None,
                     tool_input: Optional[str] = None,
@@ -117,35 +116,36 @@ class NLAgent:
                     latency_ms: Optional[int] = None) -> None:
         try:
             from src.database import init_db, insert_conversation_log
-            conn = init_db(db_path)
-            insert_conversation_log(conn, {
-                "id": str(uuid.uuid4()),
-                "session_id": session_id,
-                "role": role,
-                "content": (content[:2000] if content else None),
-                "tool_name": tool_name,
-                "tool_input": (tool_input[:2000] if tool_input else None),
-                "tokens_in": tokens_in,
-                "tokens_out": tokens_out,
-                "latency_ms": latency_ms,
-            })
+            conn = init_db()
+            try:
+                insert_conversation_log(conn, {
+                    "id": str(uuid.uuid4()),
+                    "session_id": session_id,
+                    "role": role,
+                    "content": (content[:2000] if content else None),
+                    "tool_name": tool_name,
+                    "tool_input": (tool_input[:2000] if tool_input else None),
+                    "tokens_in": tokens_in,
+                    "tokens_out": tokens_out,
+                    "latency_ms": latency_ms,
+                })
+            finally:
+                conn.close()
         except Exception as exc:
             log.debug("Conversation logging failed: %s", exc)
 
     def chat(self, user_message: str, history: List[Dict] = None,
-             session_id: Optional[str] = None,
-             db_path: Optional[str] = None) -> str:
+             session_id: Optional[str] = None) -> str:
         import anthropic
         client = anthropic.Anthropic(api_key=self.config.anthropic_key)
 
         _session_id = session_id or str(uuid.uuid4())
-        _db_path = db_path or self.config.db_path
 
         messages = list(history or [])
         messages.append({"role": "user", "content": user_message})
 
         # Log user message
-        self._log_to_db(_db_path, _session_id, "user", content=user_message)
+        self._log_to_db(_session_id, "user", content=user_message)
 
         system = (
             "You are a weather pipeline assistant for Kerala and Tamil Nadu, India. "
@@ -172,7 +172,7 @@ class NLAgent:
                 text_blocks = [b.text for b in response.content
                                if hasattr(b, "text")]
                 reply = "\n".join(text_blocks)
-                self._log_to_db(_db_path, _session_id, "assistant",
+                self._log_to_db(_session_id, "assistant",
                                 content=reply, tokens_in=tokens_in,
                                 tokens_out=tokens_out, latency_ms=latency_ms)
                 return reply
@@ -182,21 +182,20 @@ class NLAgent:
                 tool_results = []
                 for block in response.content:
                     if block.type == "tool_use":
-                        self._log_to_db(_db_path, _session_id, "tool_use",
+                        self._log_to_db(_session_id, "tool_use",
                                         tool_name=block.name,
                                         tool_input=json.dumps(block.input, default=str),
                                         tokens_in=tokens_in, tokens_out=tokens_out,
                                         latency_ms=latency_ms)
                         result = _execute_tool(
-                            block.name, block.input,
-                            self.config, self.config.db_path,
+                            block.name, block.input, self.config,
                         )
                         tool_results.append({
                             "type":       "tool_result",
                             "tool_use_id": block.id,
                             "content":     result,
                         })
-                        self._log_to_db(_db_path, _session_id, "tool_result",
+                        self._log_to_db(_session_id, "tool_result",
                                         tool_name=block.name,
                                         content=(result[:2000] if result else None))
                 messages.append({"role": "user", "content": tool_results})

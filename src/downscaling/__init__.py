@@ -65,7 +65,6 @@ class IDWDownscaler:
 
             # Blend IDW result with lapse-rate correction
             # Use IDW temperature as the base, then add lapse-rate delta
-            station_temp = station_forecast.get("temperature") or interp_temp
             downscaled_temp = interp_temp + lapse_delta
 
             result["temperature"]   = round(downscaled_temp, 2)

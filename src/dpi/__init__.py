@@ -4,7 +4,6 @@ Identifies farmers by phone, assembles composite profiles from 6 DPI services in
 """
 
 from __future__ import annotations
-import asyncio
 import json
 import logging
 import uuid
@@ -36,31 +35,9 @@ class DPIAgent:
         return AadhaarProfile(**result)
 
     async def assemble_profile(self, aadhaar_id: str) -> Optional[FarmerProfile]:
-        """Fetch all 6 DPI sources in parallel, compose into FarmerProfile."""
-        from src.dpi.services import get_service
-
-        svc_land = get_service("land_records", simulation=self.simulation)
-        svc_soil = get_service("soil_health", simulation=self.simulation)
-        svc_pmk  = get_service("pmkisan", simulation=self.simulation)
-        svc_pmf  = get_service("pmfby", simulation=self.simulation)
-        svc_kcc  = get_service("kcc", simulation=self.simulation)
-
-        # Parallel fetch
-        land_r, soil_r, pmk_r, pmf_r, kcc_r = await asyncio.gather(
-            svc_land.lookup(aadhaar_id),
-            svc_soil.lookup(aadhaar_id),
-            svc_pmk.lookup(aadhaar_id),
-            svc_pmf.lookup(aadhaar_id),
-            svc_kcc.lookup(aadhaar_id),
-        )
-
-        # We need the aadhaar profile too
+        """Look up composite FarmerProfile by Aadhaar ID."""
         registry = get_registry()
-        profile = registry.lookup_by_aadhaar(aadhaar_id)
-        if profile is None:
-            return None
-
-        return profile
+        return registry.lookup_by_aadhaar(aadhaar_id)
 
     async def get_or_create_profile(self, phone: str) -> Optional[FarmerProfile]:
         """Cache check -> identify -> assemble -> persist."""

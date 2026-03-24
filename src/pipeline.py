@@ -26,7 +26,7 @@ from src.ingestion       import ingest_all_stations
 from src.weather_clients import TomorrowIOClient, OpenMeteoClient, NASAPowerClient
 from src.healing         import RuleBasedFallback, HealingAgent
 from src.database        import insert_healing_log
-from src.forecasting     import create_forecast_model, PersistenceModel, run_forecast_step
+from src.forecasting     import create_forecast_model, PersistenceModel, run_forecast_step, classify_condition
 from src.downscaling     import IDWDownscaler
 from src.translation     import get_provider, generate_advisory
 from src.delivery        import MultiChannelDelivery, DEFAULT_RECIPIENTS, DeliveryChannel, Recipient
@@ -373,9 +373,8 @@ class WeatherPipeline:
             if not result:
                 continue
             fc_list = result if isinstance(result, list) else [result]
-            from src.database import insert_forecast as _if
             for fc in fc_list:
-                _if(self.conn, fc)
+                insert_forecast(self.conn, fc)
                 forecasts.append(fc)
                 mu = fc.get("model_used", "")
                 if "mos" in mu:
@@ -461,7 +460,6 @@ class WeatherPipeline:
             # Apply lapse-rate correction to this day's forecast temperature
             if adj["idw_temp"] is not None and adj["lapse_delta"] is not None:
                 result["temperature"] = round(adj["idw_temp"] + adj["lapse_delta"], 2)
-                from src.forecasting import classify_condition
                 result["condition"] = classify_condition(result)
             downscaled.append(result)
 
