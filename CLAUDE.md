@@ -17,6 +17,9 @@ cp .env.example .env      # then fill in keys
 # Run the full pipeline with real IMD data (all 20 stations)
 python run_pipeline.py
 
+# Run with NeuralGCM forecasting (requires GPU + neuralgcm package)
+python run_pipeline.py --neuralgcm
+
 # Run with synthetic data (old behavior)
 python run_pipeline.py --source synthetic
 
@@ -48,7 +51,7 @@ Each API has exactly ONE job — no source is shared between stages:
 ```
 IMD Scraper + imdlib → Step 1 Ingest     (real station obs, fallback: synthetic)
 Tomorrow.io          → Step 2 Heal        (cross-validation reference)
-Open-Meteo           → Step 3 Forecast    (GFS/ECMWF NWP baseline)
+NeuralGCM / Open-Meteo → Step 3 Forecast (NeuralGCM 1.4° on GPU, fallback: Open-Meteo API)
 NASA POWER           → Step 4 Downscale   (0.5° spatial grid → farmer GPS)
 Claude API           → Step 5 Translate   (RAG advisory + Tamil/Malayalam)
 ```
@@ -59,14 +62,14 @@ Claude API           → Step 5 Translate   (RAG advisory + Tamil/Malayalam)
 |---|---|---|
 | 1 Ingest | `raw_telemetry` | Real IMD station data (scraper → imdlib → synthetic fallback) |
 | 2 Heal | `clean_telemetry` + `healing_log` | Claude Sonnet agentic healer (5 tools: station metadata, historical normals, Tomorrow.io reference, neighboring stations, seasonal context) with rule-based fallback |
-| 3 Forecast | `forecasts` | Open-Meteo NWP + XGBoost MOS correction (12-feature vector) |
+| 3 Forecast | `forecasts` | NeuralGCM 1.4° on GPU (ERA5 init, single batch for all 20 stations) → XGBoost MOS correction; fallback: Open-Meteo GFS/ECMWF API |
 | 4 Downscale | `forecasts` (updated) | NASA POWER IDW interpolation + lapse-rate elevation correction |
 | 5 Translate | `agricultural_alerts` | Hybrid RAG (FAISS+BM25) + Claude advisory + translation |
 | 6 Deliver | `delivery_log` | Console SMS (Twilio dry-run) |
 
 ### Parallelization
 - Step 2 Heal: Tomorrow.io fetched in batches of 10 with 0.2s sleep
-- Step 3 Forecast: Open-Meteo fetched in single batch of 20 (no rate limit)
+- Step 3 Forecast: NeuralGCM runs once globally (all 20 stations from one inference); Open-Meteo fallback fetched in single batch of 20
 - Step 4 Downscale: all 20 stations downscaled in parallel via `asyncio.gather()`
 - Step 5 Translate: all 20 advisories generated in parallel via `asyncio.gather()`
 
@@ -76,7 +79,8 @@ Quality score measures **accuracy of compared fields only** (how well IMD temp/r
 ### Degradation chain (independent, never cascades)
 - Claude healing agent unavailable → rule-based fallback (identical output, no reasoning logged)
 - IMD scraper down → imdlib gridded (T-1 day) → synthetic fallback
-- NWP unavailable → persistence model (last obs + diurnal adjustment)
+- NeuralGCM unavailable (no GPU/package) → Open-Meteo API fallback
+- NWP unavailable (both NeuralGCM + Open-Meteo) → persistence model (last obs + diurnal adjustment)
 - XGBoost not trained → raw NWP passthrough
 - Claude down → rule-based template advisories
 - Tomorrow.io down → cross-validate against NASA POWER; if both down, assign quality by data completeness
@@ -119,6 +123,7 @@ weather AI 2/
 │   ├── healing.py             # HealingAgent (Claude Sonnet tool-use agentic healer, 5 tools, 24-entry seasonal context) + RuleBasedFallback (quality score = accuracy of compared fields only, no fill penalty)
 │   ├── ingestion.py           # IMD scraper + imdlib gridded + synthetic fallback
 │   ├── weather_clients.py     # Tomorrow.io, Open-Meteo, NASA POWER, IMD JSON API + imdlib clients
+│   ├── neuralgcm_client.py   # NeuralGCM 1.4° forecaster (JAX/GPU, ERA5 init, station extraction)
 │   ├── forecasting.py         # HybridNWPModel: NWP + XGBoost MOS + persistence fallback
 │   ├── downscaling/           # IDW spatial interpolation + lapse-rate
 │   │   ├── __init__.py        # IDWDownscaler
@@ -245,13 +250,19 @@ Crop contexts: verified per-district from state agriculture department data.
 
 **Architecture:** MOS (Model Output Statistics) — same approach used by national weather services.
 
-- **NWP baseline:** GFS/ECMWF via Open-Meteo (hourly, 7-day)
-- **XGBoost correction:** trained on residual between NWP and observations
+- **NWP primary: NeuralGCM 1.4°** (Google DeepMind's neural GCM, runs on GPU via JAX)
+  - Initial conditions: ERA5 reanalysis from ARCO Zarr (free, ~5-day lag via ERA5T)
+  - Single inference pass produces global forecast → extract all 20 stations
+  - Matches ECMWF-HRES accuracy for 1-5 day forecasts
+  - Requires GPU (L4/T4 on HF Spaces), enabled via `--neuralgcm` flag
+- **NWP fallback: Open-Meteo** (GFS/ECMWF via free API, no GPU needed)
+- **XGBoost MOS correction:** trained on residual between NWP and observations
 - **12-feature vector:** `nwp_temp`, `nwp_rainfall`, `humidity`, `wind_speed`, `pressure`, `station_altitude`, `soil_moisture`, `rolling_6h_error`, `recent_temp_trend`, `hour_sin`, `hour_cos`, `doy_sin`
 - **Soil moisture proxy:** NASA POWER `PRECTOTCORR` (mm/day) / 20, capped at 1.0
 - **Rolling error tracking:** per-station 6h error window, updated after each prediction
 - **Fallback:** persistence model (last obs + diurnal adjustment)
 - **Formula:** `Final = NWP_Forecast + XGBoost_Correction(features)`
+- **model_used values:** `neuralgcm_mos`, `neuralgcm_only`, `hybrid_mos`, `nwp_only`, `persistence`
 - **DVC pipeline:** `scripts/export_training_data.py` → `scripts/train_mos.py` → `models/hybrid_mos.json`
 
 ---
@@ -357,7 +368,7 @@ NASA POWER 5x5 grid (~0.5 deg radius around station) → IDW interpolation to fa
 | `ANTHROPIC_API_KEY` | Claude healing agent + advisory generation + translation | Pay-per-use (~$0.27/run: ~$0.15 healing + ~$0.12 advisory) |
 | `TOMORROW_IO_API_KEY` | Anomaly healing cross-validation | 500 calls/day free |
 
-NASA POWER, Open-Meteo, IMD city weather (scraping), and imdlib are fully free, no key needed.
+NASA POWER, Open-Meteo, NeuralGCM (model checkpoints on GCS), ERA5 ARCO Zarr, IMD city weather (scraping), and imdlib are fully free, no key needed.
 
 Set in `.env` for local development. On Streamlit Cloud, add to App Settings → Secrets.
 
@@ -365,11 +376,20 @@ Set in `.env` for local development. On Streamlit Cloud, add to App Settings →
 
 ## Deployment
 
-### Hugging Face Spaces (recommended)
+### Hugging Face Spaces with GPU (recommended for NeuralGCM)
+HF Spaces L4 GPU tier gives **24 GB VRAM** — runs NeuralGCM 1.4° comfortably.
+- Enable via Settings → Hardware → NVIDIA L4 (~$0.80/hr, auto-sleeps when idle)
+- Run with `--neuralgcm` flag or set `config.neuralgcm.enabled = True`
+- NeuralGCM checkpoint downloads from GCS on first run (~30s)
+- ERA5 initial conditions fetched from ARCO Zarr (free, anonymous)
+- Without GPU: falls back to Open-Meteo automatically
+
+### Hugging Face Spaces CPU (free tier)
 HF Spaces free tier gives **16 GB RAM** — enough for RAG (sentence-transformers + FAISS).
 - `models/faiss_index/` (180 KB) is committed — RAG index is pre-built
 - BGE embedding model downloads from HF Hub on first use (~30 sec on HF infra)
 - `weather.duckdb` is committed (pre-populated data)
+- NeuralGCM disabled (no GPU) — uses Open-Meteo for NWP
 
 ### Streamlit Cloud
 - Main file: `streamlit_app/app.py`, Python 3.11
@@ -381,12 +401,14 @@ HF Spaces free tier gives **16 GB RAM** — enough for RAG (sentence-transformer
 ## Tech Stack
 
 - **Python 3.12+**, **DuckDB** (embedded lakehouse)
+- **neuralgcm** + **jax[cuda12]** (Google DeepMind neural weather model on GPU)
 - **anthropic** (Claude API — advisory generation + translation)
 - **xgboost** + **scikit-learn** (MOS correction model)
 - **faiss-cpu** + **sentence-transformers** + **rank-bm25** (RAG retrieval)
 - **langchain-huggingface** + **datasets** (index building)
 - **pydantic** v2 (data contracts at stage boundaries)
 - **httpx** (async HTTP for weather APIs)
+- **gcsfs** + **xarray** + **zarr** (ERA5 data access for NeuralGCM)
 - **beautifulsoup4** + **imdlib** (IMD data scraping + gridded backup)
 - **streamlit** + **pydeck** (dashboard)
 - **dagster** (orchestration — alternative to linear pipeline)

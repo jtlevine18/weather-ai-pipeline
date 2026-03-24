@@ -6,7 +6,9 @@ Build a complete, production-grade AI-powered weather forecasting pipeline for s
 
 ## Stack & Dependencies
 
-- **Python 3.11**, **DuckDB** (embedded lakehouse — single file `weather.duckdb`, 15 tables)
+- **Python 3.11**, **DuckDB** (embedded lakehouse — single file `weather.duckdb`, 16 tables)
+- **neuralgcm** + **jax[cuda12]** — Google DeepMind neural weather model (GPU, L4/T4)
+- **gcsfs** + **xarray** + **zarr** — ERA5 reanalysis data access for NeuralGCM initial conditions
 - **anthropic** (Claude claude-sonnet-4-6) — advisory generation + translation + NL chat tool-use
 - **faiss-cpu** + **sentence-transformers** (BAAI/bge-base-en-v1.5) + **rank-bm25** — hybrid RAG retrieval
 - **xgboost** + **scikit-learn** — MOS forecast correction model
@@ -34,7 +36,7 @@ Each API has exactly ONE job — no source is shared between stages:
 ```
 IMD JSON API + imdlib → Step 1 Ingest     (real station observations, fallback: synthetic)
 Tomorrow.io           → Step 2 Heal        (cross-validation reference source)
-Open-Meteo            → Step 3 Forecast    (GFS/ECMWF NWP baseline)
+NeuralGCM / Open-Meteo → Step 3 Forecast  (NeuralGCM 1.4° on GPU, fallback: Open-Meteo GFS/ECMWF)
 NASA POWER            → Step 4 Downscale   (0.5° spatial grid → farmer GPS)
 Claude API            → Step 5 Translate   (RAG advisory generation + Tamil/Malayalam translation)
 ```
@@ -84,17 +86,23 @@ Store healed readings in `clean_telemetry` with `quality_score` (0.0–1.0) and 
 
 ### Step 3: Forecast (`forecasts`)
 
-**NWP baseline:** GFS/ECMWF via Open-Meteo API (hourly, 7-day).
+**NWP primary: NeuralGCM 1.4°** (Google DeepMind's neural GCM, `src/neuralgcm_client.py`):
+- Runs on GPU (JAX) via HF Spaces L4 tier. Single inference pass produces global forecast → extracts all 20 station forecasts via nearest-gridpoint interpolation.
+- Initial conditions: ERA5 reanalysis from ARCO Zarr on Google Cloud Storage (free, no auth, ~5-day lag via ERA5T). Fetches pressure-level vars (u, v, T, Z, q, cloud) + surface forcings (SST, sea ice).
+- Post-processing: temperature K→°C at station-appropriate pressure level (accounting for altitude), specific humidity→RH, u/v→wind speed/direction, surface pressure from barometric formula.
+- Matches ECMWF-HRES accuracy for 1-5 day forecasts. Enabled via `--neuralgcm` flag or `config.neuralgcm.enabled = True`.
 
-**MOS correction:** XGBoost trained on residual between NWP and observations. 12-feature vector: `nwp_temp`, `nwp_rainfall`, `humidity`, `wind_speed`, `pressure`, `station_altitude`, `soil_moisture`, `rolling_6h_error`, `recent_temp_trend`, `hour_sin`, `hour_cos`, `doy_sin`. Soil moisture proxy: NASA POWER `PRECTOTCORR` (mm/day) / 20, capped at 1.0. Rolling error: per-station 6h window, updated after each prediction.
+**NWP fallback: Open-Meteo** (GFS/ECMWF via free API, no GPU needed). Per-station HTTP calls, same as before.
+
+**MOS correction:** XGBoost trained on residual between NWP and observations. 12-feature vector: `nwp_temp`, `nwp_rainfall`, `humidity`, `wind_speed`, `pressure`, `station_altitude`, `soil_moisture`, `rolling_6h_error`, `recent_temp_trend`, `hour_sin`, `hour_cos`, `doy_sin`. Soil moisture proxy: NASA POWER `PRECTOTCORR` (mm/day) / 20, capped at 1.0. Rolling error: per-station 6h window, updated after each prediction. MOS correction applies identically regardless of NWP source.
 
 **Formula:** `Final = NWP_Forecast + XGBoost_Correction(features)`
 
-**Fallback:** Persistence model (last observation + diurnal adjustment) when XGBoost not trained.
+**Fallback:** Persistence model (last observation + diurnal adjustment) when NWP unavailable.
 
 **DVC pipeline:** `scripts/export_training_data.py` → Parquet → `scripts/train_mos.py` → `models/hybrid_mos.json`
 
-Store in `forecasts` table with `model_used` ("hybrid_mos" or "persistence"), `confidence`, `condition`.
+Store in `forecasts` table with `model_used` ("neuralgcm_mos", "neuralgcm_only", "hybrid_mos", "nwp_only", or "persistence"), `nwp_source` ("neuralgcm" or "open_meteo"), `confidence`, `condition`.
 
 ### Step 4: Downscale (`forecasts` updated)
 
@@ -132,7 +140,8 @@ Console SMS output (Twilio dry-run). Log each delivery to `delivery_log`. Aggreg
 - IMD API down → imdlib gridded (T-1 day) → synthetic fallback
 - Tomorrow.io down → cross-validate against NASA POWER; if both down → quality by data completeness
 - NASA POWER down (heal) → quality score reflects missing cross-validation
-- NWP unavailable → persistence model (last obs + diurnal adjustment)
+- NeuralGCM unavailable (no GPU / package not installed / ERA5 fetch fails) → Open-Meteo API fallback
+- NWP unavailable (both NeuralGCM + Open-Meteo fail) → persistence model (last obs + diurnal adjustment)
 - XGBoost not trained → raw NWP passthrough
 - Claude down → rule-based template advisories
 - NASA POWER down (downscale) → use station-level forecast

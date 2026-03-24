@@ -315,10 +315,18 @@ async def run_forecast_step(
     persistence_model: PersistenceModel,
     nasa_client=None,
     station_history: Optional[List[Dict[str, Any]]] = None,
+    precomputed_nwp: Optional[List[Dict[str, Any]]] = None,
 ) -> Optional[Dict[str, Any]]:
-    """Run complete forecast for one station. Returns forecast record."""
+    """Run complete forecast for one station. Returns forecast record.
 
-    nwp_forecasts = await open_meteo_client.get_forecast(station.lat, station.lon, hours=24)
+    If precomputed_nwp is provided (e.g. from NeuralGCM batch), uses that
+    instead of calling Open-Meteo.
+    """
+
+    if precomputed_nwp:
+        nwp_forecasts = precomputed_nwp
+    else:
+        nwp_forecasts = await open_meteo_client.get_forecast(station.lat, station.lon, hours=24)
 
     if not clean_reading and not nwp_forecasts:
         return None
@@ -351,6 +359,11 @@ async def run_forecast_step(
     elif clean_reading:
         training_obs = [clean_reading]
 
+    # Determine NWP source for model_used labeling
+    nwp_source = "open_meteo"
+    if nwp_forecasts and nwp_forecasts[0].get("source") == "neuralgcm":
+        nwp_source = "neuralgcm"
+
     if nwp_forecasts:
         if training_obs:
             model.train(
@@ -365,6 +378,13 @@ async def run_forecast_step(
             station_id=station.station_id,
             recent_temp_trend=recent_temp_trend,
         )
+        # Tag the NWP source for downstream tracking
+        if nwp_source == "neuralgcm":
+            if forecast.get("model_used") == "hybrid_mos":
+                forecast["model_used"] = "neuralgcm_mos"
+            elif forecast.get("model_used") == "nwp_only":
+                forecast["model_used"] = "neuralgcm_only"
+        forecast["nwp_source"] = nwp_source
         # Record error for rolling tracker (observed - predicted, if obs available)
         if clean_reading and clean_reading.get("temperature") is not None:
             error = clean_reading["temperature"] - forecast["temperature"]
@@ -382,5 +402,6 @@ async def run_forecast_step(
         "valid_for_ts": (now + timedelta(hours=6)).isoformat(),
         **{k: v for k, v in forecast.items()
            if k in ("temperature","humidity","wind_speed","rainfall",
-                    "condition","model_used","nwp_temp","correction","confidence")},
+                    "condition","model_used","nwp_temp","correction","confidence",
+                    "nwp_source")},
     }

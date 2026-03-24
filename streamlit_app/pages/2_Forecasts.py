@@ -38,8 +38,16 @@ CONDITION_STYLE = {
 }
 
 MODEL_LABELS = {
-    "hybrid_mos":  ("Hybrid MOS",  "NWP + XGBoost correction", "#2a9d8f"),
-    "persistence": ("Persistence", "Diurnal-adjusted fallback", "#e63946"),
+    "neuralgcm_mos":  ("NeuralGCM + MOS", "NeuralGCM NWP + XGBoost correction", "#4361ee"),
+    "neuralgcm_only": ("NeuralGCM",       "NeuralGCM NWP (no MOS correction)",   "#7b8cde"),
+    "hybrid_mos":     ("Open-Meteo + MOS", "Open-Meteo NWP + XGBoost correction", "#2a9d8f"),
+    "nwp_only":       ("Open-Meteo",       "Open-Meteo NWP (no MOS correction)",  "#6db5a8"),
+    "persistence":    ("Persistence",      "Diurnal-adjusted fallback",           "#e63946"),
+}
+
+NWP_SOURCE_LABELS = {
+    "neuralgcm":  ("NeuralGCM 1.4°", "Google DeepMind neural GCM on GPU", "#4361ee"),
+    "open_meteo": ("Open-Meteo",      "GFS/ECMWF via free API",           "#2a9d8f"),
 }
 
 
@@ -83,9 +91,28 @@ df["station_name"] = df["station_id"].apply(lambda s: STATION_META.get(s, (s, "U
 df["state"]        = df["station_id"].apply(lambda s: STATION_META.get(s, ("", "Unknown"))[1])
 
 # ---------------------------------------------------------------------------
+# NWP Source Info
+# ---------------------------------------------------------------------------
+has_nwp_source = "nwp_source" in df.columns
+ngcm_count = (df["nwp_source"] == "neuralgcm").sum() if has_nwp_source else 0
+om_count = len(df) - ngcm_count
+
+if ngcm_count > 0:
+    st.markdown(
+        '<div style="background:#eef2ff;border:1px solid #c7d2fe;border-radius:8px;'
+        'padding:12px 16px;margin-bottom:16px;display:flex;align-items:center;gap:12px;">'
+        '<span style="font-size:1.2rem;">🧠</span>'
+        '<span style="font-size:0.85rem;color:#3730a3;">'
+        f'<strong>NeuralGCM active</strong> — {ngcm_count} forecasts from Google DeepMind\'s '
+        f'neural weather model (1.4° deterministic), {om_count} from Open-Meteo fallback'
+        '</span></div>',
+        unsafe_allow_html=True,
+    )
+
+# ---------------------------------------------------------------------------
 # Metrics
 # ---------------------------------------------------------------------------
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3, col4, col5 = st.columns(5)
 with col1:
     st.metric("Stations Reporting", df["station_id"].nunique())
 with col2:
@@ -97,8 +124,13 @@ with col3:
         st.metric("Avg Confidence", "—")
 with col4:
     if "model_used" in df.columns:
-        mos = (df["model_used"] == "hybrid_mos").sum()
-        st.metric("MOS Model", f"{mos} ({100*mos//max(1,len(df))}%)")
+        mos = df["model_used"].str.contains("mos", na=False).sum()
+        st.metric("MOS Corrected", f"{mos} ({100*mos//max(1,len(df))}%)")
+with col5:
+    if has_nwp_source and ngcm_count > 0:
+        st.metric("NeuralGCM", f"{ngcm_count} ({100*ngcm_count//max(1,len(df))}%)")
+    else:
+        st.metric("NWP Source", "Open-Meteo")
 
 st.divider()
 
@@ -213,11 +245,13 @@ with tab_model:
         unsafe_allow_html=True,
     )
 
-    tier_cols = st.columns(2)
+    tier_cols = st.columns(3)
     tier_data = [
-        ("1", "Hybrid MOS",  "NWP + XGBoost correction",
-         "Open-Meteo NWP baseline with local XGBoost MOS correction (12-feature vector)", "#2a9d8f"),
-        ("2", "Persistence", "Diurnal-adjusted fallback",
+        ("1", "NeuralGCM + MOS", "Neural GCM on GPU + XGBoost",
+         "Google DeepMind's 1.4° neural weather model with local MOS correction. Requires GPU (L4/T4)", "#4361ee"),
+        ("2", "Open-Meteo + MOS",  "GFS/ECMWF API + XGBoost",
+         "Open-Meteo NWP baseline with local XGBoost MOS correction (12-feature vector). Free, CPU-only", "#2a9d8f"),
+        ("3", "Persistence", "Diurnal-adjusted fallback",
          "Last observation carried forward with time-of-day adjustment when NWP unavailable", "#e63946"),
     ]
     for col, (tier, name, subtitle, desc, color) in zip(tier_cols, tier_data):
@@ -254,6 +288,30 @@ with tab_model:
                     f'<p style="font-size:2rem;font-weight:700;color:{color};margin:0;">{pct:.0f}%</p>'
                     f'<p style="font-size:0.82rem;color:#666;margin:4px 0 0;">{mname}</p>'
                     f'<p style="font-size:0.78rem;color:#999;margin:2px 0 0;">{count} forecasts</p>'
+                    f'</div>',
+                    unsafe_allow_html=True,
+                )
+
+    # NWP Source Breakdown
+    if has_nwp_source:
+        st.markdown("<div style='height:24px'></div>", unsafe_allow_html=True)
+        st.markdown(
+            '<p style="font-size:0.8rem;font-weight:600;text-transform:uppercase;'
+            'letter-spacing:1.5px;color:#666;border-bottom:2px solid #d4a019;'
+            'padding-bottom:6px;display:inline-block;">NWP Source Breakdown</p>',
+            unsafe_allow_html=True,
+        )
+        nwp_counts = df["nwp_source"].value_counts()
+        nwp_cols = st.columns(min(len(nwp_counts), 3))
+        for i, (src, count) in enumerate(nwp_counts.items()):
+            label, desc, color = NWP_SOURCE_LABELS.get(src, (src, "", "#888"))
+            pct = count / len(df) * 100
+            with nwp_cols[i % len(nwp_cols)]:
+                st.markdown(
+                    f'<div style="background:#fff;border:1px solid #e0dcd5;border-radius:8px;padding:16px;text-align:center;">'
+                    f'<p style="font-size:2rem;font-weight:700;color:{color};margin:0;">{pct:.0f}%</p>'
+                    f'<p style="font-size:0.82rem;color:#666;margin:4px 0 0;">{label}</p>'
+                    f'<p style="font-size:0.78rem;color:#999;margin:2px 0 0;">{count} forecasts — {desc}</p>'
                     f'</div>',
                     unsafe_allow_html=True,
                 )
