@@ -5,6 +5,7 @@ Each step can fail independently without killing the pipeline.
 
 from __future__ import annotations
 import asyncio
+import json
 import logging
 import uuid
 from datetime import datetime
@@ -28,7 +29,7 @@ from src.database        import insert_healing_log
 from src.forecasting     import create_forecast_model, PersistenceModel, run_forecast_step
 from src.downscaling     import IDWDownscaler
 from src.translation     import get_provider, generate_advisory
-from src.delivery        import MultiChannelDelivery, DEFAULT_RECIPIENTS, DeliveryChannel
+from src.delivery        import MultiChannelDelivery, DEFAULT_RECIPIENTS, DeliveryChannel, Recipient
 from src.models          import RawReading, CleanReading, Forecast, Advisory, DeliveryLog
 
 log = logging.getLogger(__name__)
@@ -154,7 +155,6 @@ class WeatherPipeline:
 
     def _store_healing_log(self, result) -> None:
         """Persist AI healing assessments to healing_log table."""
-        import json as _json
         records = []
         for a in result.assessments:
             records.append({
@@ -164,10 +164,10 @@ class WeatherPipeline:
                 "station_id": a.station_id,
                 "assessment": a.assessment,
                 "reasoning": a.reasoning,
-                "corrections": _json.dumps(a.corrections, default=str),
+                "corrections": json.dumps(a.corrections, default=str),
                 "quality_score": a.quality_score,
                 "tools_used": ",".join(a.tools_used),
-                "original_values": _json.dumps(a.original_values, default=str),
+                "original_values": json.dumps(a.original_values, default=str),
                 "model": result.model,
                 "tokens_in": result.tokens_in,
                 "tokens_out": result.tokens_out,

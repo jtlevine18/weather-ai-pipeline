@@ -43,24 +43,24 @@ DEFAULT_RECIPIENTS: List[Recipient] = [
 
 class MultiChannelDelivery:
     def __init__(self, config: DeliveryConfig, channels: Optional[List[DeliveryChannel]] = None):
-        self.config   = config
-        self.channels = channels or [DeliveryChannel.CONSOLE]
-
-    async def deliver(self, alert: Dict[str, Any], recipient: Recipient) -> List[Dict[str, Any]]:
-        """Deliver an alert through all configured channels. Returns delivery log entries."""
         from src.delivery.console_provider   import ConsoleProvider
         from src.delivery.twilio_provider    import TwilioProvider
         from src.delivery.whatsapp_provider  import WhatsAppProvider
 
-        providers = {
+        self.config   = config
+        self.channels = channels or [DeliveryChannel.CONSOLE]
+        self._providers = {
             DeliveryChannel.CONSOLE:  ConsoleProvider(),
-            DeliveryChannel.SMS:      TwilioProvider(self.config),
-            DeliveryChannel.WHATSAPP: WhatsAppProvider(self.config),
+            DeliveryChannel.SMS:      TwilioProvider(config),
+            DeliveryChannel.WHATSAPP: WhatsAppProvider(config),
         }
+
+    async def deliver(self, alert: Dict[str, Any], recipient: Recipient) -> List[Dict[str, Any]]:
+        """Deliver an alert through all configured channels. Returns delivery log entries."""
 
         results = []
         for channel in self.channels:
-            provider = providers.get(channel)
+            provider = self._providers.get(channel)
             if provider is None:
                 continue
             try:

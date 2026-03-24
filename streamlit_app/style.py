@@ -253,6 +253,22 @@ STATUS_COLOR = {
     "running": "#1976D2",
 }
 
+ASSESSMENT_COLOR = {
+    "good": "#2a9d8f",
+    "corrected": "#4361ee",
+    "filled": "#d4a019",
+    "flagged": "#e76f51",
+    "dropped": "#e63946",
+}
+
+ASSESSMENT_EMOJI = {
+    "good": "🟢",
+    "corrected": "🔵",
+    "filled": "🟡",
+    "flagged": "🟠",
+    "dropped": "🔴",
+}
+
 
 def inject_css():
     st.markdown(CUSTOM_CSS, unsafe_allow_html=True)

@@ -204,7 +204,7 @@ def load_delivery_metrics(limit: int = 500) -> pd.DataFrame:
 
 def load_eval_results() -> dict:
     """Load eval results from JSON files in tests/eval_results/."""
-    import json as json_mod
+    import json
     results_dir = os.path.join(os.path.dirname(__file__), "..", "tests", "eval_results")
     results = {}
     for name in ("healing", "forecast", "rag", "advisory", "translation", "dpi", "conversation"):
@@ -212,7 +212,7 @@ def load_eval_results() -> dict:
         if os.path.exists(path):
             try:
                 with open(path) as fh:
-                    results[name] = json_mod.load(fh)
+                    results[name] = json.load(fh)
             except Exception:
                 pass
     return results
