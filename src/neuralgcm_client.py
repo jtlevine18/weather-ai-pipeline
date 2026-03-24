@@ -252,11 +252,24 @@ class NeuralGCMClient:
 
         model = self._model
 
-        # Regrid ERA5 (0.25°) to model's native grid (1.4°)
-        model_coords = model.data_coords
-        log.info("Regridding ERA5 to model grid (%s)...",
-                 {k: len(v) for k, v in model_coords.items() if hasattr(v, '__len__')})
-        init_ds = init_ds.interp(model_coords)
+        # Regrid ERA5 (0.25°) to model's native grid (1.4° Gaussian)
+        from dinosaur import horizontal_interpolation
+        from neuralgcm import xarray_utils
+
+        target_grid = model.data_coords.horizontal
+        source_grid = horizontal_interpolation.Grid.from_degrees(
+            longitude_nodes=len(init_ds.longitude),
+            latitude_nodes=len(init_ds.latitude),
+            latitude_spacing="equiangular_with_poles",
+        )
+        regridder = horizontal_interpolation.ConservativeRegridder(
+            source_grid, target_grid, skipna=True,
+        )
+        log.info("Regridding ERA5 (%d×%d) → model grid (%d×%d)...",
+                 source_grid.longitude_nodes, source_grid.latitude_nodes,
+                 target_grid.longitude_nodes, target_grid.latitude_nodes)
+        init_ds = regridder(init_ds)
+        init_ds = xarray_utils.fill_nan_with_nearest(init_ds)
 
         log.info("Encoding initial state...")
         inputs = model.inputs_from_xarray(init_ds)
