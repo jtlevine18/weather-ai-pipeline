@@ -207,6 +207,14 @@ class NeuralGCMClient:
         log.info("ERA5 data shape: %s, vars: %s",
                  {d: data.sizes[d] for d in data.dims}, list(data.data_vars))
 
+        # Fill NaN in surface forcing variables (SST is NaN over land)
+        # Must do this BEFORE regridding or the regridder propagates NaN
+        for var in model.forcing_variables:
+            if var in data and data[var].isnull().any():
+                mean_val = float(data[var].mean(skipna=True).values)
+                data[var] = data[var].fillna(mean_val)
+                log.info("Filled NaN in %s with global mean %.2f", var, mean_val)
+
         return data, latest_time
 
     # ------------------------------------------------------------------
