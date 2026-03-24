@@ -227,7 +227,7 @@ class HybridNWPModel:
             try:
                 os.makedirs(self.models_dir, exist_ok=True)
                 self._model.save_model(self._model_path)
-            except (PermissionError, OSError):
+            except Exception:
                 tmp_dir = os.path.join("/tmp", self.models_dir)
                 os.makedirs(tmp_dir, exist_ok=True)
                 tmp_path = os.path.join(tmp_dir, "hybrid_mos.json")

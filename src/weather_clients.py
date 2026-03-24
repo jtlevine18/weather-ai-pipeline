@@ -279,9 +279,18 @@ class TomorrowIOClient:
 # ---------------------------------------------------------------------------
 
 class OpenMeteoClient:
+    def __init__(self):
+        self._sem = asyncio.Semaphore(5)  # max 5 concurrent requests
+
     async def get_forecast(self, lat: float, lon: float,
                             hours: int = 168) -> List[Dict[str, Any]]:
         """Return hourly NWP forecast from Open-Meteo (GFS/ECMWF)."""
+        async with self._sem:
+            await asyncio.sleep(0.2)  # rate-limit: avoid 429s
+            return await self._fetch_forecast(lat, lon, hours)
+
+    async def _fetch_forecast(self, lat: float, lon: float,
+                               hours: int = 168) -> List[Dict[str, Any]]:
         url = f"{OPEN_METEO_BASE}/forecast"
         params = {
             "latitude":  lat,
@@ -322,8 +331,16 @@ class OpenMeteoClient:
 class NASAPowerClient:
     NASA_MISSING = -999.0
 
+    def __init__(self):
+        self._sem = asyncio.Semaphore(3)  # max 3 concurrent requests (NASA POWER is strict)
+
     async def get_current(self, lat: float, lon: float) -> Optional[Dict[str, Any]]:
         """Fetch the most recent valid daily observation from NASA POWER."""
+        async with self._sem:
+            await asyncio.sleep(0.3)  # rate-limit: NASA POWER is strict
+            return await self._fetch_current(lat, lon)
+
+    async def _fetch_current(self, lat: float, lon: float) -> Optional[Dict[str, Any]]:
         # NASA POWER has a 2-3 day lag; fetch 7-day window
         end   = date.today() - timedelta(days=2)
         start = end - timedelta(days=7)

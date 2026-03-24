@@ -56,7 +56,7 @@ class WeatherDataConfig:
 @dataclass
 class NeuralGCMConfig:
     enabled: bool = True                            # On by default; falls back to Open-Meteo if no GPU
-    model_name: str = "deterministic_1_4_deg"       # 1.4° resolution, ~48s on L4
+    model_name: str = "deterministic_2_8_deg"       # 2.8° resolution — fits in 24GB VRAM (L4/A100)
     forecast_hours: int = 168                       # 7-day forecast horizon
 
 

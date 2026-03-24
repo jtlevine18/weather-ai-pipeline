@@ -1,7 +1,7 @@
 """
 NeuralGCM forecaster — Google DeepMind's neural weather model.
 
-Runs the NeuralGCM 1.4° deterministic model on GPU (JAX) and extracts
+Runs the NeuralGCM 2.8° deterministic model on GPU (JAX) and extracts
 station-level forecasts for all 20 IMD stations in a single inference pass.
 
 Initial conditions: ERA5 reanalysis from Google's ARCO ERA5 Zarr archive
@@ -127,7 +127,7 @@ class NeuralGCMClient:
 
     def __init__(
         self,
-        model_name: str = "deterministic_1_4_deg",
+        model_name: str = "deterministic_2_8_deg",
         forecast_hours: int = 168,
     ):
         self.model_name = model_name

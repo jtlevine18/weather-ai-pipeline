@@ -15,6 +15,9 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy project
 COPY . .
 
+ENV STREAMLIT_HOME=/tmp/.streamlit
+RUN mkdir -p /tmp/.streamlit
+
 EXPOSE 8000
 EXPOSE 8501
 

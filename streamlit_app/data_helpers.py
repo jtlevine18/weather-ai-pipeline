@@ -22,6 +22,9 @@ def _inject_cloud_secrets() -> None:
 
 _inject_cloud_secrets()
 
+import warnings
+warnings.filterwarnings("ignore", message="pandas only supports SQLAlchemy")
+
 import psycopg2
 import pandas as pd
 import streamlit as st
