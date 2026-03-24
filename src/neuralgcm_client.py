@@ -306,100 +306,72 @@ class NeuralGCMClient:
         else:
             log.warning("  %s: %s", prefix, type(pred).__name__)
 
-    def _manual_pred_to_xarray(self, pred, times):
+    def _manual_pred_to_xarray(self, pred, times_np):
         """Convert prediction dict to xarray Dataset using model grid coordinates.
 
-        Bypasses model.data_to_xarray() which has internal bugs with list-based
-        prediction pytrees. After _fix_pred_pytree, pred is a dict of JAX/numpy
-        arrays. We flatten nested dicts, infer dimensions from shapes, and build
-        the Dataset manually.
+        Fallback for model.data_to_xarray(). Uses model.data_coords for grid info.
+        NeuralGCM arrays have shape (time, level, longitude, latitude) — note
+        longitude comes before latitude (dinosaur convention).
         """
         import numpy as np
         import xarray as xr
 
         model = self._model
         horiz = model.data_coords.horizontal
-        lat = np.asarray(horiz.latitudes)
-        lon = np.asarray(horiz.longitudes)
+
+        # Get coordinates the same way xarray_utils.py does (line 278-281)
+        lon_rad, sin_lat = horiz.nodal_axes
+        lon = lon_rad * 180 / np.pi
+        lat = np.arcsin(sin_lat) * 180 / np.pi
+        n_lon, n_lat = len(lon), len(lat)  # NeuralGCM: (lon, lat) order
 
         # Pressure levels
-        levels = None
-        try:
-            levels = np.asarray(model.data_coords.vertical.centers)
-        except Exception:
-            pass
-
-        times_np = np.array(times)
-        n_lat, n_lon = len(lat), len(lon)
-        n_lev = len(levels) if levels is not None else 0
+        levels = np.asarray(model.data_coords.vertical.centers)
+        n_lev = len(levels)
 
         # Flatten nested dicts into {name: np_array}
         flat = {}
+        for k, v in pred.items():
+            if isinstance(v, dict):
+                for k2, v2 in v.items():
+                    if hasattr(v2, "shape"):
+                        flat[k2] = np.asarray(v2)
+            elif hasattr(v, "shape"):
+                flat[k] = np.asarray(v)
 
-        def _flatten(d, prefix=""):
-            for k, v in d.items():
-                key = k if not prefix else f"{prefix}/{k}"
-                if isinstance(v, dict):
-                    _flatten(v, key)
-                elif hasattr(v, "shape"):
-                    flat[key] = np.asarray(v)
-                else:
-                    log.debug("Skipping non-array pred var %s: %s", key, type(v).__name__)
-
-        _flatten(pred)
-
-        if not flat:
-            raise RuntimeError("No arrays found in prediction dict after flattening")
-
-        # Infer time dimension from array shapes
+        # Infer actual timestep count from arrays
         actual_n_times = None
         for arr in flat.values():
-            s = arr.shape
-            if len(s) >= 3 and s[-2:] == (n_lat, n_lon):
-                actual_n_times = s[0] if len(s) == 3 else s[0]
-                break
-            if len(s) >= 4 and n_lev and s[-3] == n_lev and s[-2:] == (n_lat, n_lon):
-                actual_n_times = s[0]
+            if arr.ndim >= 3 and arr.shape[-2:] == (n_lon, n_lat):
+                actual_n_times = arr.shape[0] if arr.ndim >= 3 else 1
                 break
 
         if actual_n_times is not None and actual_n_times != len(times_np):
-            log.warning("Pred has %d timesteps but %d times provided; adjusting",
+            log.warning("Pred has %d timesteps but %d times; trimming",
                         actual_n_times, len(times_np))
-            # Rebuild times to match actual array size
-            dt_h = 6  # inner_steps
-            base = times_np[0] if len(times_np) > 0 else np.datetime64("now")
-            times_np = np.array([
-                base + np.timedelta64(i * dt_h, "h") for i in range(actual_n_times)
-            ])
+            times_np = times_np[:actual_n_times]
 
-        # Build xarray data_vars
+        # Build data_vars — NeuralGCM convention: (time, level, lon, lat)
         data_vars = {}
         for name, arr in flat.items():
             s = arr.shape
-            if len(s) >= 2 and s[-2:] == (n_lat, n_lon):
-                if len(s) == 4 and n_lev and s[-3] == n_lev:
-                    data_vars[name] = (["time", "level", "latitude", "longitude"], arr)
+            if s[-2:] == (n_lon, n_lat):
+                if len(s) == 4 and s[-3] == n_lev:
+                    data_vars[name] = (["time", "level", "longitude", "latitude"], arr)
                 elif len(s) == 3:
-                    data_vars[name] = (["time", "latitude", "longitude"], arr)
+                    data_vars[name] = (["time", "longitude", "latitude"], arr)
                 elif len(s) == 2:
-                    data_vars[name] = (["time", "latitude", "longitude"], arr[np.newaxis])
-                else:
-                    log.debug("Skipping %s shape=%s", name, s)
-            else:
-                log.debug("Skipping %s shape=%s (doesn't end with %d×%d)",
-                          name, s, n_lat, n_lon)
+                    data_vars[name] = (["time", "longitude", "latitude"], arr[np.newaxis])
 
-        coords = {"time": times_np, "latitude": lat, "longitude": lon}
-        if levels is not None:
-            coords["level"] = levels
+        coords = {"time": times_np, "longitude": lon, "latitude": lat, "level": levels}
 
-        log.warning("Manual xarray: %d vars from %d candidates, %d times, grid %d×%d",
-                    len(data_vars), len(flat), len(times_np), n_lat, n_lon)
+        log.warning("Manual xarray: %d vars, %d times, grid %d×%d (lon×lat)",
+                    len(data_vars), len(times_np), n_lon, n_lat)
 
         if not data_vars:
             raise RuntimeError(
-                f"No vars matched grid {n_lat}×{n_lon}. "
-                f"Array shapes: {[(k, v.shape) for k, v in flat.items()]}"
+                f"No vars matched grid {n_lon}×{n_lat} (lon×lat). "
+                f"Shapes: {[(k, v.shape) for k, v in flat.items()]}"
             )
 
         return xr.Dataset(data_vars, coords=coords)
@@ -496,8 +468,10 @@ class NeuralGCMClient:
                      steps_done, catchup_steps, elapsed_h, catchup_steps * inner_steps)
             del _discarded  # free GPU memory
 
-        # Phase 2: Forecast — unroll in chunks, fix prediction pytree,
-        # manually build xarray (bypasses broken data_to_xarray), concatenate.
+        # Phase 2: Forecast — unroll in chunks, convert to xarray, concatenate.
+        # Use start_with_input=True for ALL chunks → continuous timeline.
+        # unroll() always produces exactly `steps` outputs regardless of
+        # start_with_input (confirmed from trajectory_from_step source).
         import xarray as xr
 
         forecast_start = init_time + np.timedelta64(catchup_steps * inner_steps, "h")
@@ -505,36 +479,42 @@ class NeuralGCMClient:
         forecast_steps_done = 0
         while forecast_steps_done < forecast_steps:
             n = min(chunk_size, forecast_steps - forecast_steps_done)
-            is_first = (forecast_steps_done == 0 and catchup_steps == 0)
             state, chunk_pred = model.unroll(
                 state, all_forcings, steps=n, timedelta=timedelta,
-                start_with_input=is_first,
+                start_with_input=True,  # continuous: output starts at current state
             )
 
-            # Log raw prediction structure (first chunk only, at WARNING so it shows)
+            # Log prediction structure (first chunk only)
             if forecast_steps_done == 0:
-                log.warning("Raw unroll prediction (steps=%d, start_with_input=%s):",
-                            n, is_first)
+                log.warning("Unroll prediction (steps=%d):", n)
                 self._log_pred_structure(chunk_pred)
 
-            # Fix prediction pytree: stack Python lists → JAX arrays
+            # Safety: fix any Python lists → JAX arrays (shouldn't be needed
+            # since jax.lax.scan stacks properly, but cheap insurance)
             chunk_pred = self._fix_pred_pytree(chunk_pred)
 
-            if forecast_steps_done == 0:
-                log.warning("Fixed prediction structure:")
-                self._log_pred_structure(chunk_pred)
-
-            # Build time coordinates for this chunk.
-            # Over-provide times; _manual_pred_to_xarray adjusts to actual array size.
-            chunk_start = forecast_start + np.timedelta64(forecast_steps_done * inner_steps, "h")
-            max_times = n + 1  # start_with_input=True may give n+1
-            chunk_times = [
+            # Build exactly n times as numpy array (MUST be np.array, not list —
+            # xarray_utils.data_to_xarray accesses times.shape)
+            chunk_start = forecast_start + np.timedelta64(
+                forecast_steps_done * inner_steps, "h"
+            )
+            chunk_times = np.array([
                 chunk_start + np.timedelta64(j * inner_steps, "h")
-                for j in range(max_times)
-            ]
+                for j in range(n)
+            ])
 
-            # Primary: manual xarray construction (bypasses data_to_xarray bugs)
-            chunk_ds = self._manual_pred_to_xarray(chunk_pred, chunk_times)
+            # Primary: library's data_to_xarray (now with proper numpy times)
+            chunk_ds = None
+            try:
+                chunk_ds = model.data_to_xarray(chunk_pred, times=chunk_times)
+                if forecast_steps_done == 0:
+                    log.warning("data_to_xarray succeeded: %s", list(chunk_ds.data_vars))
+            except Exception as e:
+                log.warning("data_to_xarray failed: %s — using manual fallback", e)
+
+            # Fallback: manual xarray construction
+            if chunk_ds is None:
+                chunk_ds = self._manual_pred_to_xarray(chunk_pred, chunk_times)
 
             chunk_datasets.append(chunk_ds)
             del chunk_pred  # free GPU memory
