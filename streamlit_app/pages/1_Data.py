@@ -8,7 +8,7 @@ import streamlit as st
 import pandas as pd
 import json
 
-from streamlit_app.style import inject_css
+from streamlit_app.style import inject_css, inject_sidebar_nav
 from streamlit_app.data_helpers import (
     get_station_coords, get_station_name_map, load_station_health,
     load_raw_telemetry, load_clean_telemetry,
@@ -18,6 +18,7 @@ from streamlit_app.data_helpers import (
 
 st.set_page_config(page_title="Data", page_icon="D", layout="wide")
 inject_css()
+inject_sidebar_nav()
 
 st.title("Data")
 st.caption("Weather station readings across Kerala and Tamil Nadu — raw ingestion, quality scores, and healing")
