@@ -314,7 +314,7 @@ class NeuralGCMClient:
         # A single unroll of 28 steps stores all intermediate predictions (~66 GB).
         # Instead, run 4-step chunks: discard catch-up predictions, keep only the
         # final chunk that covers now → now + forecast_hours.
-        chunk_size = 1  # single-step unroll — minimizes XLA graph size to fit in GPU VRAM
+        chunk_size = 4  # 4-step chunks — ~16GB for 2.8° model, fits L40S (48GB) comfortably
         forecast_steps = max(1, -(-self.forecast_hours // inner_steps))  # steps for actual forecast
         catchup_steps = max(0, total_steps - forecast_steps)
 
@@ -355,6 +355,16 @@ class NeuralGCMClient:
             )
             forecast_predictions.append(chunk_pred)
             forecast_steps_done += n
+            # Debug: log prediction structure on first chunk
+            if forecast_steps_done == n:
+                pred_type = type(chunk_pred).__name__
+                if hasattr(chunk_pred, 'keys'):
+                    leaf_info = {k: (type(v).__name__, getattr(v, 'shape', 'no shape'))
+                                 for k, v in (chunk_pred.items() if hasattr(chunk_pred, 'items')
+                                              else enumerate(chunk_pred))}
+                    log.info("  Prediction structure: %s, leaves: %s", pred_type, leaf_info)
+                else:
+                    log.info("  Prediction type: %s", pred_type)
             elapsed_h = (catchup_steps + forecast_steps_done) * inner_steps
             log.info("  Forecast: %d/%d steps done (%dh / %dh)",
                      forecast_steps_done, forecast_steps,
@@ -364,9 +374,23 @@ class NeuralGCMClient:
         if len(forecast_predictions) == 1:
             predictions = forecast_predictions[0]
         else:
+            # NeuralGCM predictions are pytrees that may contain Python lists
+            # (e.g., coordinate metadata). jax.tree.map recurses into lists by
+            # default, causing jnp.concatenate to receive non-array leaves.
+            # Use is_leaf to treat lists as opaque values, and skip concat
+            # for anything without a .shape attribute.
+            def _is_array_leaf(x):
+                return isinstance(x, list) or hasattr(x, 'shape')
+
+            def _safe_concat(*arrs):
+                if hasattr(arrs[0], 'shape'):
+                    return jnp.concatenate(arrs, axis=0)
+                return arrs[0]  # non-array metadata — keep first
+
             predictions = jax.tree.map(
-                lambda *arrs: jnp.concatenate(arrs, axis=0),
+                _safe_concat,
                 *forecast_predictions,
+                is_leaf=_is_array_leaf,
             )
         inference_s = time_mod.time() - t0
         log.info("NeuralGCM inference completed in %.1fs", inference_s)

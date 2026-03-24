@@ -332,13 +332,25 @@ class NASAPowerClient:
     NASA_MISSING = -999.0
 
     def __init__(self):
-        self._sem = asyncio.Semaphore(3)  # max 3 concurrent requests (NASA POWER is strict)
+        self._sem = asyncio.Semaphore(2)   # max 2 concurrent (NASA POWER is very strict)
+        self._cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
+        self._cache_ttl = 3600  # 1 hour — NASA data is daily, no need to refetch
 
     async def get_current(self, lat: float, lon: float) -> Optional[Dict[str, Any]]:
         """Fetch the most recent valid daily observation from NASA POWER."""
+        # Round coords to 0.25° to maximize cache hits across nearby stations
+        cache_key = f"{round(lat, 2)},{round(lon, 2)}"
+        if cache_key in self._cache:
+            cached_time, cached_data = self._cache[cache_key]
+            if time.time() - cached_time < self._cache_ttl:
+                return cached_data
+
         async with self._sem:
-            await asyncio.sleep(0.3)  # rate-limit: NASA POWER is strict
-            return await self._fetch_current(lat, lon)
+            await asyncio.sleep(0.5)  # 0.5s between requests — NASA POWER is strict
+            result = await self._fetch_current(lat, lon)
+            if result is not None:
+                self._cache[cache_key] = (time.time(), result)
+            return result
 
     async def _fetch_current(self, lat: float, lon: float) -> Optional[Dict[str, Any]]:
         # NASA POWER has a 2-3 day lag; fetch 7-day window
@@ -356,6 +368,11 @@ class NASAPowerClient:
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:
                 resp = await client.get(NASA_POWER_BASE, params=params)
+                # Retry once on 429 with longer delay
+                if resp.status_code == 429:
+                    log.info("NASA POWER 429, waiting 5s before retry...")
+                    await asyncio.sleep(5.0)
+                    resp = await client.get(NASA_POWER_BASE, params=params)
                 resp.raise_for_status()
                 data = resp.json()
             props = data["properties"]["parameter"]
@@ -384,25 +401,23 @@ class NASAPowerClient:
 
     async def get_grid(self, lat: float, lon: float,
                         radius_deg: float = 0.5) -> List[Dict[str, Any]]:
-        """Fetch a grid of ~25 cells around a station for IDW interpolation."""
-        import numpy as np
+        """Fetch a 3×3 grid around a station for IDW interpolation.
 
-        offsets = [-0.5, -0.25, 0.0, 0.25, 0.5]
-        tasks = []
-        coords = []
-        for dlat in offsets:
-            for dlon in offsets:
-                coords.append((lat + dlat, lon + dlon))
+        Reduced from 5×5 (25 requests) to 3×3 (9 requests) — NASA POWER
+        has strict rate limits and IDW works fine with 9 points.
+        """
+        offsets = [-0.5, 0.0, 0.5]
+        coords = [(lat + dlat, lon + dlon) for dlat in offsets for dlon in offsets]
 
-        async def _fetch(lt, ln):
-            return await self.get_current(lt, ln)
-
-        results = await asyncio.gather(*[_fetch(lt, ln) for lt, ln in coords],
-                                        return_exceptions=True)
+        # Sequential fetch to respect rate limits (semaphore + delay handle pacing)
         grid = []
-        for (lt, ln), res in zip(coords, results):
-            if isinstance(res, dict) and res is not None:
-                res["lat"] = lt
-                res["lon"] = ln
-                grid.append(res)
+        for lt, ln in coords:
+            try:
+                res = await self.get_current(lt, ln)
+                if isinstance(res, dict) and res is not None:
+                    res["lat"] = lt
+                    res["lon"] = ln
+                    grid.append(res)
+            except Exception:
+                continue
         return grid
