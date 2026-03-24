@@ -86,11 +86,11 @@ CONVERSATION_TOOLS = [
 
 
 def execute_conversation_tool(tool_name: str, tool_input: Dict[str, Any],
-                               database_url: str, session_id: str = "") -> str:
+                               session_id: str = "") -> str:
     """Execute one of the 6 conversation tools. Returns JSON string."""
 
     if tool_name == "lookup_farmer_profile":
-        return asyncio.run(_lookup_profile(tool_input, database_url))
+        return asyncio.run(_lookup_profile(tool_input))
 
     if tool_name == "get_soil_health":
         return _get_soil(tool_input)
@@ -102,17 +102,17 @@ def execute_conversation_tool(tool_name: str, tool_input: Dict[str, Any],
         return _get_subsidy(tool_input)
 
     if tool_name == "get_personalized_advisory":
-        return asyncio.run(_personalized_advisory(tool_input, database_url))
+        return asyncio.run(_personalized_advisory(tool_input))
 
     if tool_name == "schedule_followup":
-        return _schedule(tool_input, database_url, session_id)
+        return _schedule(tool_input, session_id)
 
     return json.dumps({"error": f"Unknown conversation tool: {tool_name}"})
 
 
-async def _lookup_profile(tool_input: Dict, database_url: str) -> str:
+async def _lookup_profile(tool_input: Dict) -> str:
     from src.dpi import DPIAgent
-    agent = DPIAgent(database_url=database_url)
+    agent = DPIAgent()
     phone = tool_input["phone"]
     profile = await agent.get_or_create_profile(phone)
     if profile is None:
@@ -166,12 +166,12 @@ def _get_subsidy(tool_input: Dict) -> str:
     return json.dumps(result, default=str, indent=2)
 
 
-async def _personalized_advisory(tool_input: Dict, database_url: str) -> str:
+async def _personalized_advisory(tool_input: Dict) -> str:
     from src.dpi import DPIAgent
     from src.database import init_db, get_recent_forecasts
     from config import STATION_MAP
 
-    agent = DPIAgent(database_url=database_url)
+    agent = DPIAgent()
     profile = await agent.get_or_create_profile(tool_input["phone"])
     if profile is None:
         return json.dumps({"error": "Farmer not found"})
@@ -187,7 +187,7 @@ async def _personalized_advisory(tool_input: Dict, database_url: str) -> str:
         return json.dumps({"error": f"Unknown station: {station_id}"})
 
     # Get latest forecast for station
-    conn = init_db(database_url)
+    conn = init_db()
     forecasts = get_recent_forecasts(conn, limit=50)
     station_fc = [f for f in forecasts if f.get("station_id") == station_id]
     if not station_fc:
@@ -221,10 +221,10 @@ async def _personalized_advisory(tool_input: Dict, database_url: str) -> str:
     }, default=str, indent=2)
 
 
-def _schedule(tool_input: Dict, database_url: str, session_id: str) -> str:
+def _schedule(tool_input: Dict, session_id: str) -> str:
     from src.database import init_db
     from src.conversation.followup import schedule_followup
-    conn = init_db(database_url)
+    conn = init_db()
     fid = schedule_followup(
         conn, tool_input["aadhaar_id"],
         tool_input["trigger_type"], tool_input["trigger_value"],

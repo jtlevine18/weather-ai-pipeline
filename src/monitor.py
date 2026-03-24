@@ -18,15 +18,13 @@ STALE_THRESHOLD_HOURS = 2
 
 
 class StationMonitor:
-    def __init__(self, db_path: str = "weather.duckdb",
-                  stale_hours: int = STALE_THRESHOLD_HOURS):
-        self.db_path    = db_path
+    def __init__(self, stale_hours: int = STALE_THRESHOLD_HOURS):
         self.stale_hours = stale_hours
 
     def check_all(self) -> List[Dict[str, Any]]:
         """Return health status for all stations."""
         from src.database import init_db
-        conn    = init_db(self.db_path)
+        conn    = init_db()
         health  = {r["station_id"]: r for r in get_station_health(conn)}
         now     = datetime.utcnow()
         cutoff  = now - timedelta(hours=self.stale_hours)

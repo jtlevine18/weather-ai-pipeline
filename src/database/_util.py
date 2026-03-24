@@ -2,12 +2,15 @@
 
 Provides PgConnection — a thin wrapper around psycopg2 that preserves
 the conn.execute(sql, params).fetchall() pattern used throughout the codebase.
+Uses SimpleConnectionPool to reuse connections instead of creating new ones each time.
 """
 
 from __future__ import annotations
 import os
 from datetime import datetime
 from typing import Any, Dict, List, Optional
+
+from psycopg2.pool import SimpleConnectionPool
 
 
 def _now() -> str:
@@ -25,17 +28,27 @@ def get_database_url() -> str:
     return url
 
 
-class PgConnection:
-    """Wraps psycopg2 connection to mimic DuckDB's conn.execute() one-liner.
+_pool = None
 
-    DuckDB:    rows = conn.execute(sql, [p1, p2]).fetchall()
-    Postgres:  rows = conn.execute(sql, [p1, p2]).fetchall()  # same API
+
+def _get_pool(dsn: str) -> SimpleConnectionPool:
+    global _pool
+    if _pool is None or _pool.closed:
+        _pool = SimpleConnectionPool(minconn=2, maxconn=10, dsn=dsn)
+    return _pool
+
+
+class PgConnection:
+    """Thin psycopg2 wrapper providing conn.execute(sql, params).fetchall() pattern.
+
+    Converts ? placeholders to %s for psycopg2 compatibility.
     """
 
     def __init__(self, dsn: str):
-        import psycopg2
-        self._conn = psycopg2.connect(dsn)
+        pool = _get_pool(dsn)
+        self._conn = pool.getconn()
         self._conn.autocommit = True
+        self._pool = pool
         self._last_cur: Optional[Any] = None
 
     def execute(self, sql: str, params=None):
@@ -60,7 +73,9 @@ class PgConnection:
         return self._conn
 
     def close(self):
-        self._conn.close()
+        if self._pool and self._conn:
+            self._pool.putconn(self._conn)
+            self._conn = None
 
     def __enter__(self):
         return self

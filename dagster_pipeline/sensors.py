@@ -5,7 +5,6 @@ downstream asset materializations automatically.
 
 from datetime import datetime, timedelta, timezone
 
-import duckdb
 from dagster import (
     sensor,
     SensorEvaluationContext,
@@ -23,9 +22,10 @@ def forecast_complete_sensor(context: SensorEvaluationContext):
     the downstream agricultural_alerts and delivery_log assets.
     """
     try:
-        con = duckdb.connect("weather.duckdb", read_only=True)
-        result = con.execute("SELECT MAX(issued_at) FROM forecasts").fetchone()
-        con.close()
+        from src.database._util import get_database_url, PgConnection
+        conn = PgConnection(get_database_url())
+        result = conn.execute("SELECT MAX(issued_at) FROM forecasts").fetchone()
+        conn.close()
     except Exception as e:
         return SkipReason(f"Could not query forecasts table: {e}")
 

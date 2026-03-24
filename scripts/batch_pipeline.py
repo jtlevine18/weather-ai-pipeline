@@ -31,7 +31,6 @@ console = Console()
 def parse_args():
     parser = argparse.ArgumentParser(description="Batch pipeline runner for data accumulation")
     parser.add_argument("--runs", type=int, default=10, help="Number of pipeline runs (default: 10)")
-    parser.add_argument("--db", default="weather.duckdb", help="DuckDB path")
     return parser.parse_args()
 
 
@@ -39,7 +38,6 @@ async def main():
     args = parse_args()
     from config import get_config
     config = get_config()
-    config.db_path = args.db
 
     console.rule(f"[bold cyan]Batch Pipeline: {args.runs} runs[/bold cyan]")
 
@@ -60,9 +58,9 @@ async def main():
     ok = sum(1 for r in results if r.get("status") in ("ok", "partial"))
     console.print(f"Completed: {ok}/{args.runs} runs succeeded")
 
-    # Table counts
-    import duckdb
-    conn = duckdb.connect(args.db, read_only=True)
+    # Table counts from PostgreSQL
+    from src.database import init_db
+    conn = init_db()
     tables = ["raw_telemetry", "clean_telemetry", "forecasts",
               "agricultural_alerts", "delivery_log"]
     summary = Table(title="Table Record Counts")

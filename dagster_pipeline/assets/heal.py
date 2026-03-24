@@ -12,7 +12,7 @@ from config import STATION_MAP
 from src.healing import HealingAgent, RuleBasedFallback
 from src.models import CleanReading
 from src.database import insert_healing_log
-from dagster_pipeline.resources import TomorrowIOResource, NASAPowerResource, DuckDBResource
+from dagster_pipeline.resources import TomorrowIOResource, NASAPowerResource, PostgresResource
 
 log = logging.getLogger(__name__)
 
@@ -81,7 +81,7 @@ def clean_telemetry(
     raw_telemetry: List[Dict[str, Any]],
     tomorrow_io: TomorrowIOResource,
     nasa_power: NASAPowerResource,
-    duckdb: DuckDBResource,
+    postgres: PostgresResource,
 ) -> List[Dict[str, Any]]:
     station_ids = list(dict.fromkeys(
         r["station_id"] for r in raw_telemetry if r["station_id"] in STATION_MAP
@@ -94,7 +94,7 @@ def clean_telemetry(
     api_key = os.getenv("ANTHROPIC_API_KEY", "")
     if api_key:
         try:
-            conn = duckdb.get_connection()
+            conn = postgres.get_connection()
             try:
                 agent = HealingAgent(api_key)
                 result = agent.heal_batch(raw_telemetry, references, conn)

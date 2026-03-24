@@ -24,9 +24,8 @@ PROFILE_STALE_HOURS = 24
 
 
 class DPIAgent:
-    def __init__(self, simulation: bool = True, database_url: str = ""):
+    def __init__(self, simulation: bool = True):
         self.simulation = simulation
-        self.database_url = database_url
 
     async def identify_farmer(self, phone: str) -> Optional[AadhaarProfile]:
         from src.dpi.services import get_service
@@ -133,7 +132,7 @@ class DPIAgent:
     def _load_cached_profile(self, phone: str) -> Optional[FarmerProfile]:
         try:
             from src.database import init_db
-            conn = init_db(self.database_url)
+            conn = init_db()
             row = conn.execute(
                 "SELECT profile_json, cached_at FROM farmer_profiles WHERE phone = ?",
                 [phone],
@@ -155,7 +154,7 @@ class DPIAgent:
     def _cache_profile(self, profile: FarmerProfile) -> None:
         try:
             from src.database import init_db
-            conn = init_db(self.database_url)
+            conn = init_db()
             d = _profile_to_dict(profile)
             conn.execute(
                 """INSERT INTO farmer_profiles

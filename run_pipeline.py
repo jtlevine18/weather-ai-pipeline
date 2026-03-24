@@ -37,8 +37,6 @@ def parse_args():
                         help="Actually send SMS/WhatsApp (default: dry-run)")
     parser.add_argument("--schedule", type=int, metavar="MINUTES",
                         help="Run every N minutes instead of once")
-    parser.add_argument("--db", default="weather.duckdb",
-                        help="DuckDB database path (default: weather.duckdb)")
     parser.add_argument("--step", type=int, choices=range(1, 7),
                         metavar="N", help="Run only step N (1-6)")
     parser.add_argument("--source", choices=["real", "synthetic"],
@@ -64,7 +62,6 @@ def main():
 
     from config import get_config
     config = get_config()
-    config.db_path = args.db
     config.weather.ingestion_source = args.source
     if args.no_neuralgcm:
         config.neuralgcm.enabled = False

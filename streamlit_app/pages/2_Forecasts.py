@@ -394,9 +394,8 @@ with tab_model:
 
     # Show current training data stats
     try:
-        import duckdb
-        _db = os.path.join(os.path.dirname(__file__), "..", "..", "weather.duckdb")
-        _conn = duckdb.connect(_db, read_only=True)
+        from src.database import init_db
+        _conn = init_db()
         _clean_n = _conn.execute("SELECT COUNT(*) FROM clean_telemetry").fetchone()[0]
         _fc_n = _conn.execute("SELECT COUNT(*) FROM forecasts").fetchone()[0]
         _stations_n = _conn.execute("SELECT COUNT(DISTINCT station_id) FROM forecasts").fetchone()[0]

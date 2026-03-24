@@ -563,7 +563,7 @@ class HealingAgent:
         Args:
             readings: Raw readings from Step 1 (Ingest)
             references: Dict mapping station_id -> Tomorrow.io/NASA POWER reference
-            conn: DuckDB connection for historical queries
+            conn: Database connection for historical queries
 
         Returns:
             HealingResult with healed readings, assessments, and trace

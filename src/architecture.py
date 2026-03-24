@@ -92,7 +92,7 @@ DEGRADATION CHAIN (independent, never cascades):
 
 STATIONS: 10 in Kerala, 10 in Tamil Nadu
 LANGUAGES: Malayalam (ml) for Kerala, Tamil (ta) for Tamil Nadu
-DATABASE: DuckDB embedded (weather.duckdb) — 6 tables
+DATABASE: PostgreSQL (Neon) — 17 tables
 """
 
 

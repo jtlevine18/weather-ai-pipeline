@@ -16,7 +16,7 @@ from dagster_pipeline.resources import (
     PostgresResource, TomorrowIOResource, OpenMeteoResource,
     NASAPowerResource, AnthropicResource,
 )
-from dagster_pipeline.io_manager import duckdb_io_manager
+from dagster_pipeline.io_manager import postgres_io_manager
 from dagster_pipeline.schedules import hourly_pipeline_schedule
 from dagster_pipeline.checks import (
     check_clean_row_count, check_clean_temp_nulls,
@@ -47,7 +47,7 @@ defs = Definitions(
     ],
     resources={
         "postgres": PostgresResource(database_url=os.getenv("DATABASE_URL", "")),
-        "duckdb_io": duckdb_io_manager,
+        "postgres_io": postgres_io_manager,
         "tomorrow_io": TomorrowIOResource(
             api_key=os.getenv("TOMORROW_IO_API_KEY", ""),
         ),

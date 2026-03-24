@@ -3,7 +3,6 @@
 
 Usage:
     python run_monitor.py
-    python run_monitor.py --db path/to/weather.duckdb
     python run_monitor.py --watch 30   # refresh every 30s
 """
 
@@ -20,7 +19,6 @@ console = Console()
 
 def parse_args():
     p = argparse.ArgumentParser(description="Station health monitor")
-    p.add_argument("--db",    default="weather.duckdb")
     p.add_argument("--watch", type=int, metavar="SECONDS",
                    help="Refresh every N seconds")
     return p.parse_args()
@@ -29,7 +27,7 @@ def parse_args():
 def main():
     args = parse_args()
     from src.monitor import StationMonitor
-    monitor = StationMonitor(db_path=args.db)
+    monitor = StationMonitor()
 
     if args.watch:
         try:

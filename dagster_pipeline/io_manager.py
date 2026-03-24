@@ -1,7 +1,7 @@
 """
-Custom DuckDB I/O manager for Dagster assets.
+PostgreSQL I/O manager for Dagster assets.
 
-Bridges Dagster asset outputs (List[dict]) to DuckDB tables
+Bridges Dagster asset outputs (List[dict]) to PostgreSQL tables
 using the existing insert/query helpers from src/database.py.
 """
 
@@ -55,11 +55,11 @@ TABLE_MAP = {
 }
 
 
-class DuckDBIOManager(IOManager):
-    """Persists asset outputs to DuckDB using existing insert helpers."""
+class PostgresIOManager(IOManager):
+    """Persists asset outputs to PostgreSQL using existing insert helpers."""
 
-    def __init__(self, duckdb_resource):
-        self._duckdb = duckdb_resource
+    def __init__(self, postgres_resource):
+        self._postgres = postgres_resource
 
     def handle_output(self, context: OutputContext, obj: Any):
         asset_key = context.asset_key.path[-1]
@@ -68,7 +68,7 @@ class DuckDBIOManager(IOManager):
             context.log.warning(f"No table mapping for asset {asset_key}, skipping persist")
             return
 
-        conn = self._duckdb.get_connection()
+        conn = self._postgres.get_connection()
         try:
             if isinstance(obj, list):
                 mapping["insert"](conn, obj)
@@ -85,7 +85,7 @@ class DuckDBIOManager(IOManager):
             context.log.warning(f"No table mapping for asset {asset_key}")
             return []
 
-        conn = self._duckdb.get_connection()
+        conn = self._postgres.get_connection()
         try:
             result = mapping["query"](conn)
             if isinstance(result, list) and result and isinstance(result[0], dict):
@@ -103,6 +103,6 @@ class DuckDBIOManager(IOManager):
 
 
 @io_manager
-def duckdb_io_manager(init_context):
-    duckdb_resource = init_context.resources.duckdb
-    return DuckDBIOManager(duckdb_resource)
+def postgres_io_manager(init_context):
+    postgres_resource = init_context.resources.postgres
+    return PostgresIOManager(postgres_resource)

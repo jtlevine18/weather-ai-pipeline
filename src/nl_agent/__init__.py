@@ -58,7 +58,7 @@ TOOLS = [
 
 
 def _execute_tool(tool_name: str, tool_input: Dict[str, Any],
-                   config, db_path: str) -> str:
+                   config) -> str:
     from src.database import init_db, get_recent_forecasts, get_recent_alerts
     from src.monitor  import StationMonitor
     from src.architecture import get_architecture_text
@@ -67,11 +67,11 @@ def _execute_tool(tool_name: str, tool_input: Dict[str, Any],
         return get_architecture_text()
 
     if tool_name == "get_station_health":
-        monitor = StationMonitor(db_path)
+        monitor = StationMonitor()
         statuses = monitor.check_all()
         return json.dumps(statuses, default=str, indent=2)
 
-    conn = init_db(db_path)
+    conn = init_db()
 
     if tool_name == "query_forecasts":
         sid   = tool_input.get("station_id", "all")

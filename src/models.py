@@ -1,7 +1,7 @@
 """
 Pydantic v2 data contracts for each pipeline stage.
 
-Each model mirrors a DuckDB table schema from src/database.py.
+Each model mirrors a PostgreSQL table schema from src/database.py.
 Used for validation at stage boundaries — data flows as dicts internally,
 but is validated through these models before passing between stages.
 """

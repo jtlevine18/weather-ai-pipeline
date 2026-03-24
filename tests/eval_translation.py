@@ -26,7 +26,6 @@ from config import get_config
 from src.database import init_db
 
 PROJECT_ROOT = os.path.join(os.path.dirname(__file__), "..")
-DB_PATH = os.path.join(PROJECT_ROOT, "weather.duckdb")
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "eval_results")
 
 # Agricultural terms weighted higher in preservation scoring
@@ -108,7 +107,7 @@ def run_translation_eval(max_advisories=20):
     import anthropic
     client = anthropic.Anthropic(api_key=config.anthropic_key)
 
-    conn = init_db(DB_PATH)
+    conn = init_db()
     rows = conn.execute("""
         SELECT advisory_en, advisory_local, language, station_id,
                condition, provider

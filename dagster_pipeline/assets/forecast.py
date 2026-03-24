@@ -9,7 +9,7 @@ from config import STATIONS, PipelineConfig
 from src.forecasting import create_forecast_model, PersistenceModel, run_forecast_step
 from src.models import Forecast
 from src.database import get_latest_clean_for_station, get_clean_history_for_station
-from dagster_pipeline.resources import OpenMeteoResource, NASAPowerResource, DuckDBResource
+from dagster_pipeline.resources import OpenMeteoResource, NASAPowerResource, PostgresResource
 
 log = logging.getLogger(__name__)
 
@@ -24,7 +24,7 @@ def forecasts(
     clean_telemetry: List[Dict[str, Any]],
     open_meteo: OpenMeteoResource,
     nasa_power: NASAPowerResource,
-    duckdb: DuckDBResource,
+    postgres: PostgresResource,
 ) -> List[Dict[str, Any]]:
     config = PipelineConfig()
     forecast_model = create_forecast_model(config.models_dir)
@@ -50,7 +50,7 @@ def forecasts(
     except Exception as e:
         context.log.warning(f"NeuralGCM failed, using Open-Meteo: {e}")
 
-    conn = duckdb.get_connection()
+    conn = postgres.get_connection()
     try:
         async def _run():
             tasks = []

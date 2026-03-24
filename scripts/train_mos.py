@@ -13,8 +13,8 @@ from datetime import datetime
 # Allow imports from project root
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import duckdb
 import numpy as np
+import pandas as pd
 import xgboost as xgb
 from sklearn.metrics import mean_absolute_error, mean_squared_error, r2_score
 from sklearn.model_selection import train_test_split
@@ -28,59 +28,41 @@ METRICS_PATH = "metrics/mos_metrics.json"
 FEATURE_NAMES = HybridNWPModel.FEATURE_NAMES
 
 
-def load_and_engineer(conn: duckdb.DuckDBPyConnection) -> tuple:
-    """Read parquet, compute engineered features, return X and y arrays."""
-    rows = conn.execute(f"""
-        SELECT
-            actual_temp,
-            nwp_temp,
-            nwp_rainfall,
-            humidity,
-            wind_speed,
-            pressure,
-            actual_rainfall,
-            quality_score,
-            obs_ts,
-            station_id,
-            prior_correction
-        FROM read_parquet('{PARQUET_PATH}')
-        WHERE actual_temp IS NOT NULL
-          AND nwp_temp IS NOT NULL
-    """).fetchall()
+def load_and_engineer(df: pd.DataFrame) -> tuple:
+    """Compute engineered features from exported Parquet, return X and y arrays."""
+    df = df.dropna(subset=["actual_temp", "nwp_temp"])
 
-    if not rows:
+    if df.empty:
         print("ERROR: No valid rows in training export.")
         sys.exit(1)
 
     X_list = []
     y_list = []
 
-    station_rows: dict[str, list] = defaultdict(list)
-    for row in rows:
-        station_rows[row[9]].append(row)
-
-    for station_id, srows in station_rows.items():
-        # Sort by timestamp
-        srows.sort(key=lambda r: r[8])
+    for station_id, group in df.groupby("station_id"):
+        srows = group.sort_values("obs_ts").to_dict("records")
 
         for i, row in enumerate(srows):
-            (actual_temp, nwp_temp, nwp_rainfall, humidity, wind_speed,
-             pressure, actual_rainfall, quality_score, obs_ts,
-             _station_id, prior_correction) = row
-
+            actual_temp = row["actual_temp"]
+            nwp_temp = row["nwp_temp"]
             residual = actual_temp - nwp_temp
 
-            # Station altitude: not in export, default 0 (could be joined later)
-            station_altitude = 0.0
+            humidity = row.get("humidity") or 60.0
+            wind_speed = row.get("wind_speed") or 8.0
+            pressure = row.get("pressure") or 1013.0
+            nwp_rainfall = row.get("nwp_rainfall") or 0.0
+            actual_rainfall = row.get("actual_rainfall") or 0.0
+            prior_correction = row.get("prior_correction")
 
-            # Soil moisture proxy: use actual_rainfall / 20 capped at 1.0
-            soil_moisture = min(1.0, (actual_rainfall or 0.0) / 20.0)
+            station_altitude = 0.0
+            soil_moisture = min(1.0, actual_rainfall / 20.0)
 
             # Rolling 6h error: mean absolute prior_correction over last 6 rows
             window_start = max(0, i - 6)
             corrections = [
-                abs(srows[j][10]) for j in range(window_start, i)
-                if srows[j][10] is not None
+                abs(srows[j]["prior_correction"])
+                for j in range(window_start, i)
+                if srows[j].get("prior_correction") is not None
             ]
             rolling_6h_error = (
                 sum(corrections) / len(corrections) if corrections else 0.0
@@ -89,9 +71,9 @@ def load_and_engineer(conn: duckdb.DuckDBPyConnection) -> tuple:
             # Recent temp trend: slope over last 6 rows
             if i >= 3:
                 temps_window = [
-                    srows[j][0]
+                    srows[j]["actual_temp"]
                     for j in range(max(0, i - 6), i + 1)
-                    if srows[j][0] is not None
+                    if srows[j].get("actual_temp") is not None
                 ]
                 if len(temps_window) >= 2:
                     recent_temp_trend = (
@@ -104,10 +86,11 @@ def load_and_engineer(conn: duckdb.DuckDBPyConnection) -> tuple:
                 recent_temp_trend = 0.0
 
             try:
+                obs_ts = row["obs_ts"]
                 if isinstance(obs_ts, str):
                     dt = datetime.fromisoformat(obs_ts.replace("Z", ""))
                 else:
-                    dt = obs_ts  # already a datetime
+                    dt = obs_ts
                 hour = dt.hour
                 doy = dt.timetuple().tm_yday
             except Exception:
@@ -119,10 +102,10 @@ def load_and_engineer(conn: duckdb.DuckDBPyConnection) -> tuple:
 
             feature_vec = [
                 nwp_temp,
-                nwp_rainfall or 0.0,
-                humidity or 60.0,
-                wind_speed or 8.0,
-                pressure or 1013.0,
+                nwp_rainfall,
+                humidity,
+                wind_speed,
+                pressure,
                 station_altitude,
                 soil_moisture,
                 rolling_6h_error,
@@ -141,14 +124,14 @@ def load_and_engineer(conn: duckdb.DuckDBPyConnection) -> tuple:
 def main() -> None:
     if not os.path.exists(PARQUET_PATH):
         print(f"ERROR: Training data not found at {PARQUET_PATH}")
+        print("Run  python scripts/export_training_data.py  first.")
         sys.exit(1)
 
     os.makedirs(os.path.dirname(MODEL_PATH), exist_ok=True)
     os.makedirs(os.path.dirname(METRICS_PATH), exist_ok=True)
 
-    conn = duckdb.connect(":memory:")
-    X, y = load_and_engineer(conn)
-    conn.close()
+    df = pd.read_parquet(PARQUET_PATH)
+    X, y = load_and_engineer(df)
 
     print(f"Training samples: {len(X)}")
     print(f"Features: {len(FEATURE_NAMES)}")
@@ -157,7 +140,7 @@ def main() -> None:
     if len(X) < 10:
         print("WARNING: Very few training samples, model may not generalize.")
 
-    # Train/test split (80/20, stratify not applicable for regression)
+    # Train/test split (80/20)
     X_train, X_test, y_train, y_test = train_test_split(
         X, y, test_size=0.2, random_state=42
     )

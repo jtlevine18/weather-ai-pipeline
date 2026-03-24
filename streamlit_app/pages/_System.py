@@ -205,7 +205,7 @@ with tab_sched:
 
     with bc4:
         if st.button("Retrain MOS Model", width="stretch",
-                      help="Export training data from DuckDB and retrain the XGBoost MOS model"):
+                      help="Export day-0 forecast/obs pairs from PostgreSQL and retrain the XGBoost MOS model"):
             with st.spinner("Exporting data and training model..."):
                 try:
                     import subprocess

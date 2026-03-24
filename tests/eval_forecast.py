@@ -21,7 +21,6 @@ from rich.table import Table
 from src.database import init_db
 
 PROJECT_ROOT = os.path.join(os.path.dirname(__file__), "..")
-DB_PATH = os.path.join(PROJECT_ROOT, "weather.duckdb")
 RESULTS_DIR = os.path.join(os.path.dirname(__file__), "eval_results")
 
 
@@ -109,9 +108,9 @@ def _fmt(val, fmt=".2f"):
     return f"{val:{fmt}}" if val is not None else "---"
 
 
-def run_forecast_eval(db_path=DB_PATH):
+def run_forecast_eval():
     console = Console()
-    conn = init_db(db_path)
+    conn = init_db()
     pairs = pair_forecasts_with_actuals(conn, limit=2000)
     conn.close()
 

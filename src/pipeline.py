@@ -398,45 +398,72 @@ class WeatherPipeline:
     # ------------------------------------------------------------------
     async def step_downscale(self, forecasts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         console.print("[bold blue]Step 4:[/bold blue] Downscaling to farmer GPS...")
-        downscaled = []
 
         recipient_map = {r.station_id: r for r in DEFAULT_RECIPIENTS}
 
-        # Build parallel downscale tasks
-        passthrough = []
+        # Group forecasts by station — fetch NASA grid once per station,
+        # then apply the same adjustment to all 7 daily forecasts.
+        from collections import defaultdict
+        station_groups: Dict[str, List[int]] = defaultdict(list)
+        for idx, fc in enumerate(forecasts):
+            station_groups[fc["station_id"]].append(idx)
+
+        # Downscale one representative forecast per station (day 0)
         ds_tasks = []
-        ds_indices = []
-        for idx, forecast in enumerate(forecasts):
-            sid     = forecast["station_id"]
+        ds_station_ids = []
+        for sid, indices in station_groups.items():
             station = STATION_MAP.get(sid)
             if station is None:
-                passthrough.append((idx, forecast))
                 continue
-
             recipient = recipient_map.get(sid)
             farmer_lat = recipient.lat if hasattr(recipient, "lat") else station.lat + 0.05
             farmer_lon = recipient.lon if hasattr(recipient, "lon") else station.lon + 0.05
             farmer_alt = recipient.alt_m if recipient else None
-
+            # Use first forecast as representative (grid fetch is location-based, not time-based)
             ds_tasks.append(self.downscaler.downscale(
-                forecast, station, farmer_lat, farmer_lon, farmer_alt
+                forecasts[indices[0]], station, farmer_lat, farmer_lon, farmer_alt
             ))
-            ds_indices.append(idx)
+            ds_station_ids.append(sid)
 
-        # Run all downscale calls in parallel
+        # Run one downscale per station in parallel (20 calls, not 140)
         ds_results = await asyncio.gather(*ds_tasks, return_exceptions=True)
 
-        # Reassemble in original order
-        result_map: Dict[int, Dict[str, Any]] = {}
-        for idx, forecast in passthrough:
-            result_map[idx] = forecast
-        for idx, res in zip(ds_indices, ds_results):
+        # Build adjustment map: station_id → downscaling deltas
+        adjustments: Dict[str, Dict[str, Any]] = {}
+        for sid, res in zip(ds_station_ids, ds_results):
             if isinstance(res, Exception):
-                log.warning("Downscale failed for forecast %d: %s", idx, res)
-                result_map[idx] = forecasts[idx]
-            else:
-                result_map[idx] = res
-        downscaled = [result_map[i] for i in range(len(forecasts))]
+                log.warning("Downscale failed for %s: %s", sid, res)
+                continue
+            if res.get("downscaled"):
+                adjustments[sid] = {
+                    "idw_temp": res.get("idw_temp"),
+                    "lapse_delta": res.get("lapse_delta", 0),
+                    "alt_delta_m": res.get("alt_delta_m", 0),
+                    "farmer_lat": res.get("farmer_lat"),
+                    "farmer_lon": res.get("farmer_lon"),
+                }
+
+        # Apply adjustments to all forecasts for each station
+        downscaled = []
+        for fc in forecasts:
+            sid = fc["station_id"]
+            adj = adjustments.get(sid)
+            if adj is None:
+                downscaled.append(fc)
+                continue
+            result = dict(fc)
+            result["farmer_lat"] = adj["farmer_lat"]
+            result["farmer_lon"] = adj["farmer_lon"]
+            result["downscaled"] = True
+            result["idw_temp"] = adj["idw_temp"]
+            result["lapse_delta"] = adj["lapse_delta"]
+            result["alt_delta_m"] = adj["alt_delta_m"]
+            # Apply lapse-rate correction to this day's forecast temperature
+            if adj["idw_temp"] is not None and adj["lapse_delta"] is not None:
+                result["temperature"] = round(adj["idw_temp"] + adj["lapse_delta"], 2)
+                from src.forecasting import classify_condition
+                result["condition"] = classify_condition(result)
+            downscaled.append(result)
 
         n_ds = sum(1 for f in downscaled if f.get("downscaled"))
         console.print(f"  [green]✓[/green] {len(downscaled)} forecasts | {n_ds} downscaled")
