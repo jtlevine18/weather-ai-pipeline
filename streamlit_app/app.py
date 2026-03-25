@@ -9,18 +9,18 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 import streamlit as st
 
+st.set_page_config(
+    page_title="Weather AI",
+    page_icon="W",
+    layout="wide",
+)
+
 # Auto-resume daily scheduler if previously enabled (survives HF Spaces restarts)
 import src.daily_scheduler  # noqa: F401
 
 from streamlit_app.style import inject_css, inject_sidebar_nav, STATUS_COLOR
 from streamlit_app.data_helpers import (
     load_pipeline_runs, load_station_health, load_pipeline_stage_stats,
-)
-
-st.set_page_config(
-    page_title="Weather AI",
-    page_icon="W",
-    layout="wide",
 )
 inject_css()
 inject_sidebar_nav()
