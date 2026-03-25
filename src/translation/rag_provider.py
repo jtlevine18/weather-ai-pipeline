@@ -151,7 +151,7 @@ class RAGProvider:
     def _get_client(self):
         if self._client is None:
             import anthropic
-            self._client = anthropic.Anthropic(api_key=self.api_key)
+            self._client = anthropic.AsyncAnthropic(api_key=self.api_key)
         return self._client
 
     def _query_reformulation(self, forecasts: List[Dict[str, Any]],
@@ -180,8 +180,8 @@ class RAGProvider:
             f"Agricultural advisory recommendations for the week."
         )
 
-    def _generate_english(self, forecasts: List[Dict[str, Any]], station,
-                            context_docs: List[str]) -> str:
+    async def _generate_english(self, forecasts: List[Dict[str, Any]], station,
+                                  context_docs: List[str]) -> str:
         """Step 1: Generate English weekly outlook advisory from RAG context."""
         context = "\n---\n".join(context_docs[:TOP_K]) if context_docs else ""
 
@@ -214,7 +214,7 @@ class RAGProvider:
             "Generate a weekly outlook advisory for the farmer:"
         )
         client = self._get_client()
-        msg = client.messages.create(
+        msg = await client.messages.create(
             model=self.config.model,
             max_tokens=400,
             system=system,
@@ -222,7 +222,7 @@ class RAGProvider:
         )
         return msg.content[0].text.strip()
 
-    def _translate(self, advisory_en: str, language: str,
+    async def _translate(self, advisory_en: str, language: str,
                    station_name: str) -> str:
         """Step 2: Separate Claude call to translate English advisory."""
         if language == "en":
@@ -241,7 +241,7 @@ class RAGProvider:
             f"{advisory_en}"
         )
         client = self._get_client()
-        msg = client.messages.create(
+        msg = await client.messages.create(
             model=self.config.model,
             max_tokens=512,
             system=system,
@@ -268,10 +268,10 @@ class RAGProvider:
             context_docs = [text for text, _ in hits]
 
         # Generate English weekly outlook advisory
-        advisory_en = self._generate_english(forecasts, station, context_docs)
+        advisory_en = await self._generate_english(forecasts, station, context_docs)
 
         # Translate
-        advisory_local = self._translate(advisory_en, station.language, station.name)
+        advisory_local = await self._translate(advisory_en, station.language, station.name)
 
         return {
             "advisory_en":    advisory_en,
