@@ -341,7 +341,7 @@ class NASAPowerClient:
     NASA_MISSING = -999.0
 
     def __init__(self):
-        self._sem = asyncio.Semaphore(1)   # strictly sequential — NASA POWER rate limit is ~30/min
+        self._sem = asyncio.Semaphore(3)   # NASA POWER has adaptive rate limiting, no fixed limit
         self._cache: Dict[str, Tuple[float, Dict[str, Any]]] = {}
         self._cache_ttl = 86400  # 24 hours — NASA data is daily, never changes intraday
 
@@ -355,7 +355,7 @@ class NASAPowerClient:
                 return cached_data
 
         async with self._sem:
-            await asyncio.sleep(2.0)  # 2s between requests — NASA POWER is extremely strict
+            await asyncio.sleep(0.5)  # 0.5s between requests — NASA has adaptive limits, 429 backoff handles spikes
             result = await self._fetch_current(lat, lon)
             if result is not None:
                 self._cache[cache_key] = (time.time(), result)

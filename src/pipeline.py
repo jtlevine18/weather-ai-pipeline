@@ -507,6 +507,9 @@ class WeatherPipeline:
 
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
+        # Reconnect — Claude API calls above may have taken >5min (Neon idle timeout)
+        self._refresh_conn()
+
         for (fc_list, station), result in zip(stations_list, results):
             if isinstance(result, Exception):
                 log.warning("Advisory failed for %s: %s", station.station_id, result)
