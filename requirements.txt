@@ -17,9 +17,10 @@ jax[cuda12]==0.4.27
 gcsfs==2024.2.0
 xarray==2024.1.0
 zarr==2.16.0
+numcodecs<0.16
 
 # RAG / NLP
-faiss-cpu==1.8.0
+faiss-cpu==1.9.0
 sentence-transformers==2.7.0
 langchain-huggingface==0.0.3
 rank-bm25==0.2.2

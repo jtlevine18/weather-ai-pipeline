@@ -73,6 +73,18 @@ class WeatherPipeline:
             channels.extend([DeliveryChannel.SMS])
         self.delivery = MultiChannelDelivery(config.delivery, channels)
 
+    def _refresh_conn(self) -> None:
+        """Reconnect if the DB connection was dropped (Neon 5-min idle timeout)."""
+        try:
+            self.conn.execute("SELECT 1")
+        except Exception:
+            log.info("DB connection stale — reconnecting")
+            try:
+                self.conn.close()
+            except Exception:
+                pass
+            self.conn = init_db(self.config.database_url)
+
     # ------------------------------------------------------------------
     # Step 1: Ingest
     # ------------------------------------------------------------------
@@ -311,6 +323,7 @@ class WeatherPipeline:
     # Step 3: Forecast
     # ------------------------------------------------------------------
     async def step_forecast(self) -> List[Dict[str, Any]]:
+        self._refresh_conn()
         nwp_label = "NeuralGCM + Open-Meteo fallback" if self.neuralgcm else "Open-Meteo"
         console.print(f"[bold blue]Step 3:[/bold blue] Running MOS forecasts via {nwp_label}...")
 
@@ -396,6 +409,7 @@ class WeatherPipeline:
     # Step 4: Downscale
     # ------------------------------------------------------------------
     async def step_downscale(self, forecasts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        self._refresh_conn()
         console.print("[bold blue]Step 4:[/bold blue] Downscaling to farmer GPS...")
 
         recipient_map = {r.station_id: r for r in DEFAULT_RECIPIENTS}
@@ -471,6 +485,7 @@ class WeatherPipeline:
     # Step 5: Translate / advisory
     # ------------------------------------------------------------------
     async def step_translate(self, downscaled: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        self._refresh_conn()
         console.print("[bold blue]Step 5:[/bold blue] Generating weekly advisories + translating...")
         alerts = []
 
@@ -523,6 +538,7 @@ class WeatherPipeline:
     # Step 6: Deliver
     # ------------------------------------------------------------------
     async def step_deliver(self, alerts: List[Dict[str, Any]]) -> int:
+        self._refresh_conn()
         console.print("[bold blue]Step 6:[/bold blue] Delivering advisories...")
         alert_map = {a["station_id"]: a for a in alerts}
         total = 0
