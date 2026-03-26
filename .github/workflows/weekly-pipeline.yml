@@ -41,3 +41,13 @@ jobs:
           done
           echo "Timed out waiting for pipeline"
           exit 1
+
+      - name: Pause Pipeline Space
+        if: always()
+        run: |
+          echo "Pausing Pipeline Space to stop billing..."
+          curl -s -X POST \
+            "https://huggingface.co/api/spaces/${{ secrets.HF_PIPELINE_SPACE }}/pause" \
+            -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" \
+            || true
+          echo "Space paused."
