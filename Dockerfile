@@ -19,11 +19,11 @@ COPY . .
 ENV STREAMLIT_HOME=/tmp/.streamlit
 RUN mkdir -p /tmp/.streamlit
 
-EXPOSE 8000
+EXPOSE 7860
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=10s --retries=3 \
-    CMD curl -f http://localhost:8000/health || exit 1
+    CMD curl -f http://localhost:7860/health || exit 1
 
-# FastAPI on 8000 (exposed to HF), Streamlit on 8501 (internal only)
-CMD ["sh", "-c", "uvicorn src.api:app --host 0.0.0.0 --port 8000 & streamlit run streamlit_app/app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true & wait"]
+# FastAPI on 7860 (exposed to HF), Streamlit on 8501 (internal only)
+CMD ["sh", "-c", "uvicorn src.api:app --host 0.0.0.0 --port 7860 & streamlit run streamlit_app/app.py --server.port=8501 --server.address=0.0.0.0 --server.headless=true & wait"]
