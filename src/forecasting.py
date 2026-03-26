@@ -6,6 +6,7 @@ Fallback: PersistenceModel (last observation + diurnal adjustment)
 
 from __future__ import annotations
 import logging
+import math
 import os
 import uuid
 from datetime import datetime, timedelta
@@ -143,7 +144,6 @@ class HybridNWPModel:
         except Exception:
             hour, doy = datetime.utcnow().hour, 180
 
-        import math
         return [
             nwp.get("temperature", 25.0) or 25.0,   # nwp_temp
             nwp.get("rainfall",     0.0) or 0.0,     # nwp_rainfall

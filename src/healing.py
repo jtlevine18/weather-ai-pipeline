@@ -800,7 +800,7 @@ class RuleBasedFallback:
         "rainfall":    20.0,  # mm
     }
 
-    WEATHER_FIELDS = ["temperature", "humidity", "wind_speed", "wind_dir", "pressure", "rainfall"]
+    # Uses module-level WEATHER_FIELDS
 
     def detect_anomalies(self, readings: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
         anomalies = []
@@ -868,7 +868,7 @@ class RuleBasedFallback:
                    reference: Dict[str, Any]) -> tuple:
         """Fill NULL weather fields from reference. Returns (reading, filled_fields)."""
         filled = []
-        for fld in self.WEATHER_FIELDS:
+        for fld in WEATHER_FIELDS:
             if reading.get(fld) is None and reference.get(fld) is not None:
                 reading[fld] = reference[fld]
                 filled.append(fld)

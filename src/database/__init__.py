@@ -236,33 +236,23 @@ CREATE TABLE IF NOT EXISTS users (
 """
 
 
+_schema_initialized = False
+
+
 def init_db(database_url: str = "") -> Any:
     """Initialize PostgreSQL database and return connection.
 
-    If database_url is empty, reads from DATABASE_URL environment variable.
+    DDL only runs once per process. Subsequent calls just return a connection.
     """
+    global _schema_initialized
     from src.database._util import PgConnection, get_database_url
     if not database_url:
         database_url = get_database_url()
     conn = PgConnection(database_url)
-    conn.execute(DDL)
-    _migrate(conn)
+    if not _schema_initialized:
+        conn.execute(DDL)
+        _schema_initialized = True
     return conn
-
-
-def _migrate(conn) -> None:
-    """Apply schema migrations to existing tables (idempotent)."""
-    _add_column_if_missing(conn, "forecasts", "nwp_source", "VARCHAR DEFAULT 'open_meteo'")
-    _add_column_if_missing(conn, "forecasts", "forecast_day", "INTEGER DEFAULT 0")
-    _add_column_if_missing(conn, "agricultural_alerts", "forecast_days", "INTEGER DEFAULT 1")
-
-
-def _add_column_if_missing(conn, table: str, column: str, typedef: str) -> None:
-    """Add a column if it doesn't exist (PostgreSQL 9.6+)."""
-    try:
-        conn.execute(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {typedef}")
-    except Exception:
-        pass
 
 
 from src.database._util import _now, _rows_to_dicts  # noqa: F401
