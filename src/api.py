@@ -82,6 +82,12 @@ WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
 # Health (public)
 # ---------------------------------------------------------------------------
 
+@app.get("/")
+def root():
+    """Root — redirect to health or show status."""
+    return {"name": "Weather Pipeline API", "docs": "/docs", "health": "/health"}
+
+
 @app.get("/health")
 def health():
     """Pipeline health check — no auth required."""
