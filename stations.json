@@ -1,0 +1,222 @@
+[
+  {
+    "station_id": "KL_TVM",
+    "name": "Thiruvananthapuram",
+    "lat": 8.4833,
+    "lon": 76.9500,
+    "altitude_m": 60,
+    "state": "Kerala",
+    "language": "ml",
+    "crop_context": "coconut, rubber, banana, tapioca, pepper",
+    "imd_id": "43371"
+  },
+  {
+    "station_id": "KL_COK",
+    "name": "Kochi",
+    "lat": 9.9500,
+    "lon": 76.2667,
+    "altitude_m": 1,
+    "state": "Kerala",
+    "language": "ml",
+    "crop_context": "coconut, rubber, pineapple, nutmeg, banana",
+    "imd_id": "43353"
+  },
+  {
+    "station_id": "KL_ALP",
+    "name": "Alappuzha",
+    "lat": 9.5500,
+    "lon": 76.4167,
+    "altitude_m": 2,
+    "state": "Kerala",
+    "language": "ml",
+    "crop_context": "rice (paddy), coconut, banana, tapioca",
+    "imd_id": "43352"
+  },
+  {
+    "station_id": "KL_KNR",
+    "name": "Kannur",
+    "lat": 11.8333,
+    "lon": 75.3333,
+    "altitude_m": 11,
+    "state": "Kerala",
+    "language": "ml",
+    "crop_context": "coconut, cashew, pepper, rubber, arecanut",
+    "imd_id": "43315"
+  },
+  {
+    "station_id": "KL_KZD",
+    "name": "Kozhikode",
+    "lat": 11.2500,
+    "lon": 75.7833,
+    "altitude_m": 4,
+    "state": "Kerala",
+    "language": "ml",
+    "crop_context": "coconut, pepper, arecanut, rubber, banana",
+    "imd_id": "43314"
+  },
+  {
+    "station_id": "KL_TCR",
+    "name": "Thrissur",
+    "lat": 10.5167,
+    "lon": 76.2167,
+    "altitude_m": 40,
+    "state": "Kerala",
+    "language": "ml",
+    "crop_context": "rice (paddy), coconut, arecanut",
+    "imd_id": "43357"
+  },
+  {
+    "station_id": "KL_KTM",
+    "name": "Kottayam",
+    "lat": 9.5833,
+    "lon": 76.5167,
+    "altitude_m": 39,
+    "state": "Kerala",
+    "language": "ml",
+    "crop_context": "rubber, coconut, pepper, banana, cardamom",
+    "imd_id": "43355"
+  },
+  {
+    "station_id": "KL_PKD",
+    "name": "Palakkad",
+    "lat": 10.7667,
+    "lon": 76.6500,
+    "altitude_m": 95,
+    "state": "Kerala",
+    "language": "ml",
+    "crop_context": "rice (paddy), coconut, groundnut, arecanut, banana",
+    "imd_id": "43335"
+  },
+  {
+    "station_id": "KL_PNL",
+    "name": "Punalur",
+    "lat": 9.0000,
+    "lon": 76.9167,
+    "altitude_m": 33,
+    "state": "Kerala",
+    "language": "ml",
+    "crop_context": "rubber, coconut, cashew, pepper, tapioca",
+    "imd_id": "43354"
+  },
+  {
+    "station_id": "KL_NLB",
+    "name": "Nilambur",
+    "lat": 11.2800,
+    "lon": 76.2300,
+    "altitude_m": 30,
+    "state": "Kerala",
+    "language": "ml",
+    "crop_context": "coconut, rubber, arecanut, pepper, paddy",
+    "imd_id": "43316"
+  },
+  {
+    "station_id": "TN_TNJ",
+    "name": "Thanjavur",
+    "lat": 10.7833,
+    "lon": 79.1333,
+    "altitude_m": 0,
+    "state": "Tamil Nadu",
+    "language": "ta",
+    "crop_context": "rice (paddy), pulses (black gram), sugarcane, banana, coconut",
+    "imd_id": "43330"
+  },
+  {
+    "station_id": "TN_MDU",
+    "name": "Madurai",
+    "lat": 9.8333,
+    "lon": 78.0833,
+    "altitude_m": 139,
+    "state": "Tamil Nadu",
+    "language": "ta",
+    "crop_context": "paddy, cotton, groundnut, millets, banana",
+    "imd_id": "43360"
+  },
+  {
+    "station_id": "TN_TRZ",
+    "name": "Tiruchirappalli",
+    "lat": 10.7667,
+    "lon": 78.7167,
+    "altitude_m": 85,
+    "state": "Tamil Nadu",
+    "language": "ta",
+    "crop_context": "paddy, banana, sugarcane, groundnut, maize",
+    "imd_id": "43344"
+  },
+  {
+    "station_id": "TN_SLM",
+    "name": "Salem",
+    "lat": 11.6500,
+    "lon": 78.1667,
+    "altitude_m": 279,
+    "state": "Tamil Nadu",
+    "language": "ta",
+    "crop_context": "tapioca, paddy, groundnut, maize, turmeric",
+    "imd_id": "43325"
+  },
+  {
+    "station_id": "TN_ERD",
+    "name": "Erode",
+    "lat": 11.3400,
+    "lon": 77.7200,
+    "altitude_m": 183,
+    "state": "Tamil Nadu",
+    "language": "ta",
+    "crop_context": "turmeric, sugarcane, coconut, cotton, groundnut",
+    "imd_id": "43338"
+  },
+  {
+    "station_id": "TN_CHN",
+    "name": "Chennai",
+    "lat": 13.0000,
+    "lon": 80.1833,
+    "altitude_m": 10,
+    "state": "Tamil Nadu",
+    "language": "ta",
+    "crop_context": "rice (paddy), vegetables, flowers",
+    "imd_id": "43279"
+  },
+  {
+    "station_id": "TN_TNV",
+    "name": "Tirunelveli",
+    "lat": 8.7333,
+    "lon": 77.7500,
+    "altitude_m": 45,
+    "state": "Tamil Nadu",
+    "language": "ta",
+    "crop_context": "paddy, banana, coconut, cotton, sugarcane",
+    "imd_id": "43376"
+  },
+  {
+    "station_id": "TN_CBE",
+    "name": "Coimbatore",
+    "lat": 11.0333,
+    "lon": 77.0500,
+    "altitude_m": 396,
+    "state": "Tamil Nadu",
+    "language": "ta",
+    "crop_context": "coconut, cotton, sugarcane, millets, groundnut",
+    "imd_id": "43321"
+  },
+  {
+    "station_id": "TN_VLR",
+    "name": "Vellore",
+    "lat": 12.9200,
+    "lon": 79.1300,
+    "altitude_m": 215,
+    "state": "Tamil Nadu",
+    "language": "ta",
+    "crop_context": "paddy, groundnut, sugarcane, ragi, mango",
+    "imd_id": "43303"
+  },
+  {
+    "station_id": "TN_NGP",
+    "name": "Nagappattinam",
+    "lat": 10.7667,
+    "lon": 79.8500,
+    "altitude_m": 2,
+    "state": "Tamil Nadu",
+    "language": "ta",
+    "crop_context": "rice (paddy), pulses (black gram), coconut, banana",
+    "imd_id": "43347"
+  }
+]

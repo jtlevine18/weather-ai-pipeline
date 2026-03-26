@@ -12,10 +12,9 @@ interface ChatMessage {
 const INITIAL_MSG: ChatMessage = {
   role: 'assistant',
   content:
-    "I'm your Weather AI assistant for Kerala and Tamil Nadu. " +
-    "I can check station health, run forecasts, show pipeline metrics, " +
-    "and explain the architecture. Enter a phone number to access " +
-    "personalized farmer services.",
+    "Welcome! I can explain any part of this AI weather pipeline, show you live data, " +
+    "or walk you through the architecture. Try asking: 'How does NeuralGCM work?', " +
+    "'Show me the latest forecast for Chennai', or 'What's the tech stack?'",
 }
 
 export function ChatWidget() {

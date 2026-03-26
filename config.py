@@ -3,6 +3,7 @@
 from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Dict, List
+import json
 import os
 from dotenv import load_dotenv
 
@@ -79,10 +80,12 @@ class PipelineConfig:
 
 
 # ---------------------------------------------------------------------------
-# Station registry
+# Station registry — loaded from stations.json (fallback to hardcoded)
 # ---------------------------------------------------------------------------
 
-STATIONS: List[StationConfig] = [
+_STATIONS_JSON = os.path.join(os.path.dirname(os.path.abspath(__file__)), "stations.json")
+
+_HARDCODED_STATIONS: List[StationConfig] = [
     # Kerala — coastal
     StationConfig("KL_TVM", "Thiruvananthapuram", 8.4833, 76.9500, 60,  "Kerala",
                   "coconut, rubber, banana, tapioca, pepper", "ml", "43371"),
@@ -133,6 +136,34 @@ STATIONS: List[StationConfig] = [
     StationConfig("TN_NGP", "Nagappattinam",     10.7667, 79.8500, 2,   "Tamil Nadu",
                   "rice (paddy), pulses (black gram), coconut, banana", "ta", "43347"),
 ]
+
+
+def _load_stations() -> List[StationConfig]:
+    """Load stations from stations.json if it exists, otherwise use hardcoded list."""
+    if os.path.exists(_STATIONS_JSON):
+        try:
+            with open(_STATIONS_JSON) as f:
+                data = json.load(f)
+            return [
+                StationConfig(
+                    station_id=s["station_id"],
+                    name=s["name"],
+                    lat=s["lat"],
+                    lon=s["lon"],
+                    altitude_m=s["altitude_m"],
+                    state=s["state"],
+                    crop_context=s["crop_context"],
+                    language=s["language"],
+                    imd_id=s.get("imd_id", ""),
+                )
+                for s in data
+            ]
+        except Exception:
+            pass  # Fall through to hardcoded
+    return list(_HARDCODED_STATIONS)
+
+
+STATIONS: List[StationConfig] = _load_stations()
 
 STATION_MAP = {s.station_id: s for s in STATIONS}
 

@@ -404,12 +404,13 @@ def get_eval_results(request: Request, user: User = Depends(get_current_user)):
 def get_conversation_log(request: Request, limit: int = Query(50, le=500),
                          user: User = Depends(get_current_user)):
     """Recent conversation log entries."""
-    from src.database._util import _rows_to_dicts
-    with _get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM conversation_log ORDER BY created_at DESC LIMIT %s", [limit]
-        ).fetchall()
-        return _rows_to_dicts(conn, rows)
+    try:
+        from src.database._util import _rows_to_dicts
+        with _get_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM conversation_log ORDER BY created_at DESC LIMIT %s", [limit]
+            ).fetchall()
+            return _rows_to_dicts(conn, rows)
     except Exception:
         return []
 
@@ -423,12 +424,13 @@ def get_conversation_log(request: Request, limit: int = Query(50, le=500),
 def get_delivery_metrics(request: Request, limit: int = Query(200, le=500),
                          user: User = Depends(get_current_user)):
     """Delivery metrics per station per run."""
-    from src.database._util import _rows_to_dicts
-    with _get_conn() as conn:
-        rows = conn.execute(
-            "SELECT * FROM delivery_metrics ORDER BY created_at DESC LIMIT %s", [limit]
-        ).fetchall()
-        return _rows_to_dicts(conn, rows)
+    try:
+        from src.database._util import _rows_to_dicts
+        with _get_conn() as conn:
+            rows = conn.execute(
+                "SELECT * FROM delivery_metrics ORDER BY created_at DESC LIMIT %s", [limit]
+            ).fetchall()
+            return _rows_to_dicts(conn, rows)
     except Exception:
         return []
 
@@ -488,6 +490,36 @@ def chat_message(request: Request, payload: dict,
         return {"response": "Chat requires the anthropic package."}
     except Exception as exc:
         return {"response": f"Sorry, I couldn't process that: {str(exc)[:200]}"}
+
+
+# ---------------------------------------------------------------------------
+# Mini demo (public — no auth, no API keys)
+# ---------------------------------------------------------------------------
+
+@app.post("/api/demo/run")
+@limiter.limit("5/minute")
+async def run_mini_demo(request: Request):
+    """Run a mini demo: synthetic ingest + rule-based heal. No API keys needed."""
+    from config import STATIONS, FaultInjectionConfig
+    from src.ingestion import generate_synthetic_reading
+    from src.healing import RuleBasedFallback
+
+    fault_config = FaultInjectionConfig(
+        typo_rate=0.25, offline_rate=0.25, drift_rate=0.25, missing_rate=0.25,
+    )
+    healer = RuleBasedFallback()
+    results = []
+    for station in STATIONS[:3]:
+        reading = generate_synthetic_reading(station, fault_config)
+        healed = healer.heal(reading)
+        results.append({
+            "raw": reading,
+            "healed": healed,
+            "station": station.name,
+            "fault_injected": reading.get("fault_type"),
+        })
+
+    return {"demo": True, "stations_used": 3, "results": results}
 
 
 # ---------------------------------------------------------------------------

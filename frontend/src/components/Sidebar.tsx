@@ -1,6 +1,7 @@
 import { NavLink } from 'react-router-dom'
 import {
   Home,
+  BookOpen,
   Database,
   CloudSun,
   Wheat,
@@ -10,6 +11,7 @@ import {
 
 const NAV_ITEMS = [
   { to: '/', label: 'Home', icon: Home },
+  { to: '/how-it-works', label: 'How It Works', icon: BookOpen },
   { to: '/stations', label: 'Data', icon: Database },
   { to: '/forecasts', label: 'Forecasts', icon: CloudSun },
   { to: '/advisories', label: 'Advisories', icon: Wheat },
