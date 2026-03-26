@@ -42,9 +42,8 @@ export async function apiFetch<T>(
     headers,
   })
 
+  // Auth disabled for portfolio demo — don't redirect on 401
   if (response.status === 401) {
-    clearToken()
-    window.location.href = '/login'
     throw new ApiError('Unauthorized', 401)
   }
 
