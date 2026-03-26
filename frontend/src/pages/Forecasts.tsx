@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useForecasts, useStations } from '../api/hooks'
+import { useForecasts, useStations, useFarmers } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { PageLoader } from '../components/LoadingSpinner'
 
@@ -388,7 +388,7 @@ export default function Forecasts() {
         </div>
       )}
 
-      {activeTab === 2 && <DownscalingTab stations={stations?.data} forecasts={allForecasts} />}
+      {activeTab === 2 && <DownscalingTab stations={stations ?? []} forecasts={allForecasts} />}
     </div>
   )
 }
@@ -480,7 +480,7 @@ function DownscalingTab({ stations, forecasts }: {
                   <td>{s.state}</td>
                 </tr>
               ))}
-              {farmerList.slice(0, 8).map(f => (
+              {farmerList.slice(0, 8).map((f: any) => (
                 <tr key={f.phone}>
                   <td>
                     <span style={{
