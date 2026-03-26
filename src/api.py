@@ -142,7 +142,7 @@ def register(request: Request, username: str, password: str, role: str = "viewer
 
 @app.get("/api/stations")
 @limiter.limit("60/minute")
-def list_stations(request: Request, user: User = Depends(get_current_user)):
+def list_stations(request: Request, ):
     """List all 20 weather stations."""
     from config import STATIONS
     return [
@@ -156,7 +156,7 @@ def list_stations(request: Request, user: User = Depends(get_current_user)):
 @limiter.limit("60/minute")
 def get_forecasts(request: Request, limit: int = Query(50, le=500),
                   forecast_day: int = Query(None, ge=0, le=6),
-                  user: User = Depends(get_current_user)):
+                  ):
     """Recent forecasts across all stations. Optional forecast_day filter (0-6)."""
     from src.database import get_recent_forecasts
     with _get_conn() as conn:
@@ -169,7 +169,7 @@ def get_forecasts(request: Request, limit: int = Query(50, le=500),
 @app.get("/api/alerts")
 @limiter.limit("60/minute")
 def get_alerts(request: Request, limit: int = Query(50, le=200),
-               user: User = Depends(get_current_user)):
+               ):
     """Recent agricultural alerts / advisories."""
     from src.database import get_recent_alerts
     with _get_conn() as conn:
@@ -179,7 +179,7 @@ def get_alerts(request: Request, limit: int = Query(50, le=200),
 @app.get("/api/station/{station_id}/latest")
 @limiter.limit("60/minute")
 def station_latest(request: Request, station_id: str,
-                   user: User = Depends(get_current_user)):
+                   ):
     """Latest clean telemetry for a station."""
     from src.database import get_latest_clean_for_station
     with _get_conn() as conn:
@@ -192,7 +192,7 @@ def station_latest(request: Request, station_id: str,
 @app.get("/api/pipeline/runs")
 @limiter.limit("60/minute")
 def pipeline_runs(request: Request, limit: int = Query(10, le=50),
-                  user: User = Depends(get_current_user)):
+                  ):
     """Recent pipeline run history."""
     from src.database._util import _rows_to_dicts
     with _get_conn() as conn:
@@ -209,7 +209,7 @@ def pipeline_runs(request: Request, limit: int = Query(10, le=50),
 @app.get("/api/telemetry/raw")
 @limiter.limit("60/minute")
 def get_raw_telemetry(request: Request, limit: int = Query(200, le=500),
-                      user: User = Depends(get_current_user)):
+                      ):
     """Recent raw telemetry readings."""
     from src.database._util import _rows_to_dicts
     with _get_conn() as conn:
@@ -222,7 +222,7 @@ def get_raw_telemetry(request: Request, limit: int = Query(200, le=500),
 @app.get("/api/telemetry/clean")
 @limiter.limit("60/minute")
 def get_clean_telemetry(request: Request, limit: int = Query(200, le=500),
-                        user: User = Depends(get_current_user)):
+                        ):
     """Recent clean (healed) telemetry readings."""
     from src.database._util import _rows_to_dicts
     with _get_conn() as conn:
@@ -239,7 +239,7 @@ def get_clean_telemetry(request: Request, limit: int = Query(200, le=500),
 @app.get("/api/delivery/log")
 @limiter.limit("60/minute")
 def get_delivery_log(request: Request, limit: int = Query(100, le=500),
-                     user: User = Depends(get_current_user)):
+                     ):
     """Recent delivery log entries."""
     from src.database._util import _rows_to_dicts
     with _get_conn() as conn:
@@ -252,7 +252,7 @@ def get_delivery_log(request: Request, limit: int = Query(100, le=500),
 @app.get("/api/healing/log")
 @limiter.limit("60/minute")
 def get_healing_log(request: Request, limit: int = Query(100, le=500),
-                    user: User = Depends(get_current_user)):
+                    ):
     """Recent healing log entries."""
     from src.database._util import _rows_to_dicts
     with _get_conn() as conn:
@@ -264,7 +264,7 @@ def get_healing_log(request: Request, limit: int = Query(100, le=500),
 
 @app.get("/api/healing/stats")
 @limiter.limit("60/minute")
-def get_healing_stats(request: Request, user: User = Depends(get_current_user)):
+def get_healing_stats(request: Request, ):
     """Healing assessment distribution, tool usage counts, and latest run info."""
     from src.database.healing import get_healing_stats as _get_healing_stats
     with _get_conn() as conn:
@@ -277,7 +277,7 @@ def get_healing_stats(request: Request, user: User = Depends(get_current_user)):
 
 @app.get("/api/pipeline/stats")
 @limiter.limit("60/minute")
-def get_pipeline_stats(request: Request, user: User = Depends(get_current_user)):
+def get_pipeline_stats(request: Request, ):
     """Row counts from each major table for dashboard overview."""
     with _get_conn() as conn:
         tables = [
@@ -294,7 +294,7 @@ def get_pipeline_stats(request: Request, user: User = Depends(get_current_user))
 
 @app.get("/api/sources")
 @limiter.limit("60/minute")
-def get_data_sources(request: Request, user: User = Depends(get_current_user)):
+def get_data_sources(request: Request, ):
     """Data source distribution from raw_telemetry."""
     from src.database._util import _rows_to_dicts
     with _get_conn() as conn:
@@ -310,7 +310,7 @@ def get_data_sources(request: Request, user: User = Depends(get_current_user)):
 
 @app.get("/api/farmers")
 @limiter.limit("60/minute")
-def list_farmers(request: Request, user: User = Depends(get_current_user)):
+def list_farmers(request: Request, ):
     """List all simulated farmers."""
     try:
         from src.dpi.simulator import get_registry
@@ -321,7 +321,7 @@ def list_farmers(request: Request, user: User = Depends(get_current_user)):
 
 @app.get("/api/farmers/{phone}")
 @limiter.limit("60/minute")
-def get_farmer_detail(request: Request, phone: str, user: User = Depends(get_current_user)):
+def get_farmer_detail(request: Request, phone: str, ):
     """Get full DPI profile for a farmer by phone number."""
     from src.dpi.simulator import get_registry
     profile = get_registry().lookup_by_phone(phone)
@@ -382,7 +382,7 @@ def get_farmer_detail(request: Request, phone: str, user: User = Depends(get_cur
 
 @app.get("/api/evals")
 @limiter.limit("60/minute")
-def get_eval_results(request: Request, user: User = Depends(get_current_user)):
+def get_eval_results(request: Request, ):
     """Load eval results from JSON files in tests/eval_results/."""
     results_dir = os.path.join(os.path.dirname(__file__), "..", "tests", "eval_results")
     results = {}
@@ -404,7 +404,7 @@ def get_eval_results(request: Request, user: User = Depends(get_current_user)):
 @app.get("/api/conversation/log")
 @limiter.limit("60/minute")
 def get_conversation_log(request: Request, limit: int = Query(50, le=500),
-                         user: User = Depends(get_current_user)):
+                         ):
     """Recent conversation log entries."""
     try:
         from src.database._util import _rows_to_dicts
@@ -424,7 +424,7 @@ def get_conversation_log(request: Request, limit: int = Query(50, le=500),
 @app.get("/api/delivery/metrics")
 @limiter.limit("60/minute")
 def get_delivery_metrics(request: Request, limit: int = Query(200, le=500),
-                         user: User = Depends(get_current_user)):
+                         ):
     """Delivery metrics per station per run."""
     try:
         from src.database._util import _rows_to_dicts
@@ -444,7 +444,7 @@ def get_delivery_metrics(request: Request, limit: int = Query(200, le=500),
 @app.post("/api/chat")
 @limiter.limit("20/minute")
 def chat_message(request: Request, payload: dict,
-                 user: User = Depends(get_current_user)):
+                 ):
     """Send a chat message and get a response from Claude."""
     message = payload.get("message", "")
     history = payload.get("history", [])
