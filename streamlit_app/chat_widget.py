@@ -146,17 +146,14 @@ def _render_chat_panel():
                 {"role": m["role"], "content": m["content"]}
                 for m in st.session_state.chat_messages[:-1]
             ]
-            from streamlit_app.data_helpers import DB_PATH
-
             if st.session_state.agent_mode == "conversational":
                 from src.conversation import ConversationalAgent
-                agent = ConversationalAgent(config, db_path=DB_PATH)
+                agent = ConversationalAgent(config)
                 if st.session_state.farmer_phone:
                     asyncio.run(agent.identify(st.session_state.farmer_phone))
                 response = agent.chat(
                     user_input, history,
                     session_id=st.session_state.chat_session_id,
-                    db_path=DB_PATH,
                 )
             else:
                 from src.nl_agent import NLAgent
@@ -164,7 +161,6 @@ def _render_chat_panel():
                 response = agent.chat(
                     user_input, history,
                     session_id=st.session_state.chat_session_id,
-                    db_path=DB_PATH,
                 )
             st.session_state.chat_messages.append(
                 {"role": "assistant", "content": response}

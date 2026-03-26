@@ -9,13 +9,11 @@ import json
 import logging
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn
-from rich.table   import Table
 
-from config import PipelineConfig, STATIONS, STATION_MAP, StationConfig
+from config import PipelineConfig, STATIONS, STATION_MAP
 from src.database import (init_db, insert_clean_telemetry, insert_forecast,
                             insert_alert, insert_delivery_log,
                             insert_delivery_metrics,
@@ -30,7 +28,7 @@ from src.forecasting     import create_forecast_model, PersistenceModel, run_for
 from src.downscaling     import IDWDownscaler
 from src.translation     import get_provider, generate_advisory
 from src.delivery        import MultiChannelDelivery, DEFAULT_RECIPIENTS, DeliveryChannel, Recipient
-from src.models          import RawReading, CleanReading, Forecast, Advisory, DeliveryLog
+from src.models          import RawReading, CleanReading, Forecast
 from src.neuralgcm_client import NeuralGCMClient, is_neuralgcm_available
 
 log = logging.getLogger(__name__)

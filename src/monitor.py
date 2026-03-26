@@ -8,7 +8,7 @@ from typing import Any, Dict, List
 from rich.console import Console
 from rich.table   import Table
 
-from config import STATIONS, STATION_MAP
+from config import STATIONS
 from src.database import get_station_health
 
 log     = logging.getLogger(__name__)

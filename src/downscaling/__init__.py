@@ -8,7 +8,7 @@ import logging
 from typing import Any, Dict, Optional
 
 from src.downscaling.grid_fetcher import fetch_nasa_grid
-from src.downscaling.interpolation import idw_interpolate, apply_lapse_rate
+from src.downscaling.interpolation import idw_interpolate
 from src.forecasting import classify_condition
 
 log = logging.getLogger(__name__)
