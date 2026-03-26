@@ -512,6 +512,33 @@ async def receive_webhook(request: Request, payload: dict):
     return {"status": "received"}
 
 
+@app.post("/api/pipeline/trigger")
+@limiter.limit("2/minute")
+async def trigger_pipeline(request: Request):
+    """Trigger a full pipeline run in a background thread. Webhook-secret protected."""
+    if WEBHOOK_SECRET:
+        token = request.headers.get("X-Webhook-Secret", "")
+        if token != WEBHOOK_SECRET:
+            raise HTTPException(status_code=403, detail="Invalid webhook secret")
+    import threading
+    run_id = str(uuid.uuid4())
+
+    def _run():
+        import asyncio
+        from config import get_config
+        from src.pipeline import WeatherPipeline
+        try:
+            config = get_config()
+            pipeline = WeatherPipeline(config)
+            asyncio.run(pipeline.run())
+        except Exception as exc:
+            logging.getLogger(__name__).error("Triggered pipeline failed: %s", exc)
+
+    thread = threading.Thread(target=_run, daemon=True)
+    thread.start()
+    return {"status": "triggered", "run_id": run_id}
+
+
 @app.get("/webhook/history")
 @limiter.limit("30/minute")
 async def webhook_history(request: Request):

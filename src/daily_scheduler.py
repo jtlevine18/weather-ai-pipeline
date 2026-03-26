@@ -52,9 +52,9 @@ def _run_pipeline() -> None:
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         result = loop.run_until_complete(pipeline.run())
-        log.info("Daily scheduled run complete: %s", result.get("status"))
+        log.info("Weekly scheduled run complete: %s", result.get("status"))
     except Exception as exc:
-        log.error("Daily scheduled run failed: %s", exc)
+        log.error("Weekly scheduled run failed: %s", exc)
     finally:
         try:
             loop.close()
@@ -79,13 +79,13 @@ def start() -> bool:
             _scheduler = BackgroundScheduler(daemon=True)
             _scheduler.add_job(
                 _run_pipeline,
-                CronTrigger(hour=0, minute=30),  # 00:30 UTC = 06:00 IST
-                id="daily_pipeline",
+                CronTrigger(day_of_week='mon', hour=0, minute=30),  # Monday 00:30 UTC = 06:00 IST
+                id="weekly_pipeline",
                 replace_existing=True,
             )
             _scheduler.start()
             _write_state(True)
-            log.info("Daily scheduler started (06:00 IST / 00:30 UTC)")
+            log.info("Weekly scheduler started (Monday 06:00 IST / 00:30 UTC)")
             return True
         except ImportError:
             log.warning("apscheduler not installed — daily scheduler unavailable")

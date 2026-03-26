@@ -1,0 +1,43 @@
+name: Weekly Pipeline Run
+
+on:
+  schedule:
+    - cron: '30 0 * * 1'  # Monday 00:30 UTC = 06:00 IST
+  workflow_dispatch: {}    # Manual trigger from GitHub UI
+
+jobs:
+  trigger-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Wake Pipeline Space
+        run: |
+          echo "Restarting Pipeline Space..."
+          curl -s -X POST \
+            "https://huggingface.co/api/spaces/${{ secrets.HF_PIPELINE_SPACE }}/restart" \
+            -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" \
+            || true
+          echo "Waiting for Space to boot..."
+          sleep 60
+
+      - name: Wait for pipeline completion
+        run: |
+          MAX_WAIT=1200  # 20 minutes
+          ELAPSED=0
+          INTERVAL=30
+          while [ $ELAPSED -lt $MAX_WAIT ]; do
+            STATUS=$(curl -s "https://${{ secrets.HF_PIPELINE_SPACE_URL }}/health" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('state','unknown'))" 2>/dev/null || echo "unreachable")
+            echo "[$ELAPSED s] Pipeline status: $STATUS"
+            if [ "$STATUS" = "complete" ]; then
+              echo "Pipeline completed successfully!"
+              exit 0
+            fi
+            if [ "$STATUS" = "failed" ]; then
+              echo "Pipeline failed!"
+              exit 1
+            fi
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+          done
+          echo "Timed out waiting for pipeline"
+          exit 1

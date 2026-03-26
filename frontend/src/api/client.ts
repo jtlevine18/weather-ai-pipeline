@@ -1,3 +1,4 @@
+const API_BASE = import.meta.env.VITE_API_URL || ''
 const TOKEN_KEY = 'weather_jwt'
 
 export function getToken(): string | null {
@@ -36,7 +37,7 @@ export async function apiFetch<T>(
     headers['Authorization'] = `Bearer ${token}`
   }
 
-  const response = await fetch(url, {
+  const response = await fetch(`${API_BASE}${url}`, {
     ...options,
     headers,
   })
@@ -68,7 +69,7 @@ export async function loginRequest(
 ): Promise<{ access_token: string; token_type: string }> {
   const body = new URLSearchParams({ username, password })
 
-  const response = await fetch('/auth/token', {
+  const response = await fetch(`${API_BASE}/auth/token`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
     body,
