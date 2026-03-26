@@ -103,32 +103,14 @@ export default function Dashboard() {
 
   const [selectedStation, setSelectedStation] = useState('')
 
-  const isLoading = stations.isLoading && forecasts.isLoading && pipelineStats.isLoading
-  if (isLoading) return <PageLoader label="Loading dashboard..." />
-
   const stationList = stations.data ?? []
   const forecastList = forecasts.data ?? []
   const alertList = alerts.data ?? []
   const runList = runs.data ?? []
   const deliveryCount = deliveries.data?.length ?? 0
-  const okRuns = runList.filter(
-    (r) => r.status === 'ok' || r.status === 'success' || r.status === 'completed',
-  ).length
-
-  // Avg quality from clean telemetry
   const cleanData = clean.data ?? []
-  const avgQuality =
-    cleanData.length > 0
-      ? cleanData.reduce((sum, r) => sum + (r.quality_score ?? 0), 0) / cleanData.length
-      : 0
 
-  // Last pipeline run
-  const lastRun = runList.length > 0 ? runList[0] : undefined
-  const lastRunDate = lastRun?.started_at
-  const daysAgo = daysSince(lastRunDate)
-  const isRecent = daysAgo < 7
-
-  // Filtered forecasts/alerts for selected station
+  // All hooks must be above any early return
   const stationForecasts = useMemo(() => {
     if (!selectedStation) return []
     return forecastList
@@ -141,6 +123,21 @@ export default function Dashboard() {
     if (!selectedStation) return null
     return alertList.find((a) => a.station_id === selectedStation) ?? null
   }, [selectedStation, alertList])
+
+  const isLoading = stations.isLoading && forecasts.isLoading && pipelineStats.isLoading
+  if (isLoading) return <PageLoader label="Loading dashboard..." />
+
+  const okRuns = runList.filter(
+    (r) => r.status === 'ok' || r.status === 'success' || r.status === 'completed',
+  ).length
+  const avgQuality =
+    cleanData.length > 0
+      ? cleanData.reduce((sum, r) => sum + (r.quality_score ?? 0), 0) / cleanData.length
+      : 0
+  const lastRun = runList.length > 0 ? runList[0] : undefined
+  const lastRunDate = lastRun?.started_at
+  const daysAgo = daysSince(lastRunDate)
+  const isRecent = daysAgo < 7
 
   return (
     <div className="space-y-8">
