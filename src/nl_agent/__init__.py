@@ -59,9 +59,10 @@ TOOLS = [
 
 def _execute_tool(tool_name: str, tool_input: Dict[str, Any],
                    config) -> str:
-    from src.database import init_db, get_recent_forecasts, get_recent_alerts
+    from src.database import get_recent_forecasts, get_recent_alerts
     from src.monitor  import StationMonitor
     from src.architecture import get_architecture_text
+    from src.database._util import PgConnection, get_database_url
 
     if tool_name == "get_architecture":
         return get_architecture_text()
@@ -71,9 +72,8 @@ def _execute_tool(tool_name: str, tool_input: Dict[str, Any],
         statuses = monitor.check_all()
         return json.dumps(statuses, default=str, indent=2)
 
-    conn = init_db()
-    try:
-        if tool_name == "query_forecasts":
+    if tool_name == "query_forecasts":
+        with PgConnection(get_database_url()) as conn:
             sid   = tool_input.get("station_id", "all")
             limit = tool_input.get("limit", 10)
             rows  = get_recent_forecasts(conn, limit=50)
@@ -81,15 +81,14 @@ def _execute_tool(tool_name: str, tool_input: Dict[str, Any],
                 rows = [r for r in rows if r.get("station_id") == sid]
             return json.dumps(rows[:limit], default=str, indent=2)
 
-        if tool_name == "query_alerts":
+    if tool_name == "query_alerts":
+        with PgConnection(get_database_url()) as conn:
             sid   = tool_input.get("station_id", "all")
             limit = tool_input.get("limit", 5)
             rows  = get_recent_alerts(conn, limit=50)
             if sid != "all":
                 rows = [r for r in rows if r.get("station_id") == sid]
             return json.dumps(rows[:limit], default=str, indent=2)
-    finally:
-        conn.close()
 
     if tool_name == "run_pipeline":
         import asyncio
@@ -115,9 +114,9 @@ class NLAgent:
                     tokens_out: Optional[int] = None,
                     latency_ms: Optional[int] = None) -> None:
         try:
-            from src.database import init_db, insert_conversation_log
-            conn = init_db()
-            try:
+            from src.database import insert_conversation_log
+            from src.database._util import PgConnection, get_database_url
+            with PgConnection(get_database_url()) as conn:
                 insert_conversation_log(conn, {
                     "id": str(uuid.uuid4()),
                     "session_id": session_id,
@@ -129,8 +128,6 @@ class NLAgent:
                     "tokens_out": tokens_out,
                     "latency_ms": latency_ms,
                 })
-            finally:
-                conn.close()
         except Exception as exc:
             log.debug("Conversation logging failed: %s", exc)
 

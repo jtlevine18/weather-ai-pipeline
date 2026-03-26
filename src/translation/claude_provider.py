@@ -22,10 +22,10 @@ class ClaudeProvider:
     def _get_client(self):
         if self._client is None:
             import anthropic
-            self._client = anthropic.Anthropic(api_key=self.api_key)
+            self._client = anthropic.AsyncAnthropic(api_key=self.api_key)
         return self._client
 
-    def generate_advisory(
+    async def generate_advisory(
         self,
         forecast: Dict[str, Any],
         station,
@@ -68,7 +68,7 @@ class ClaudeProvider:
             )
 
         client  = self._get_client()
-        msg     = client.messages.create(
+        msg     = await client.messages.create(
             model=self.config.model,
             max_tokens=400,
             system=system,

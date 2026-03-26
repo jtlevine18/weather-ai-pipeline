@@ -108,45 +108,45 @@ class DPIAgent:
 
     def _load_cached_profile(self, phone: str) -> Optional[FarmerProfile]:
         try:
-            from src.database import init_db
-            conn = init_db()
-            row = conn.execute(
-                "SELECT profile_json, cached_at FROM farmer_profiles WHERE phone = ?",
-                [phone],
-            ).fetchone()
-            if row is None:
-                return None
-            profile_json, cached_at = row
-            if isinstance(cached_at, str):
-                cached_dt = datetime.fromisoformat(cached_at)
-            else:
-                cached_dt = cached_at
-            if datetime.utcnow() - cached_dt > timedelta(hours=PROFILE_STALE_HOURS):
-                return None
-            return _dict_to_profile(json.loads(profile_json))
+            from src.database._util import PgConnection, get_database_url
+            with PgConnection(get_database_url()) as conn:
+                row = conn.execute(
+                    "SELECT profile_json, cached_at FROM farmer_profiles WHERE phone = %s",
+                    [phone],
+                ).fetchone()
+                if row is None:
+                    return None
+                profile_json, cached_at = row
+                if isinstance(cached_at, str):
+                    cached_dt = datetime.fromisoformat(cached_at)
+                else:
+                    cached_dt = cached_at
+                if datetime.utcnow() - cached_dt > timedelta(hours=PROFILE_STALE_HOURS):
+                    return None
+                return _dict_to_profile(json.loads(profile_json))
         except Exception as exc:
             log.debug("Cache load failed: %s", exc)
             return None
 
     def _cache_profile(self, profile: FarmerProfile) -> None:
         try:
-            from src.database import init_db
-            conn = init_db()
-            d = _profile_to_dict(profile)
-            conn.execute(
-                """INSERT INTO farmer_profiles
-                   (id, aadhaar_id, phone, name, district, station_id,
-                    primary_crops, total_area, profile_json, cached_at)
-                   VALUES (?,?,?,?,?,?,?,?,?,?)
-                   ON CONFLICT (id) DO NOTHING""",
-                [str(uuid.uuid4()), profile.aadhaar.aadhaar_id, profile.aadhaar.phone,
-                 profile.aadhaar.name, profile.aadhaar.district,
-                 profile.nearest_stations[0] if profile.nearest_stations else "",
-                 json.dumps(profile.primary_crops),
-                 profile.total_area,
-                 json.dumps(d, default=str),
-                 datetime.utcnow().isoformat()],
-            )
+            from src.database._util import PgConnection, get_database_url
+            with PgConnection(get_database_url()) as conn:
+                d = _profile_to_dict(profile)
+                conn.execute(
+                    """INSERT INTO farmer_profiles
+                       (id, aadhaar_id, phone, name, district, station_id,
+                        primary_crops, total_area, profile_json, cached_at)
+                       VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+                       ON CONFLICT (id) DO NOTHING""",
+                    [str(uuid.uuid4()), profile.aadhaar.aadhaar_id, profile.aadhaar.phone,
+                     profile.aadhaar.name, profile.aadhaar.district,
+                     profile.nearest_stations[0] if profile.nearest_stations else "",
+                     json.dumps(profile.primary_crops),
+                     profile.total_area,
+                     json.dumps(d, default=str),
+                     datetime.utcnow().isoformat()],
+                )
         except Exception as exc:
             log.debug("Cache write failed: %s", exc)
 

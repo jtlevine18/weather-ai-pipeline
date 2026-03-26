@@ -94,8 +94,7 @@ def health():
 @limiter.limit("5/minute")
 def login(request: Request, username: str = Form(...), password: str = Form(...)):
     """Exchange username + password for a JWT token."""
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         row = conn.execute(
             "SELECT id, password_hash, role FROM users WHERE username = %s",
             [username],
@@ -104,16 +103,13 @@ def login(request: Request, username: str = Form(...), password: str = Form(...)
             raise HTTPException(status_code=401, detail="Invalid credentials")
         token = create_token(username, row[2])
         return {"access_token": token, "token_type": "bearer", "role": row[2]}
-    finally:
-        conn.close()
 
 
 @app.post("/auth/bootstrap", status_code=201)
 @limiter.limit("3/minute")
 def bootstrap_admin(request: Request, username: str, password: str):
     """Create the first admin user. Only works when no users exist yet."""
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         count = conn.execute("SELECT COUNT(*) FROM users").fetchone()[0]
         if count > 0:
             raise HTTPException(status_code=409, detail="Users already exist — use /auth/token")
@@ -123,8 +119,6 @@ def bootstrap_admin(request: Request, username: str, password: str):
         )
         token = create_token(username, "operator")
         return {"access_token": token, "token_type": "bearer", "role": "operator"}
-    finally:
-        conn.close()
 
 
 @app.post("/auth/register", status_code=201)
@@ -132,15 +126,12 @@ def bootstrap_admin(request: Request, username: str, password: str):
 def register(request: Request, username: str, password: str, role: str = "viewer",
              operator: User = Depends(require_operator)):
     """Create a new user (operator-only)."""
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         conn.execute(
             "INSERT INTO users (id, username, password_hash, role) VALUES (%s,%s,%s,%s)",
             [str(uuid.uuid4()), username, hash_password(password), role],
         )
         return {"username": username, "role": role}
-    finally:
-        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -166,14 +157,11 @@ def get_forecasts(request: Request, limit: int = Query(50, le=500),
                   user: User = Depends(get_current_user)):
     """Recent forecasts across all stations. Optional forecast_day filter (0-6)."""
     from src.database import get_recent_forecasts
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         results = get_recent_forecasts(conn, limit=limit)
         if forecast_day is not None:
             results = [r for r in results if r.get("forecast_day", 0) == forecast_day]
         return results
-    finally:
-        conn.close()
 
 
 @app.get("/api/alerts")
@@ -182,11 +170,8 @@ def get_alerts(request: Request, limit: int = Query(50, le=200),
                user: User = Depends(get_current_user)):
     """Recent agricultural alerts / advisories."""
     from src.database import get_recent_alerts
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         return get_recent_alerts(conn, limit=limit)
-    finally:
-        conn.close()
 
 
 @app.get("/api/station/{station_id}/latest")
@@ -195,14 +180,11 @@ def station_latest(request: Request, station_id: str,
                    user: User = Depends(get_current_user)):
     """Latest clean telemetry for a station."""
     from src.database import get_latest_clean_for_station
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         result = get_latest_clean_for_station(conn, station_id)
         if result is None:
             raise HTTPException(status_code=404, detail=f"No data for {station_id}")
         return result
-    finally:
-        conn.close()
 
 
 @app.get("/api/pipeline/runs")
@@ -211,14 +193,11 @@ def pipeline_runs(request: Request, limit: int = Query(10, le=50),
                   user: User = Depends(get_current_user)):
     """Recent pipeline run history."""
     from src.database._util import _rows_to_dicts
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM pipeline_runs ORDER BY started_at DESC LIMIT %s", [limit]
         ).fetchall()
         return _rows_to_dicts(conn, rows)
-    finally:
-        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -231,14 +210,11 @@ def get_raw_telemetry(request: Request, limit: int = Query(200, le=500),
                       user: User = Depends(get_current_user)):
     """Recent raw telemetry readings."""
     from src.database._util import _rows_to_dicts
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM raw_telemetry ORDER BY ts DESC LIMIT %s", [limit]
         ).fetchall()
         return _rows_to_dicts(conn, rows)
-    finally:
-        conn.close()
 
 
 @app.get("/api/telemetry/clean")
@@ -247,14 +223,11 @@ def get_clean_telemetry(request: Request, limit: int = Query(200, le=500),
                         user: User = Depends(get_current_user)):
     """Recent clean (healed) telemetry readings."""
     from src.database._util import _rows_to_dicts
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM clean_telemetry ORDER BY ts DESC LIMIT %s", [limit]
         ).fetchall()
         return _rows_to_dicts(conn, rows)
-    finally:
-        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -267,14 +240,11 @@ def get_delivery_log(request: Request, limit: int = Query(100, le=500),
                      user: User = Depends(get_current_user)):
     """Recent delivery log entries."""
     from src.database._util import _rows_to_dicts
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM delivery_log ORDER BY delivered_at DESC LIMIT %s", [limit]
         ).fetchall()
         return _rows_to_dicts(conn, rows)
-    finally:
-        conn.close()
 
 
 @app.get("/api/healing/log")
@@ -283,14 +253,11 @@ def get_healing_log(request: Request, limit: int = Query(100, le=500),
                     user: User = Depends(get_current_user)):
     """Recent healing log entries."""
     from src.database._util import _rows_to_dicts
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM healing_log ORDER BY created_at DESC LIMIT %s", [limit]
         ).fetchall()
         return _rows_to_dicts(conn, rows)
-    finally:
-        conn.close()
 
 
 @app.get("/api/healing/stats")
@@ -298,11 +265,8 @@ def get_healing_log(request: Request, limit: int = Query(100, le=500),
 def get_healing_stats(request: Request, user: User = Depends(get_current_user)):
     """Healing assessment distribution, tool usage counts, and latest run info."""
     from src.database.healing import get_healing_stats as _get_healing_stats
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         return _get_healing_stats(conn)
-    finally:
-        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -313,8 +277,7 @@ def get_healing_stats(request: Request, user: User = Depends(get_current_user)):
 @limiter.limit("60/minute")
 def get_pipeline_stats(request: Request, user: User = Depends(get_current_user)):
     """Row counts from each major table for dashboard overview."""
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         tables = [
             "raw_telemetry", "clean_telemetry", "healing_log",
             "forecasts", "agricultural_alerts", "delivery_log",
@@ -325,8 +288,6 @@ def get_pipeline_stats(request: Request, user: User = Depends(get_current_user))
             row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
             counts[table] = row[0] if row else 0
         return counts
-    finally:
-        conn.close()
 
 
 @app.get("/api/sources")
@@ -334,14 +295,11 @@ def get_pipeline_stats(request: Request, user: User = Depends(get_current_user))
 def get_data_sources(request: Request, user: User = Depends(get_current_user)):
     """Data source distribution from raw_telemetry."""
     from src.database._util import _rows_to_dicts
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         rows = conn.execute(
             "SELECT source, COUNT(*) AS count FROM raw_telemetry GROUP BY source"
         ).fetchall()
         return _rows_to_dicts(conn, rows)
-    finally:
-        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -447,16 +405,13 @@ def get_conversation_log(request: Request, limit: int = Query(50, le=500),
                          user: User = Depends(get_current_user)):
     """Recent conversation log entries."""
     from src.database._util import _rows_to_dicts
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM conversation_log ORDER BY created_at DESC LIMIT %s", [limit]
         ).fetchall()
         return _rows_to_dicts(conn, rows)
     except Exception:
         return []
-    finally:
-        conn.close()
 
 
 # ---------------------------------------------------------------------------
@@ -469,16 +424,13 @@ def get_delivery_metrics(request: Request, limit: int = Query(200, le=500),
                          user: User = Depends(get_current_user)):
     """Delivery metrics per station per run."""
     from src.database._util import _rows_to_dicts
-    conn = _get_conn()
-    try:
+    with _get_conn() as conn:
         rows = conn.execute(
             "SELECT * FROM delivery_metrics ORDER BY created_at DESC LIMIT %s", [limit]
         ).fetchall()
         return _rows_to_dicts(conn, rows)
     except Exception:
         return []
-    finally:
-        conn.close()
 
 
 # ---------------------------------------------------------------------------

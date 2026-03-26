@@ -68,7 +68,7 @@ async def generate_advisory(
         if api_key and config:
             try:
                 from src.translation.claude_provider import ClaudeProvider
-                result2 = ClaudeProvider(api_key=api_key, config=config).generate_advisory(fc_list[0], station)
+                result2 = await ClaudeProvider(api_key=api_key, config=config).generate_advisory(fc_list[0], station)
                 log.info("Claude-direct fallback succeeded for %s", station.station_id)
                 return result2
             except Exception as exc2:
