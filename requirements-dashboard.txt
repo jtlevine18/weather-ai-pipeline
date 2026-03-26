@@ -1,0 +1,32 @@
+# Lightweight requirements for the Dashboard Space (API + Streamlit only).
+# The Pipeline Runner Space uses the full requirements.txt.
+
+# Core
+python-dotenv==1.0.0
+httpx==0.27.0
+rich==13.0.0
+
+# API + Auth
+fastapi==0.111.0
+uvicorn==0.29.0
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.0
+slowapi==0.1.9
+prometheus-fastapi-instrumentator==7.0.0
+
+# Database
+psycopg2-binary==2.9.9
+
+# Data contracts
+pydantic==2.6.0
+
+# Dashboard
+streamlit==1.38.0
+pandas==2.2.2
+numpy==2.0.0
+
+# Claude API (for chat widget + mini demo healing)
+anthropic==0.34.0
+
+# Scheduling (backup weekly scheduler)
+apscheduler==3.10.0
