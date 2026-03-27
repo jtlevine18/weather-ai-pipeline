@@ -625,6 +625,43 @@ async def retrain_mos(request: Request):
     return {"status": "triggered"}
 
 
+@app.post("/api/pipeline/run-evals")
+@limiter.limit("2/minute")
+async def run_evals(request: Request):
+    """Trigger all 7 eval scripts in a background thread. Results saved to tests/eval_results/."""
+    import threading
+    import subprocess
+    import sys as _sys
+
+    eval_scripts = [
+        "tests/eval_healing.py",
+        "tests/eval_forecast.py",
+        "tests/eval_rag.py",
+        "tests/eval_advisory.py",
+        "tests/eval_translation.py",
+        "tests/eval_dpi.py",
+        "tests/eval_conversation.py",
+    ]
+
+    def _run_evals():
+        log = logging.getLogger(__name__)
+        for script in eval_scripts:
+            try:
+                subprocess.run(
+                    [_sys.executable, script],
+                    check=True, capture_output=True, text=True, timeout=120,
+                )
+                log.info("Eval passed: %s", script)
+            except subprocess.CalledProcessError as exc:
+                log.warning("Eval failed: %s — %s", script, (exc.stderr or exc.stdout or str(exc))[:300])
+            except subprocess.TimeoutExpired:
+                log.warning("Eval timed out: %s", script)
+
+    thread = threading.Thread(target=_run_evals, daemon=True)
+    thread.start()
+    return {"status": "triggered", "scripts": len(eval_scripts)}
+
+
 @app.get("/webhook/history")
 @limiter.limit("30/minute")
 async def webhook_history(request: Request):

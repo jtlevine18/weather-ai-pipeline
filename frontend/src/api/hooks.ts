@@ -411,3 +411,13 @@ export function useRetrainMos() {
     },
   })
 }
+
+export function useRunEvals() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<{ status: string; scripts: number }>('/api/pipeline/run-evals', { method: 'POST' }),
+    onSuccess: () => {
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['evals'] }), 10000)
+    },
+  })
+}

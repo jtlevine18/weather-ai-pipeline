@@ -11,8 +11,9 @@ Fork the repo, open [Claude Code](https://claude.ai/code), fill in the bracketed
 ## The Prompt
 
 ```text
-I want to adapt this weather pipeline for my region. Read CLAUDE.md first to understand
-the full architecture, then make all the changes described below.
+I forked https://github.com/jtlevine18/weather-ai-pipeline — an AI weather forecasting
+and crop advisory pipeline. I want to adapt it for my region. Read CLAUDE.md to understand
+the full architecture, then make all the changes below.
 
 === MY REGION ===
 

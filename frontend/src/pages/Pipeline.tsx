@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   usePipelineRuns, useHealingStats, useHealingLog, usePipelineStats,
   useDeliveryLog, useEvals, useConversationLog, useDeliveryMetricsAgg,
-  useTriggerPipeline, useRetrainMos,
+  useTriggerPipeline, useRetrainMos, useRunEvals,
 } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
@@ -774,6 +774,7 @@ function HealingStatsTab() {
 function ArchitectureTab() {
   const triggerPipeline = useTriggerPipeline()
   const retrainMos = useRetrainMos()
+  const runEvals = useRunEvals()
 
   return (
     <div className="space-y-6">
@@ -781,7 +782,7 @@ function ArchitectureTab() {
 
       {/* Actions */}
       <div className="section-header">Actions</div>
-      <div className="grid grid-cols-2 gap-3" style={{ maxWidth: '400px' }}>
+      <div className="grid grid-cols-3 gap-3" style={{ maxWidth: '560px' }}>
         <button
           className="btn-primary"
           style={{ fontSize: '0.82rem' }}
@@ -798,12 +799,23 @@ function ArchitectureTab() {
         >
           {retrainMos.isPending ? 'Retraining...' : 'Retrain MOS Model'}
         </button>
+        <button
+          className="btn-secondary"
+          style={{ fontSize: '0.82rem' }}
+          disabled={runEvals.isPending}
+          onClick={() => runEvals.mutate()}
+        >
+          {runEvals.isPending ? 'Running...' : 'Run Evaluations'}
+        </button>
       </div>
       {triggerPipeline.isSuccess && (
         <p style={{ color: '#2a9d8f', fontSize: '0.82rem' }}>Pipeline triggered — check Pipeline Runs tab.</p>
       )}
       {retrainMos.isSuccess && (
         <p style={{ color: '#2a9d8f', fontSize: '0.82rem' }}>Retraining triggered — refresh in ~30s.</p>
+      )}
+      {runEvals.isSuccess && (
+        <p style={{ color: '#2a9d8f', fontSize: '0.82rem' }}>Evaluations running (7 scripts) — check Pipeline Stats tab for results.</p>
       )}
     </div>
   )
@@ -1004,42 +1016,20 @@ export default function Pipeline() {
       {/* Tab 3: Build Your Own */}
       <TabPanel active={activeTab === 3}>
         <div className="space-y-6">
-          <div className="section-header">Fork This Pipeline for Your Location</div>
+          <div className="section-header">Build Your Own</div>
 
           <div className="card card-body">
-            <p style={{ fontSize: '0.85rem', color: '#555', lineHeight: 1.7 }}>
-              This pipeline works for any geography. Fork the repo, fill in the prompt below with your stations,
-              then paste it into <a href="https://claude.ai/code" target="_blank" rel="noopener" style={{ color: '#d4a019', fontWeight: 600 }}>Claude Code</a>.
-              It handles the rest.
+            <p style={{ fontSize: '0.88rem', color: '#1a1a1a', lineHeight: 1.7 }}>
+              Want to run this for your own region? Fork the{' '}
+              <a href="https://github.com/jtlevine18/weather-ai-pipeline" target="_blank" rel="noopener" style={{ color: '#d4a019', fontWeight: 600 }}>GitHub repo</a>,
+              fill in the prompt below with your stations and data source, then paste it into{' '}
+              <a href="https://claude.ai/code" target="_blank" rel="noopener" style={{ color: '#d4a019', fontWeight: 600 }}>Claude Code</a>.
+              It adapts the full pipeline — ingestion, forecasting, crop advisories, farmer profiles, and dashboard — for your geography.
             </p>
-          </div>
-
-          {/* What you provide */}
-          <div>
-            <div className="section-header">What You Provide</div>
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-              {[
-                { label: 'Your stations', desc: 'Lat/lon, altitude, crops, language for 5\u201320 weather stations', required: true },
-                { label: 'Your data source', desc: 'Own API, CSV files, or use Open-Meteo (free, global)', required: true },
-                { label: 'Farmer profiles', desc: 'Demo profiles for your region (names, crops, soil). Optional.', required: false },
-              ].map(item => (
-                <div key={item.label} className="card card-body" style={{ padding: '14px' }}>
-                  <div style={{ fontWeight: 600, fontSize: '0.84rem', color: '#1a1a1a', marginBottom: '4px' }}>
-                    {item.label}
-                    {!item.required && <span style={{ color: '#aaa', fontWeight: 400, fontSize: '0.75rem', marginLeft: '6px' }}>optional</span>}
-                  </div>
-                  <div style={{ fontSize: '0.78rem', color: '#888', lineHeight: 1.5 }}>{item.desc}</div>
-                </div>
-              ))}
-            </div>
           </div>
 
           {/* Full adaptation prompt with copy button */}
           <div>
-            <div className="section-header">Adaptation Prompt</div>
-            <p style={{ fontSize: '0.78rem', color: '#888', marginBottom: '8px' }}>
-              Fill in the bracketed parts with your region's details, then copy and paste into <a href="https://claude.ai/code" target="_blank" rel="noopener" style={{ color: '#d4a019', fontWeight: 600 }}>Claude Code</a> in your fork.
-            </p>
             <div style={{ position: 'relative' }}>
               <button
                 onClick={() => {
@@ -1067,7 +1057,7 @@ export default function Pipeline() {
                 padding: '20px', fontSize: '0.78rem', lineHeight: 1.65,
                 overflow: 'auto', whiteSpace: 'pre-wrap', maxHeight: '600px',
               }}>
-{`I want to adapt this weather pipeline for my region. Read CLAUDE.md first to understand the full architecture, then make all the changes described below.
+{`I forked https://github.com/jtlevine18/weather-ai-pipeline — an AI weather forecasting and crop advisory pipeline. I want to adapt it for my region. Read CLAUDE.md to understand the full architecture, then make all the changes below.
 
 === MY REGION ===
 
@@ -1152,36 +1142,6 @@ If it fails, debug and fix. Common issues: DATABASE_URL missing, API keys missin
 
 These are globally portable: src/forecasting.py, src/weather_clients.py, src/downscaling/, src/translation/rag_provider.py, src/delivery/, src/database/, src/pipeline.py, src/models.py, src/api.py, dagster_pipeline/`}
               </pre>
-            </div>
-          </div>
-
-          {/* What works globally vs what's region-specific */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="card card-body">
-              <div style={{ fontWeight: 600, color: '#2a9d8f', marginBottom: '8px', fontSize: '0.85rem' }}>
-                Works Globally (no changes needed)
-              </div>
-              <ul style={{ fontSize: '0.82rem', color: '#555', lineHeight: 1.8, paddingLeft: '16px', margin: 0 }}>
-                <li>Open-Meteo weather forecasts (global, free)</li>
-                <li>NASA POWER satellite data (global)</li>
-                <li>NeuralGCM neural weather model (GPU)</li>
-                <li>Claude advisory generation (any language)</li>
-                <li>XGBoost MOS correction (trains on local data)</li>
-                <li>PostgreSQL, FAISS RAG, pipeline orchestration</li>
-              </ul>
-            </div>
-            <div className="card card-body">
-              <div style={{ fontWeight: 600, color: '#e65100', marginBottom: '8px', fontSize: '0.85rem' }}>
-                Region-Specific (the prompt handles these)
-              </div>
-              <ul style={{ fontSize: '0.82rem', color: '#555', lineHeight: 1.8, paddingLeft: '16px', margin: 0 }}>
-                <li>Station config {'\u2192'} <code>stations.json</code></li>
-                <li>Data ingestion {'\u2192'} your data source</li>
-                <li>Farmer profiles {'\u2192'} <code>farmers.json</code></li>
-                <li>Crop advisories {'\u2192'} your crops + conditions</li>
-                <li>Dashboard strings {'\u2192'} <code>regionConfig.ts</code></li>
-                <li>Seasonal context {'\u2192'} your climate patterns</li>
-              </ul>
             </div>
           </div>
 
