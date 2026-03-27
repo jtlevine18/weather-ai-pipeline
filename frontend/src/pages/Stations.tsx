@@ -14,7 +14,8 @@ import type {
   HealingStats,
 } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
-import { PageLoader } from '../components/LoadingSpinner'
+import { TableSkeleton } from '../components/LoadingSpinner'
+import { PageContext } from '../components/PageContext'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -1023,7 +1024,7 @@ export default function Stations() {
     return scores.reduce((a, b) => a + b, 0) / scores.length
   }, [cleanData])
 
-  if (isLoading) return <PageLoader label="Loading data..." />
+  if (isLoading) return <TableSkeleton />
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'readings', label: 'Station Readings' },
@@ -1040,6 +1041,10 @@ export default function Stations() {
           Weather station readings across Kerala and Tamil Nadu — raw ingestion, quality scores, and healing
         </p>
       </div>
+
+      <PageContext id="stations">
+        Raw weather observations from India's meteorological network, before and after AI-powered quality healing. Toggle between raw and healed data to see how anomalies are detected and corrected.
+      </PageContext>
 
       {/* Metric cards */}
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">

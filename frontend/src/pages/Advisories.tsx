@@ -1,7 +1,8 @@
 import { useState, useMemo } from 'react'
 import { useAlerts, useStations, useForecasts, useDeliveryLog, useFarmers, useFarmerDetail } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
-import { PageLoader } from '../components/LoadingSpinner'
+import { TableSkeleton } from '../components/LoadingSpinner'
+import { PageContext } from '../components/PageContext'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -91,7 +92,7 @@ export default function Advisories() {
     return items
   }, [allAlerts, langFilter, condFilter, provFilter])
 
-  if (isLoading) return <PageLoader label="Loading advisories..." />
+  if (isLoading) return <TableSkeleton />
   if (error) return <div className="text-center py-12"><p className="text-error text-sm">Failed to load advisories</p></div>
 
   const TABS = ['Advisory Feed', 'Lineage', 'Farmers & DPI', 'Delivery']
@@ -104,6 +105,10 @@ export default function Advisories() {
           Translation, delivery, and farmer profiles
         </p>
       </div>
+
+      <PageContext id="advisories">
+        Crop-specific farming advice generated through RAG retrieval + Claude, translated into Tamil and Malayalam, and delivered via SMS. Select a farmer below to see their complete Digital Public Infrastructure profile.
+      </PageContext>
 
       {/* 4 Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">

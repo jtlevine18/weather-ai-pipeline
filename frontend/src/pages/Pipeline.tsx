@@ -4,7 +4,8 @@ import {
   useDeliveryLog, useEvals, useConversationLog, useDeliveryMetricsAgg,
 } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
-import { PageLoader } from '../components/LoadingSpinner'
+import { TableSkeleton } from '../components/LoadingSpinner'
+import { PageContext } from '../components/PageContext'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -790,7 +791,7 @@ export default function Pipeline() {
 
   const [activeTab, setActiveTab] = useState(0)
 
-  if (runs.isLoading) return <PageLoader label="Loading system data..." />
+  if (runs.isLoading) return <TableSkeleton />
 
   const runList = runs.data ?? []
   const okRuns = runList.filter(r => r.status === 'ok' || r.status === 'success' || r.status === 'completed').length
@@ -809,6 +810,10 @@ export default function Pipeline() {
           Architecture, pipeline history, and infrastructure
         </p>
       </div>
+
+      <PageContext id="pipeline">
+        System architecture and operational metrics. The pipeline runs 6 steps in sequence, with independent degradation chains ensuring no single API failure cascades.
+      </PageContext>
 
       {/* Tabs */}
       <div className="tab-list">

@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom'
 import { ChevronRight } from 'lucide-react'
 import { MetricCard } from '../components/MetricCard'
-import { PageLoader } from '../components/LoadingSpinner'
+import { DashboardSkeleton } from '../components/LoadingSpinner'
+import { WelcomeBanner } from '../components/PageContext'
 import {
   useStations,
   useForecasts,
@@ -70,7 +71,7 @@ export default function Dashboard() {
   const clean = useTelemetryClean(200)
 
   const isLoading = stations.isLoading && forecasts.isLoading && pipelineStats.isLoading
-  if (isLoading) return <PageLoader label="Loading dashboard..." />
+  if (isLoading) return <DashboardSkeleton />
 
   const stationCount = stations.data?.length ?? 0
   const forecastCount = forecasts.data?.length ?? 0
@@ -123,8 +124,13 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {/* Welcome banner for first-time visitors */}
+      <div style={{ paddingTop: '20px' }}>
+        <WelcomeBanner />
+      </div>
+
       {/* Hero */}
-      <div style={{ padding: '28px 0 8px' }}>
+      <div>
         <h1 style={{
           margin: 0,
           fontWeight: 700,

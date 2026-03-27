@@ -19,7 +19,13 @@ const INITIAL_MSG: ChatMessage = {
 
 export function ChatWidget() {
   const [open, setOpen] = useState(false)
-  const [messages, setMessages] = useState<ChatMessage[]>([INITIAL_MSG])
+  const [messages, setMessages] = useState<ChatMessage[]>(() => {
+    try {
+      const saved = sessionStorage.getItem('weather_chat_messages')
+      if (saved) return JSON.parse(saved)
+    } catch {}
+    return [INITIAL_MSG]
+  })
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [farmerPhone, setFarmerPhone] = useState('')
@@ -31,6 +37,7 @@ export function ChatWidget() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+    try { sessionStorage.setItem('weather_chat_messages', JSON.stringify(messages)) } catch {}
   }, [messages])
 
   async function lookupFarmer(phone: string) {
@@ -239,10 +246,12 @@ export function ChatWidget() {
         ))}
         {sending && (
           <div style={{
-            display: 'flex', alignItems: 'center', gap: '6px',
-            fontSize: '0.78rem', color: '#888',
+            display: 'flex', alignItems: 'center', gap: '4px',
+            padding: '8px 12px',
           }}>
-            <span className="animate-pulse">Thinking...</span>
+            <span className="typing-dot" />
+            <span className="typing-dot" />
+            <span className="typing-dot" />
           </div>
         )}
         <div ref={messagesEndRef} />

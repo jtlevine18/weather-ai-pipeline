@@ -3,6 +3,7 @@ import { Outlet } from 'react-router-dom'
 import { Menu } from 'lucide-react'
 import { Sidebar } from './Sidebar'
 import { ChatWidget } from './ChatWidget'
+import { PageTransition } from './PageTransition'
 
 export function Layout() {
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -21,15 +22,15 @@ export function Layout() {
           </button>
         </header>
 
-        {/* Main content — fills available width */}
         <main className="flex-1 overflow-y-auto">
-          <div className="px-5 sm:px-8 lg:px-10 pb-8 animate-fade-in">
-            <Outlet />
+          <div className="px-5 sm:px-8 lg:px-10 pb-8">
+            <PageTransition>
+              <Outlet />
+            </PageTransition>
           </div>
         </main>
       </div>
 
-      {/* Floating chat widget */}
       <ChatWidget />
     </div>
   )

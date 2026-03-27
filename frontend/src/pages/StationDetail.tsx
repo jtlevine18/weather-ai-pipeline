@@ -10,7 +10,7 @@ import {
 } from 'lucide-react'
 import { useStationLatest, useForecasts } from '../api/hooks'
 import { ForecastStrip } from '../components/ForecastStrip'
-import { PageLoader } from '../components/LoadingSpinner'
+import { DetailSkeleton } from '../components/LoadingSpinner'
 
 function formatDate(dateStr: string | undefined): string {
   if (!dateStr) return '--'
@@ -36,7 +36,7 @@ export default function StationDetail() {
     (f) => f.station_id === id
   )
 
-  if (latest.isLoading) return <PageLoader label="Loading station..." />
+  if (latest.isLoading) return <DetailSkeleton />
 
   if (latest.error || !station) {
     return (
