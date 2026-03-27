@@ -1,16 +1,34 @@
 """
-Step 1: Ingestion — real IMD station data with imdlib + synthetic fallback.
-Supports 20 SYNOP stations in Kerala and Tamil Nadu.
+Step 1: Ingestion — station-level weather data from configurable sources.
 
-Fallback chain: IMD scraper → imdlib gridded → synthetic
+Default (India): IMD scraper → imdlib gridded → synthetic fallback.
+Custom: set ingestion_source="custom" and provide a custom_ingest_fn in
+WeatherDataConfig, or register a module that implements fetch_reading().
+
+Provider interface
+------------------
+A custom ingestion function receives a StationConfig and returns a dict::
+
+    async def my_fetch(station: StationConfig) -> dict:
+        return {
+            "temperature": 28.5,   # °C
+            "humidity":    75.0,   # %
+            "wind_speed":  8.2,    # km/h
+            "pressure":    1012.0, # hPa
+            "rainfall":    0.0,    # mm
+        }
+
+Set config.weather.ingestion_source = "custom" and
+config.weather.custom_ingest_fn = my_fetch to use it.
 """
 
 from __future__ import annotations
 import asyncio
+import importlib
 import random
 import uuid
-from datetime import datetime
-from typing import Any, Dict, List, Optional
+from datetime import datetime, timezone
+from typing import Any, Callable, Dict, List, Optional
 
 from config import FaultInjectionConfig, PipelineConfig, STATIONS, StationConfig
 from src.database import insert_raw_telemetry
@@ -22,7 +40,7 @@ from src.database import insert_raw_telemetry
 
 def _baseline(station: StationConfig) -> Dict[str, float]:
     """Generate a realistic baseline reading for a station."""
-    hour = datetime.utcnow().hour
+    hour = datetime.now(timezone.utc).hour
     # Diurnal temperature cycle
     diurnal = 3.0 * (1.0 - abs(hour - 14) / 14.0)
 
@@ -110,9 +128,9 @@ def _inject_fault(reading: Dict[str, Any],
 def generate_synthetic_reading(station: StationConfig,
                                  fault_config: FaultInjectionConfig) -> Dict[str, Any]:
     reading = _baseline(station)
-    reading["id"]         = f"{station.station_id}_{datetime.utcnow().strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}"
+    reading["id"]         = f"{station.station_id}_{datetime.now(timezone.utc).strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}"
     reading["station_id"] = station.station_id
-    reading["ts"]         = datetime.utcnow().isoformat()
+    reading["ts"]         = datetime.now(timezone.utc).isoformat()
     reading["source"]     = "synthetic"
     reading["fault_type"] = None
     reading = _inject_fault(reading, fault_config)
@@ -132,7 +150,7 @@ async def _fetch_real_reading(
 
     Returns a reading dict matching the raw_telemetry schema.
     """
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     reading = {
         "id":         f"{station.station_id}_{now.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}",
         "station_id": station.station_id,
@@ -199,10 +217,59 @@ async def ingest_real_stations(config: PipelineConfig, conn) -> List[Dict[str, A
 # Public API — dispatcher
 # ---------------------------------------------------------------------------
 
+async def ingest_custom_stations(config: PipelineConfig, conn) -> List[Dict[str, Any]]:
+    """Ingest weather data using a user-provided fetch function.
+
+    Set config.weather.custom_ingest_fn to an async function that accepts a
+    StationConfig and returns a dict with keys: temperature, humidity,
+    wind_speed, pressure, rainfall.
+    """
+    fetch_fn = config.weather.custom_ingest_fn
+    if fetch_fn is None:
+        raise ValueError(
+            "ingestion_source='custom' requires config.weather.custom_ingest_fn "
+            "to be set to an async function(StationConfig) → dict. "
+            "See src/ingestion.py docstring for the provider interface."
+        )
+
+    sem = asyncio.Semaphore(5)
+
+    async def _fetch_one(station: StationConfig) -> Dict[str, Any]:
+        async with sem:
+            raw = await fetch_fn(station)
+            now = datetime.now(timezone.utc)
+            return {
+                "id": f"{station.station_id}_{now.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:6]}",
+                "station_id": station.station_id,
+                "timestamp": now.isoformat(),
+                "temperature": raw.get("temperature"),
+                "humidity": raw.get("humidity"),
+                "wind_speed": raw.get("wind_speed"),
+                "pressure": raw.get("pressure"),
+                "rainfall": raw.get("rainfall"),
+                "source": "custom",
+                "fault_type": None,
+            }
+
+    readings = await asyncio.gather(*[_fetch_one(s) for s in STATIONS])
+    readings = list(readings)
+    insert_raw_telemetry(conn, readings)
+    return readings
+
+
 async def ingest_all_stations(config: PipelineConfig, conn) -> List[Dict[str, Any]]:
-    """Ingest weather readings — real or synthetic based on config."""
+    """Ingest weather readings — real, synthetic, or custom based on config.
+
+    ingestion_source values:
+      "real"      — IMD scraper + imdlib + synthetic fallback (India-specific)
+      "synthetic" — generated data with configurable fault injection
+      "custom"    — user-provided fetch function (see module docstring)
+    """
     if config.weather.ingestion_source == "real":
         return await ingest_real_stations(config, conn)
+
+    if config.weather.ingestion_source == "custom":
+        return await ingest_custom_stations(config, conn)
 
     # Original synthetic path
     readings = []

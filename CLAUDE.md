@@ -420,3 +420,51 @@ HF Spaces free tier gives **16 GB RAM** — enough for RAG (sentence-transformer
 - **apscheduler** (scheduled pipeline runs)
 - **rich** (terminal output)
 - **DVC** (ML model versioning pipeline)
+
+---
+
+## Adapting for a New Region
+
+This pipeline is designed to be forked and adapted. See [REBUILD.md](REBUILD.md) for the full guide and Claude Code prompt.
+
+### Geography-coupled files (must change for a new region)
+
+| File | What's region-specific |
+|------|----------------------|
+| `stations.json` | Station definitions (lat/lon/altitude/crops/language) |
+| `config.py` | `_HARDCODED_STATIONS` fallback list, `region_name`, `timezone` defaults |
+| `src/ingestion.py` | `_baseline()` uses Kerala/TN altitude thresholds (synthetic only); `ingest_real_stations()` uses IMD |
+| `src/healing.py` | `SEASONAL_CONTEXT` dict (24 entries: Kerala × 12 months + Tamil Nadu × 12 months) |
+| `src/translation/curated_advisories.py` | Advisory matrix for 17 Kerala/TN crops × 9 weather conditions |
+| `src/dpi/simulator.py` | Farmer templates for 20 India stations (loads from `farmers.json` if present) |
+| `src/dpi/models.py` | India-specific service names (AadhaarProfile, PMKISANRecord, etc.) for universal concepts |
+| `farmers.json` | Demo farmer profiles per station (optional, auto-generated from templates) |
+| `frontend/src/regionConfig.ts` | All dashboard geography strings: region name, states, languages, locale, currency, data source label, farmer service names |
+| `.env` | `REGION_NAME`, `TIMEZONE` |
+
+### Globally portable files (no changes needed)
+
+- `src/pipeline.py` — Generic orchestrator
+- `src/forecasting.py` — NeuralGCM + XGBoost MOS (timezone now configurable)
+- `src/weather_clients.py` — OpenMeteo (global), NASA POWER (global), Tomorrow.io (global)
+- `src/downscaling/` — IDW + lapse-rate math (universal)
+- `src/translation/rag_provider.py` — FAISS+BM25 hybrid RAG (language-agnostic)
+- `src/delivery/` — Console/Twilio/WhatsApp (global)
+- `src/database/` — All 17 tables are geography-neutral
+- `src/models.py` — Pydantic contracts (geography-neutral)
+- `src/auth.py`, `src/api.py` — JWT auth, FastAPI endpoints
+- `dagster_pipeline/` — Dagster orchestration
+- `tests/` — Test fixtures reference India stations (expected for reference impl)
+
+### Recommended workflow
+
+1. Fork the repo
+2. Create `stations.json` with your stations
+3. Create `farmers.json` with demo profiles for your region (optional)
+4. Set `REGION_NAME` and `TIMEZONE` in `.env`
+5. Run the REBUILD.md Claude Code prompt to adapt remaining files
+6. Test: `python run_pipeline.py && pytest tests/`
+
+### Custom data ingestion
+
+Set `config.weather.ingestion_source = "custom"` and provide an async function via `config.weather.custom_ingest_fn` that accepts a `StationConfig` and returns a dict with keys: `temperature`, `humidity`, `wind_speed`, `pressure`, `rainfall`. See `src/ingestion.py` module docstring for the full interface.

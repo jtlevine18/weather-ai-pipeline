@@ -14,7 +14,7 @@ Requires: duckdb (LLM scoring additionally needs ANTHROPIC_API_KEY)
 import json
 import os
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from rich.console import Console
@@ -89,7 +89,7 @@ def run_conversation_eval(with_llm=False):
 
     results = {
         "eval_name": "conversation",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
     }
 
     # ─── 1. State Machine Correctness ─────────────

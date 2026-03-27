@@ -21,8 +21,9 @@ sys.path.insert(0, os.path.dirname(__file__))
 
 from rich.logging import RichHandler
 
+_log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, _log_level, logging.INFO),
     format="%(message)s",
     handlers=[RichHandler(rich_tracebacks=True, show_path=False)],
 )

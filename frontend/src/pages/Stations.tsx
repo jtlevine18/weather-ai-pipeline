@@ -17,18 +17,15 @@ import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
 import { PageContext } from '../components/PageContext'
 import { TabPanel } from '../components/TabPanel'
+import { REGION } from '../regionConfig'
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const STATES = ['All States', 'Kerala', 'Tamil Nadu']
+const STATES = ['All States', ...REGION.states]
 
-const SOURCE_STYLE: Record<string, [string, string]> = {
-  imd_api: ['India Met Dept', '#2E7D32'],
-  imdlib: ['IMD Gridded Archive', '#1565C0'],
-  synthetic: ['Synthetic', '#888'],
-}
+const SOURCE_STYLE: Record<string, [string, string]> = REGION.sourceLabels
 
 const HEAL_STYLE: Record<string, [string, string]> = {
   cross_validated: ['Validated', '#2a9d8f'],
@@ -1039,12 +1036,12 @@ export default function Stations() {
       <div>
         <h1 className="page-title">Stations</h1>
         <p className="page-caption">
-          Weather readings from 20 stations, with AI-powered quality checks
+          Weather readings from stations across {REGION.states.join(' and ')}, with AI-powered quality checks
         </p>
       </div>
 
       <PageContext id="stations">
-        Weather data from 20 IMD stations, cleaned by an AI agent that detects anomalies, fills gaps, and cross-validates against satellite data.
+        Weather data from {REGION.dataSource} stations, cleaned by an AI agent that detects anomalies, fills gaps, and cross-validates against satellite data.
       </PageContext>
 
       {/* Metric cards */}

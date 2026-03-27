@@ -5,7 +5,7 @@ Supports time-based, weather-event, and pipeline-run triggers.
 
 from __future__ import annotations
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 
@@ -23,14 +23,14 @@ def schedule_followup(conn, aadhaar_id: str, trigger_type: str,
             message_template, status, created_at)
            VALUES (?,?,?,?,?,?,?,?)""",
         [fid, aadhaar_id, session_id, trigger_type, trigger_value,
-         message_template, "pending", datetime.utcnow().isoformat()],
+         message_template, "pending", datetime.now(timezone.utc).isoformat()],
     )
     return fid
 
 
 def check_and_fire(conn, current_time: datetime = None) -> List[Dict[str, Any]]:
     """Return followups that are due. Marks them as fired."""
-    now = current_time or datetime.utcnow()
+    now = current_time or datetime.now(timezone.utc)
     due = []
 
     # Time-based triggers: trigger_value is an ISO timestamp

@@ -34,9 +34,10 @@ def db_conn():
     conn = init_db(database_url)
     yield conn
     # Clean up test data (DELETE, not DROP — tables are shared)
+    from src.database.safe_sql import safe_table
     for table in _TABLES_TO_CLEAN:
         try:
-            conn.execute(f"DELETE FROM {table}")
+            conn.execute(f"DELETE FROM {safe_table(table)}")
         except Exception:
             pass
     conn.close()

@@ -8,6 +8,7 @@ import {
   CloudFog,
   type LucideIcon,
 } from 'lucide-react'
+import { REGION } from '../regionConfig'
 import type { Forecast } from '../api/hooks'
 
 const CONDITION_ICONS: Record<string, LucideIcon> = {
@@ -62,7 +63,7 @@ function formatDay(dateStr: string | undefined, day: number | undefined): string
   if (dateStr) {
     try {
       const d = new Date(dateStr)
-      return d.toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' })
+      return d.toLocaleDateString(REGION.locale, { weekday: 'short', month: 'short', day: 'numeric' })
     } catch {
       // fall through
     }

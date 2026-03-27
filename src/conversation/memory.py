@@ -7,7 +7,7 @@ from __future__ import annotations
 import json
 import logging
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 log = logging.getLogger(__name__)
@@ -52,11 +52,11 @@ def extract_memories(user_message: str, assistant_reply: str,
 def save_memories(conn, aadhaar_id: str, session_id: str,
                   memories: List[Dict[str, Any]]) -> None:
     """Persist extracted memories to conversation_memory table."""
-    now = datetime.utcnow().isoformat()
+    now = datetime.now(timezone.utc).isoformat()
     for mem in memories:
         expires_at = None
         if mem.get("expires_days"):
-            expires_at = (datetime.utcnow() + timedelta(days=mem["expires_days"])).isoformat()
+            expires_at = (datetime.now(timezone.utc) + timedelta(days=mem["expires_days"])).isoformat()
         conn.execute(
             """INSERT INTO conversation_memory
                (id, aadhaar_id, session_id, memory_type, content, expires_at, created_at)
@@ -78,7 +78,7 @@ def build_memory_context(conn, aadhaar_id: str, limit: int = 20) -> str:
                WHERE aadhaar_id = ?
                  AND (expires_at IS NULL OR expires_at > ?)
                ORDER BY created_at DESC LIMIT ?""",
-            [aadhaar_id, datetime.utcnow().isoformat(), limit],
+            [aadhaar_id, datetime.now(timezone.utc).isoformat(), limit],
         ).fetchall()
     except Exception:
         return ""

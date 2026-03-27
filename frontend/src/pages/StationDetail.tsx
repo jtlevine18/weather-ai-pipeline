@@ -8,6 +8,7 @@ import {
   Wind,
   ShieldCheck,
 } from 'lucide-react'
+import { REGION } from '../regionConfig'
 import { useStationLatest, useForecasts } from '../api/hooks'
 import { ForecastStrip } from '../components/ForecastStrip'
 import { DetailSkeleton } from '../components/LoadingSpinner'
@@ -16,7 +17,7 @@ import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts'
 function formatDate(dateStr: string | undefined): string {
   if (!dateStr) return '--'
   try {
-    return new Date(dateStr).toLocaleString('en-IN', {
+    return new Date(dateStr).toLocaleString(REGION.locale, {
       dateStyle: 'medium',
       timeStyle: 'short',
     })

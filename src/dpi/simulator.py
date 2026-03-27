@@ -1,11 +1,32 @@
 """
-Simulated DPI Registry — 30-50 realistic farmers tied to 20 stations.
+Simulated farmer registry — demo users tied to weather stations.
+
+Generates 30-50 realistic farmer profiles for pipeline demos.
 Deterministic: seed = hash(station_id + index) for reproducibility.
 Phone number is primary key (matches real-world identification flow).
+
+The default templates are for Kerala & Tamil Nadu (India). To adapt for
+another region, create a farmers.json file in the project root with the
+same structure as STATION_FARMER_TEMPLATES below. The simulator will
+load it automatically and generate demo farmers for your stations.
+
+farmers.json format::
+
+    {
+      "MY_STATION_1": {
+        "district": "District Name", "state": "State/Province", "lang": "en",
+        "crops": ["crop1", "crop2"], "soil": ["clay", "loam"],
+        "irrigation": ["canal", "rainfed"], "area": [0.5, 3.0], "pH": [5.5, 7.0],
+        "names": [["Full Name", "নাম"], ["Another Name", "নাম"]],
+        "count": 2
+      }
+    }
 """
 
 from __future__ import annotations
 import hashlib
+import json
+import os
 import random
 from typing import Any, Dict, List, Optional
 
@@ -16,10 +37,14 @@ from src.dpi.models import (
 
 
 # ---------------------------------------------------------------------------
-# Station-specific farmer templates
+# Station-specific farmer templates — loaded from farmers.json or hardcoded
 # ---------------------------------------------------------------------------
 
-STATION_FARMER_TEMPLATES: Dict[str, Dict[str, Any]] = {
+_FARMERS_JSON = os.path.join(
+    os.path.dirname(os.path.abspath(__file__)), "..", "..", "farmers.json"
+)
+
+_HARDCODED_TEMPLATES: Dict[str, Dict[str, Any]] = {
     # Kerala — coastal
     "KL_TVM": dict(district="Thiruvananthapuram", state="Kerala", lang="ml",
                    crops=["coconut", "rubber", "banana", "tapioca", "pepper"], soil=["laterite", "sandy loam"],
@@ -129,14 +154,35 @@ _TA_NAMES = [
 ]
 
 
+def _load_farmer_templates() -> Dict[str, Dict[str, Any]]:
+    """Load farmer templates from farmers.json if it exists, else use hardcoded."""
+    if os.path.exists(_FARMERS_JSON):
+        try:
+            with open(_FARMERS_JSON) as f:
+                data = json.load(f)
+            # Convert JSON lists to tuples where needed (area, pH ranges)
+            for sid, tpl in data.items():
+                if isinstance(tpl.get("area"), list):
+                    tpl["area"] = tuple(tpl["area"])
+                if isinstance(tpl.get("pH"), list):
+                    tpl["pH"] = tuple(tpl["pH"])
+            return data
+        except Exception:
+            pass
+    return dict(_HARDCODED_TEMPLATES)
+
+
+STATION_FARMER_TEMPLATES = _load_farmer_templates()
+
+
 def _seed_rng(station_id: str, index: int) -> random.Random:
     h = hashlib.md5(f"{station_id}:{index}".encode()).hexdigest()
     return random.Random(int(h, 16))
 
 
-def _make_phone(station_id: str, index: int) -> str:
+def _make_phone(station_id: str, index: int, country_code: str = "+91") -> str:
     rng = _seed_rng(station_id, index)
-    return f"+91{rng.randint(7000000000, 9999999999)}"
+    return f"{country_code}{rng.randint(7000000000, 9999999999)}"
 
 
 def _make_aadhaar_id(station_id: str, index: int) -> str:
@@ -154,19 +200,32 @@ class SimulatedDPIRegistry:
         self._generate_all()
 
     def _generate_all(self):
-        ml_idx, ta_idx = 0, 0
+        # Language → name pool mapping (hardcoded pools for ml/ta, custom via JSON)
+        _name_pools: Dict[str, List] = {"ml": list(_ML_NAMES), "ta": list(_TA_NAMES)}
+        _name_idx: Dict[str, int] = {}
+
         for station_id, tpl in STATION_FARMER_TEMPLATES.items():
-            for i in range(tpl["count"]):
+            # If template has custom names (from farmers.json), use those
+            custom_names = tpl.get("names")  # list of [en_name, local_name] pairs
+
+            for i in range(tpl.get("count", 2)):
                 rng = _seed_rng(station_id, i)
                 phone = _make_phone(station_id, i)
                 aadhaar_id = _make_aadhaar_id(station_id, i)
 
-                if tpl["lang"] == "ml":
-                    name_en, name_local = _ML_NAMES[ml_idx % len(_ML_NAMES)]
-                    ml_idx += 1
+                lang = tpl.get("lang", "en")
+                if custom_names and i < len(custom_names):
+                    pair = custom_names[i]
+                    name_en = pair[0]
+                    name_local = pair[1] if len(pair) > 1 else pair[0]
+                elif lang in _name_pools:
+                    idx = _name_idx.get(lang, 0)
+                    pool = _name_pools[lang]
+                    name_en, name_local = pool[idx % len(pool)]
+                    _name_idx[lang] = idx + 1
                 else:
-                    name_en, name_local = _TA_NAMES[ta_idx % len(_TA_NAMES)]
-                    ta_idx += 1
+                    name_en = f"Farmer {station_id}_{i}"
+                    name_local = name_en
 
                 aadhaar = AadhaarProfile(
                     aadhaar_id=aadhaar_id, name=name_en, name_local=name_local,

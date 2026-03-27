@@ -8,7 +8,7 @@ import json
 import logging
 import uuid
 from dataclasses import asdict
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, Optional
 
 from src.dpi.models import (
@@ -121,7 +121,7 @@ class DPIAgent:
                     cached_dt = datetime.fromisoformat(cached_at)
                 else:
                     cached_dt = cached_at
-                if datetime.utcnow() - cached_dt > timedelta(hours=PROFILE_STALE_HOURS):
+                if datetime.now(timezone.utc) - cached_dt > timedelta(hours=PROFILE_STALE_HOURS):
                     return None
                 return _dict_to_profile(json.loads(profile_json))
         except Exception as exc:
@@ -145,7 +145,7 @@ class DPIAgent:
                      json.dumps(profile.primary_crops),
                      profile.total_area,
                      json.dumps(d, default=str),
-                     datetime.utcnow().isoformat()],
+                     datetime.now(timezone.utc).isoformat()],
                 )
         except Exception as exc:
             log.debug("Cache write failed: %s", exc)

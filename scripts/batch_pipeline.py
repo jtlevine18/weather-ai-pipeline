@@ -19,8 +19,9 @@ from rich.console import Console
 from rich.logging import RichHandler
 from rich.table import Table
 
+_log_level = os.getenv("LOG_LEVEL", "INFO").upper()
 logging.basicConfig(
-    level=logging.INFO,
+    level=getattr(logging, _log_level, logging.INFO),
     format="%(message)s",
     handlers=[RichHandler(rich_tracebacks=True, show_path=False)],
 )
@@ -66,9 +67,10 @@ async def main():
     summary = Table(title="Table Record Counts")
     summary.add_column("Table")
     summary.add_column("Total Records", justify="right")
+    from src.database.safe_sql import safe_table
     for t in tables:
         try:
-            count = conn.execute(f"SELECT COUNT(*) FROM {t}").fetchone()[0]
+            count = conn.execute(f"SELECT COUNT(*) FROM {safe_table(t)}").fetchone()[0]
         except Exception:
             count = 0
         summary.add_row(t, str(count))

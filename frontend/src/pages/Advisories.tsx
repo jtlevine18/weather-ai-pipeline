@@ -4,6 +4,7 @@ import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
 import { PageContext } from '../components/PageContext'
 import { TabPanel } from '../components/TabPanel'
+import { REGION } from '../regionConfig'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -33,7 +34,7 @@ const STATUS_COLOR: Record<string, string> = {
 function formatTime(dateStr: string | undefined): string {
   if (!dateStr) return '--'
   try {
-    return new Date(dateStr).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' })
+    return new Date(dateStr).toLocaleString(REGION.locale, { dateStyle: 'medium', timeStyle: 'short' })
   } catch { return dateStr }
 }
 
@@ -108,14 +109,14 @@ export default function Advisories() {
       </div>
 
       <PageContext id="advisories">
-        Farming advice generated weekly by Claude AI, translated into Tamil and Malayalam. View individual farmer profiles and their linked government records in the Farmer Profiles tab.
+        Farming advice generated weekly by Claude AI, translated into {REGION.languageList}. View individual farmer profiles and their linked government records in the Farmer Profiles tab.
       </PageContext>
 
       {/* 4 Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard label="Total Advisories" value={totalAdvisories} />
         <MetricCard label="AI Generated" value={ragCount} />
-        <MetricCard label="Tamil / Malayalam" value={`${taCount} / ${mlCount}`} />
+        <MetricCard label={REGION.languageMetric} value={`${taCount} / ${mlCount}`} />
         <MetricCard label="Deliveries" value={sentCount} />
       </div>
 
@@ -467,24 +468,24 @@ function FarmersDPITab({ alerts, stationMap }: {
             )}
 
             {detail.pmkisan && (
-              <DPICard title="PM-KISAN">
+              <DPICard title={REGION.farmerServices.pmkisan}>
                 Installments received: {detail.pmkisan.installments_received}<br />
-                Total amount: Rs {detail.pmkisan.total_amount.toLocaleString('en-IN')}
+                Total amount: {REGION.currency} {detail.pmkisan.total_amount.toLocaleString(REGION.locale)}
               </DPICard>
             )}
 
             {detail.pmfby && (
-              <DPICard title="PMFBY Crop Insurance">
+              <DPICard title={REGION.farmerServices.pmfby}>
                 Status: {detail.pmfby.status}<br />
-                Sum insured: Rs {detail.pmfby.sum_insured.toLocaleString('en-IN')}<br />
-                Premium paid: Rs {detail.pmfby.premium_paid.toLocaleString('en-IN')}
+                Sum insured: {REGION.currency} {detail.pmfby.sum_insured.toLocaleString(REGION.locale)}<br />
+                Premium paid: {REGION.currency} {detail.pmfby.premium_paid.toLocaleString(REGION.locale)}
               </DPICard>
             )}
 
             {detail.kcc && (
-              <DPICard title="Kisan Credit Card">
-                Credit limit: Rs {detail.kcc.credit_limit.toLocaleString('en-IN')}<br />
-                Outstanding: Rs {detail.kcc.outstanding.toLocaleString('en-IN')}<br />
+              <DPICard title={REGION.farmerServices.kcc}>
+                Credit limit: {REGION.currency} {detail.kcc.credit_limit.toLocaleString(REGION.locale)}<br />
+                Outstanding: {REGION.currency} {detail.kcc.outstanding.toLocaleString(REGION.locale)}<br />
                 Repayment: {detail.kcc.repayment_status}
               </DPICard>
             )}

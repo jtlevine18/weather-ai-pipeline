@@ -286,8 +286,9 @@ class TomorrowIOClient:
 # ---------------------------------------------------------------------------
 
 class OpenMeteoClient:
-    def __init__(self):
+    def __init__(self, timezone: str = "UTC"):
         self._sem = asyncio.Semaphore(5)  # max 5 concurrent requests
+        self._timezone = timezone
 
     async def get_forecast(self, lat: float, lon: float,
                             hours: int = 168) -> List[Dict[str, Any]]:
@@ -306,7 +307,7 @@ class OpenMeteoClient:
             "longitude": lon,
             "hourly":    "temperature_2m,relativehumidity_2m,windspeed_10m,winddirection_10m,surface_pressure,precipitation",
             "forecast_days": max(2, hours // 24 + 1),
-            "timezone":  "Asia/Kolkata",
+            "timezone":  self._timezone,
         }
         try:
             async with httpx.AsyncClient(timeout=_TIMEOUT) as client:

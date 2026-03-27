@@ -12,7 +12,7 @@ Requires: sentence-transformers, faiss-cpu (embedding model downloads on first r
 
 import json
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from rich.console import Console
@@ -164,7 +164,7 @@ def run_rag_eval():
         ]
     results = {
         "eval_name": "rag",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "n_cases": len(golden),
         "by_mode": save_data,
     }

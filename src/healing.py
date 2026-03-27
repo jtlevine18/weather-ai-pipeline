@@ -16,7 +16,7 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 log = logging.getLogger(__name__)
@@ -638,7 +638,7 @@ class HealingAgent:
                 "source": r.get("source", "unknown"),
             })
 
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         user_msg = (
             f"Current date/time: {now.isoformat()} UTC (month={now.month})\n\n"
             f"Here are {len(batch)} raw IMD station readings to assess and heal:\n\n"

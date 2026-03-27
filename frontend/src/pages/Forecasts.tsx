@@ -4,6 +4,7 @@ import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
 import { PageContext } from '../components/PageContext'
 import { TabPanel } from '../components/TabPanel'
+import { REGION } from '../regionConfig'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell,
@@ -52,7 +53,7 @@ const DEGRADATION_TIERS = [
     desc: 'Uses the most recent observation with time-of-day adjustment. No ML correction applied.' },
 ]
 
-const STATES = ['All', 'Kerala', 'Tamil Nadu']
+const STATES = ['All', ...REGION.states]
 
 // ---------------------------------------------------------------------------
 // Helpers

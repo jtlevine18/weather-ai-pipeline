@@ -51,9 +51,10 @@ def get_health_status(database_url: str = "") -> Dict[str, Any]:
         return _build_response("degraded", checks, table_counts, last_run_ts, errors)
 
     try:
+        from src.database.safe_sql import safe_table
         for table in KEY_TABLES:
             try:
-                row = con.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+                row = con.execute(f"SELECT COUNT(*) FROM {safe_table(table)}").fetchone()
                 table_counts[table] = row[0] if row else 0
             except Exception:
                 table_counts[table] = 0

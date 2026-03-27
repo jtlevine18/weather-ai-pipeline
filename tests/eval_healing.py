@@ -15,7 +15,7 @@ import math
 import os
 import random
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from rich.console import Console
@@ -37,7 +37,7 @@ def generate_pair(station, fault_config):
     reading = dict(baseline)
     reading["id"] = f"eval_{station.station_id}_{random.randint(0, 999999):06d}"
     reading["station_id"] = station.station_id
-    reading["ts"] = datetime.utcnow().isoformat()
+    reading["ts"] = datetime.now(timezone.utc).isoformat()
     reading["source"] = "eval"
     reading["fault_type"] = None
     reading = _inject_fault(reading, fault_config)
@@ -195,7 +195,7 @@ def run_healing_eval(n_per_station=N_PER_STATION, seed=42):
     os.makedirs(RESULTS_DIR, exist_ok=True)
     results = {
         "eval_name": "healing",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "total_readings": total,
         "binary_detection": {
             "precision": prec, "recall": rec, "f1": f1,
@@ -317,7 +317,7 @@ def run_ai_healing_eval(n_per_station=5, seed=42):
     os.makedirs(RESULTS_DIR, exist_ok=True)
     ai_results = {
         "eval_name": "healing_ai",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "model": result.model,
         "tokens_in": result.tokens_in,
         "tokens_out": result.tokens_out,

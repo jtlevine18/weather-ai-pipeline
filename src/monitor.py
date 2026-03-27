@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List
 
 from rich.console import Console
@@ -26,7 +26,7 @@ class StationMonitor:
         from src.database import init_db
         conn    = init_db()
         health  = {r["station_id"]: r for r in get_station_health(conn)}
-        now     = datetime.utcnow()
+        now     = datetime.now(timezone.utc)
         cutoff  = now - timedelta(hours=self.stale_hours)
         results = []
 

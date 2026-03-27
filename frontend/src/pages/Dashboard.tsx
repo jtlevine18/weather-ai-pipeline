@@ -3,6 +3,7 @@ import { ChevronRight } from 'lucide-react'
 import { MetricCard } from '../components/MetricCard'
 import { DashboardSkeleton } from '../components/LoadingSpinner'
 import { WelcomeBanner } from '../components/PageContext'
+import { REGION } from '../regionConfig'
 import {
   useStations,
   useForecasts,
@@ -40,7 +41,7 @@ const STAGES: StageCard[] = [
     href: '/stations',
     icon: '\u{1F4E1}',
     color: '#2E7D32',
-    desc: 'Weather readings from 20 stations across Kerala and Tamil Nadu, automatically cleaned and quality-checked',
+    desc: `Weather readings from stations across ${REGION.states.join(' and ')}, automatically cleaned and quality-checked`,
   },
   {
     key: 'forecasts',
@@ -56,7 +57,7 @@ const STAGES: StageCard[] = [
     href: '/advisories',
     icon: '\u{1F33E}',
     color: '#d4a019',
-    desc: 'Crop-specific farming advice in Tamil and Malayalam, generated weekly and delivered via SMS',
+    desc: `Crop-specific farming advice in ${REGION.languageList}, generated weekly and delivered via SMS`,
   },
 ]
 
@@ -105,7 +106,7 @@ export default function Dashboard() {
   // Last run info
   const lastRun = runList[0]
   const lastRunLabel = lastRun?.started_at
-    ? new Date(lastRun.started_at).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' })
+    ? new Date(lastRun.started_at).toLocaleDateString(REGION.locale, { weekday: 'short', month: 'short', day: 'numeric' })
     : '\u2014'
 
   // Build stats per stage card
@@ -113,7 +114,7 @@ export default function Dashboard() {
     switch (stage.key) {
       case 'data':
         return [
-          ['Stations', `${stationCount} (Kerala + Tamil Nadu)`],
+          ['Stations', `${stationCount} (${REGION.states.join(' + ')})`],
           ['Avg Quality', avgQuality > 0 ? `${Math.round(avgQuality * 100)}%` : '\u2014'],
           ['Last Run', lastRunLabel],
         ]
@@ -125,7 +126,7 @@ export default function Dashboard() {
         ]
       case 'advisories':
         return [
-          ['Languages', alertCount > 0 ? 'Tamil, Malayalam' : '\u2014'],
+          ['Languages', alertCount > 0 ? REGION.languageMetric : '\u2014'],
           ['Advisories', `${alertCount} (${deliveryCount} delivered)`],
         ]
       default:
@@ -145,13 +146,13 @@ export default function Dashboard() {
         <h1 className="font-sans font-bold text-[#1a1a1a] text-[1.65rem] leading-tight tracking-tight m-0">
           AI Weather Forecasts &amp; Farming Advisories<br />
           <span className="text-warm-muted font-normal">
-            for Smallholder Farmers in Southern India
+            for Smallholder Farmers in {REGION.name}
           </span>
         </h1>
         <p className="text-warm-muted-light text-[0.86rem] leading-relaxed mt-1.5 font-sans">
-          This system collects real weather data from 20 IMD stations across Kerala and Tamil Nadu,
+          This system collects real weather data from {REGION.dataSource} stations across {REGION.states.join(' and ')},
           generates machine-learning-corrected forecasts personalized to each farmer's GPS location,
-          and generates crop-specific advisories in Tamil and Malayalam with simulated SMS delivery.
+          and generates crop-specific advisories in {REGION.languageList} with simulated SMS delivery.
         </p>
       </div>
 

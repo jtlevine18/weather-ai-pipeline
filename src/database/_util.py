@@ -7,14 +7,14 @@ Uses SimpleConnectionPool to reuse connections instead of creating new ones each
 
 from __future__ import annotations
 import os
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from psycopg2.pool import SimpleConnectionPool
 
 
 def _now() -> str:
-    return datetime.utcnow().isoformat()
+    return datetime.now(timezone.utc).isoformat()
 
 
 def get_database_url() -> str:

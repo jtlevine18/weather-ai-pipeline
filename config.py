@@ -50,8 +50,9 @@ class TranslationConfig:
 @dataclass
 class WeatherDataConfig:
     fault_config: FaultInjectionConfig = field(default_factory=FaultInjectionConfig)
-    ingestion_source: str = "real"       # "real" or "synthetic"
+    ingestion_source: str = "real"       # "real", "synthetic", or "custom"
     imd_cache_ttl_s: int = 1800          # 30-min cache for IMD scrapes
+    custom_ingest_fn: Any = None         # async fn(StationConfig) → dict (for ingestion_source="custom")
 
 
 @dataclass
@@ -77,6 +78,8 @@ class PipelineConfig:
     tomorrow_io_key: str = field(default_factory=lambda: os.getenv("TOMORROW_IO_API_KEY", ""))
     anthropic_key: str = field(default_factory=lambda: os.getenv("ANTHROPIC_API_KEY", "").strip())
     models_dir: str = "models"
+    region_name: str = field(default_factory=lambda: os.getenv("REGION_NAME", "Southern India"))
+    timezone: str = field(default_factory=lambda: os.getenv("TIMEZONE", "Asia/Kolkata"))
 
 
 # ---------------------------------------------------------------------------
@@ -166,6 +169,25 @@ def _load_stations() -> List[StationConfig]:
 STATIONS: List[StationConfig] = _load_stations()
 
 STATION_MAP = {s.station_id: s for s in STATIONS}
+
+
+_TZ_OFFSETS = {
+    "Asia/Kolkata": 5.5, "Asia/Colombo": 5.5, "Asia/Kathmandu": 5.75,
+    "Asia/Dhaka": 6.0, "Asia/Bangkok": 7.0, "Asia/Jakarta": 7.0,
+    "Asia/Shanghai": 8.0, "Asia/Tokyo": 9.0, "Asia/Seoul": 9.0,
+    "Africa/Nairobi": 3.0, "Africa/Lagos": 1.0, "Africa/Johannesburg": 2.0,
+    "Europe/London": 0.0, "Europe/Paris": 1.0, "Europe/Berlin": 1.0,
+    "America/New_York": -5.0, "America/Chicago": -6.0,
+    "America/Denver": -7.0, "America/Los_Angeles": -8.0,
+    "America/Sao_Paulo": -3.0, "America/Mexico_City": -6.0,
+    "Australia/Sydney": 11.0, "Pacific/Auckland": 13.0,
+    "UTC": 0.0,
+}
+
+
+def tz_offset_hours(tz_name: str) -> float:
+    """Return UTC offset in hours for a timezone name. Falls back to 0.0 (UTC)."""
+    return _TZ_OFFSETS.get(tz_name, 0.0)
 
 
 def get_config() -> PipelineConfig:

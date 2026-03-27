@@ -16,7 +16,7 @@ Requires: ANTHROPIC_API_KEY, advisories in database (run pipeline first)
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from rich.console import Console
@@ -196,7 +196,7 @@ def run_translation_eval(max_advisories=20):
     os.makedirs(RESULTS_DIR, exist_ok=True)
     results = {
         "eval_name": "translation",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "n_advisories": len(advisories),
         "avg_similarity": avg_sim,
         "avg_ag_preservation": avg_ag,

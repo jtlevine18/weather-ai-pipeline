@@ -8,12 +8,12 @@ import asyncio
 import json
 import logging
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Any, Dict, List
 
 from rich.console import Console
 
-from config import PipelineConfig, STATIONS, STATION_MAP
+from config import PipelineConfig, STATIONS, STATION_MAP, tz_offset_hours
 from src.database import (init_db, insert_clean_telemetry, insert_forecast,
                             insert_alert, insert_delivery_log,
                             insert_delivery_metrics,
@@ -44,7 +44,7 @@ class WeatherPipeline:
 
         # Clients
         self.tomorrow_io   = TomorrowIOClient(config.tomorrow_io_key)
-        self.open_meteo    = OpenMeteoClient()
+        self.open_meteo    = OpenMeteoClient(timezone=config.timezone)
         self.nasa_power    = NASAPowerClient()
         self.neuralgcm     = None
         if not config.neuralgcm.enabled:
@@ -361,6 +361,7 @@ class WeatherPipeline:
                 nasa_client=self.nasa_power,
                 station_history=history,
                 precomputed_nwp=precomputed,
+                tz_offset_h=tz_offset_hours(self.config.timezone),
             )))
 
         all_results = []
@@ -521,7 +522,7 @@ class WeatherPipeline:
                 "station_id":    station.station_id,
                 "farmer_lat":    day0.get("farmer_lat", station.lat),
                 "farmer_lon":    day0.get("farmer_lon", station.lon),
-                "issued_at":     datetime.utcnow().isoformat(),
+                "issued_at":     datetime.now(timezone.utc).isoformat(),
                 "condition":     day0.get("condition"),
                 "temperature":   day0.get("temperature"),
                 "rainfall":      day0.get("rainfall"),
@@ -592,7 +593,7 @@ class WeatherPipeline:
     # ------------------------------------------------------------------
     async def run(self) -> Dict[str, Any]:
         start_pipeline_run(self.conn, self.run_id)
-        start_time = datetime.utcnow()
+        start_time = datetime.now(timezone.utc)
         steps_ok = steps_fail = 0
 
         console.rule(f"[bold cyan]Weather Pipeline Run {self.run_id[:8]}[/bold cyan]")
@@ -661,7 +662,7 @@ class WeatherPipeline:
                 "channels_used": ",".join(sorted(dl_info.get("channels", set()))) or None,
             })
 
-        elapsed = (datetime.utcnow() - start_time).total_seconds()
+        elapsed = (datetime.now(timezone.utc) - start_time).total_seconds()
         status  = "ok" if steps_fail == 0 else "partial"
         summary = (f"{steps_ok}/6 steps ok | {len(alerts)} alerts | "
                    f"{deliveries} deliveries | {elapsed:.1f}s")

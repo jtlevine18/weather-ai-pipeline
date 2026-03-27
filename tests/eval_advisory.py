@@ -15,7 +15,7 @@ Requires: ANTHROPIC_API_KEY
 import json
 import os
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from rich.console import Console
@@ -184,7 +184,7 @@ def run_advisory_eval(max_cases=None):
     os.makedirs(RESULTS_DIR, exist_ok=True)
     results = {
         "eval_name": "advisory",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "n_cases": len(golden),
         "by_provider": by_provider,
         "scores": all_scores,

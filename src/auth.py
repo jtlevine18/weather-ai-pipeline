@@ -10,7 +10,8 @@ Roles:
 
 from __future__ import annotations
 import os
-from datetime import datetime, timedelta
+import warnings
+from datetime import datetime, timedelta, timezone
 
 from fastapi import Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
@@ -18,7 +19,14 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-secret-change-in-production")
+SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+if not SECRET_KEY:
+    warnings.warn(
+        "JWT_SECRET_KEY not set — using insecure default. "
+        "Set JWT_SECRET_KEY in .env for production.",
+        stacklevel=2,
+    )
+    SECRET_KEY = "dev-secret-DO-NOT-USE-IN-PRODUCTION"
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
@@ -45,7 +53,7 @@ def verify_password(plain: str, hashed: str) -> bool:
 
 
 def create_token(username: str, role: str = "viewer") -> str:
-    expire = datetime.utcnow() + timedelta(hours=TOKEN_EXPIRE_HOURS)
+    expire = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)
     return jwt.encode(
         {"sub": username, "role": role, "exp": expire},
         SECRET_KEY, algorithm=ALGORITHM,

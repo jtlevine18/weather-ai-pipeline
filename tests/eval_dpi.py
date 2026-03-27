@@ -11,7 +11,7 @@ Usage:
 import json
 import os
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from rich.console import Console
@@ -298,7 +298,7 @@ def run_dpi_eval():
     os.makedirs(RESULTS_DIR, exist_ok=True)
     results = {
         "eval_name": "dpi",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "total_farmers": registry.farmer_count,
         "coverage": {
             "stations_covered": len(covered),

@@ -9,7 +9,7 @@ import logging
 import math
 import os
 import uuid
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional, Tuple
 
 log = logging.getLogger(__name__)
@@ -51,7 +51,7 @@ class PersistenceModel:
     """Last observation + diurnal temperature adjustment."""
 
     def predict(self, last_obs: Dict[str, Any]) -> Dict[str, Any]:
-        hour = datetime.utcnow().hour
+        hour = datetime.now(timezone.utc).hour
         # Simple diurnal: peak at 14h, trough at 04h
         diurnal_delta = 2.0 * (1.0 - abs(hour - 14) / 14.0)
         base_temp = (last_obs.get("temperature") or 25.0)
@@ -110,9 +110,9 @@ class HybridNWPModel:
         """Record a prediction error for rolling-error feature computation."""
         if station_id not in self._rolling_errors:
             self._rolling_errors[station_id] = []
-        self._rolling_errors[station_id].append((datetime.utcnow(), error))
+        self._rolling_errors[station_id].append((datetime.now(timezone.utc), error))
         # Prune entries older than 48h
-        cutoff = datetime.utcnow() - timedelta(hours=48)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=48)
         self._rolling_errors[station_id] = [
             (ts, e) for ts, e in self._rolling_errors[station_id] if ts >= cutoff
         ]
@@ -122,7 +122,7 @@ class HybridNWPModel:
         history = self._rolling_errors.get(station_id, [])
         if not history:
             return 0.0
-        cutoff = datetime.utcnow() - timedelta(hours=6)
+        cutoff = datetime.now(timezone.utc) - timedelta(hours=6)
         recent = [abs(e) for ts, e in history if ts >= cutoff]
         return float(sum(recent) / len(recent)) if recent else 0.0
 
@@ -142,7 +142,7 @@ class HybridNWPModel:
             hour = dt.hour
             doy  = dt.timetuple().tm_yday
         except Exception:
-            hour, doy = datetime.utcnow().hour, 180
+            hour, doy = datetime.now(timezone.utc).hour, 180
 
         return [
             nwp.get("temperature", 25.0) or 25.0,   # nwp_temp
@@ -319,22 +319,25 @@ def create_forecast_model(models_dir: str = "models") -> HybridNWPModel:
 # Daily aggregation (6-hourly / hourly → 7 daily forecasts)
 # ---------------------------------------------------------------------------
 
-_IST_OFFSET_H = 5.5  # UTC+05:30
-
-
 def aggregate_to_daily(
     nwp_forecasts: List[Dict[str, Any]],
     num_days: int = 7,
+    tz_offset_h: float = 5.5,
 ) -> List[Dict[str, Any]]:
     """Aggregate sub-daily NWP timesteps into daily summaries.
 
-    Groups by IST calendar day, computes:
+    Groups by local calendar day (using tz_offset_h from UTC), computes:
       temperature → daily max (high)
       rainfall    → daily sum
       humidity    → daily mean
       wind_speed  → daily max
       pressure    → daily mean
-    Returns up to *num_days* daily dicts, each with ts at noon IST.
+    Returns up to *num_days* daily dicts, each with ts at local noon.
+
+    Args:
+        tz_offset_h: UTC offset in hours for the pipeline's configured timezone.
+                     Default 5.5 = IST (UTC+05:30). Use config.tz_offset_hours()
+                     to derive from a timezone name.
     """
     from collections import defaultdict
 
@@ -345,15 +348,21 @@ def aggregate_to_daily(
             dt_utc = datetime.fromisoformat(ts_str.replace("Z", "").replace(" ", "T"))
         except Exception:
             continue
-        # Convert to IST day key
-        ist_hour = dt_utc.hour + _IST_OFFSET_H
-        ist_day = dt_utc.date()
-        if ist_hour >= 24:
-            ist_day = ist_day + timedelta(days=1)
-        buckets[str(ist_day)].append(fc)
+        # Convert to local day key
+        local_hour = dt_utc.hour + tz_offset_h
+        local_day = dt_utc.date()
+        if local_hour >= 24:
+            local_day = local_day + timedelta(days=1)
+        buckets[str(local_day)].append(fc)
 
     # Sort days chronologically, take up to num_days
     sorted_days = sorted(buckets.keys())[:num_days]
+
+    # Compute noon-local as UTC: 12:00 local = (12 - offset) UTC
+    noon_utc_h = 12.0 - tz_offset_h
+    noon_utc_hh = int(noon_utc_h)
+    noon_utc_mm = int((noon_utc_h - noon_utc_hh) * 60)
+    noon_utc_str = f"{noon_utc_hh:02d}:{noon_utc_mm:02d}:00"
 
     dailies = []
     for day_key in sorted_days:
@@ -366,7 +375,7 @@ def aggregate_to_daily(
         pressures = [e.get("pressure") for e in entries if e.get("pressure") is not None]
 
         daily = {
-            "ts": f"{day_key}T06:30:00",  # noon IST = 06:30 UTC
+            "ts": f"{day_key}T{noon_utc_str}",
             "temperature": round(max(temps), 1) if temps else 25.0,
             "rainfall": round(sum(rains), 1),
             "humidity": round(sum(humids) / len(humids), 1) if humids else 60.0,
@@ -393,6 +402,7 @@ async def run_forecast_step(
     nasa_client=None,
     station_history: Optional[List[Dict[str, Any]]] = None,
     precomputed_nwp: Optional[List[Dict[str, Any]]] = None,
+    tz_offset_h: float = 5.5,
 ) -> List[Dict[str, Any]]:
     """Run 7-day forecast for one station. Returns list of daily forecast records.
 
@@ -442,7 +452,7 @@ async def run_forecast_step(
     if not nwp_forecasts:
         if clean_reading:
             forecast = persistence_model.predict(clean_reading)
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             return [{
                 "id":           f"{station.station_id}_{now.strftime('%Y%m%d%H%M%S')}_{uuid.uuid4().hex[:4]}",
                 "station_id":   station.station_id,
@@ -465,9 +475,9 @@ async def run_forecast_step(
         )
 
     # Aggregate sub-daily NWP to 7 daily forecasts
-    dailies = aggregate_to_daily(nwp_forecasts, num_days=7)
+    dailies = aggregate_to_daily(nwp_forecasts, num_days=7, tz_offset_h=tz_offset_h)
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     results = []
     for day_idx, daily_nwp in enumerate(dailies):
         # MOS correction on each daily forecast

@@ -9,12 +9,15 @@ from __future__ import annotations
 import logging
 from typing import Any, List, Tuple
 
+from src.database.safe_sql import safe_column, safe_table
+
 log = logging.getLogger(__name__)
 
 
 def check_row_count(conn: Any, table: str,
                     min_expected: int) -> Tuple[bool, str]:
     """Verify table has at least min_expected rows."""
+    table = safe_table(table)
     count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
     passed = count >= min_expected
     msg = f"{table}: {count} rows (min {min_expected})"
@@ -24,6 +27,7 @@ def check_row_count(conn: Any, table: str,
 def check_null_rate(conn: Any, table: str,
                     column: str, max_null_pct: float) -> Tuple[bool, str]:
     """Verify null rate for a column is below threshold."""
+    table, column = safe_table(table), safe_column(column)
     row = conn.execute(f"""
         SELECT COUNT(*) AS total,
                SUM(CASE WHEN {column} IS NULL THEN 1 ELSE 0 END) AS nulls
@@ -41,6 +45,7 @@ def check_null_rate(conn: Any, table: str,
 def check_value_range(conn: Any, table: str,
                       column: str, min_val: float, max_val: float) -> Tuple[bool, str]:
     """Verify all non-null values in column are within [min_val, max_val]."""
+    table, column = safe_table(table), safe_column(column)
     row = conn.execute(f"""
         SELECT MIN({column}), MAX({column})
         FROM {table}
@@ -57,6 +62,7 @@ def check_value_range(conn: Any, table: str,
 def check_freshness(conn: Any, table: str,
                     ts_column: str, max_age_hours: float) -> Tuple[bool, str]:
     """Verify most recent row is not older than max_age_hours."""
+    table, ts_column = safe_table(table), safe_column(ts_column)
     row = conn.execute(f"""
         SELECT MAX({ts_column}) FROM {table}
     """).fetchone()

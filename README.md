@@ -9,33 +9,49 @@ pinned: false
 license: mit
 ---
 
-# AI Weather Pipeline for Southern India
+# AI Weather Pipeline
 
-> Live ML-powered weather forecasting and farming advisory system for 20 stations across Kerala and Tamil Nadu.
+> ML-powered weather forecasting and crop advisory system for smallholder farmers. Works for any region — ships with a Southern India (Kerala & Tamil Nadu) reference implementation.
 
-**[Live Demo →](https://jtlevine-ai-weather-pipeline.hf.space)** | **[How It Works →](#how-it-works)**
+**[Live Demo →](https://jtlevine-ai-weather-pipeline.hf.space)** | **[Adapt for Your Region →](REBUILD.md)**
 
 ## What This Does
 
-An end-to-end weather intelligence pipeline that:
-- Scrapes real weather data from India's Meteorological Department (20 stations)
-- Heals anomalies using a Claude AI agent with 5 specialized tools
-- Generates 7-day forecasts via NeuralGCM (Google DeepMind's neural weather model) + XGBoost bias correction
-- Downscales to farmer GPS coordinates using NASA satellite data
-- Produces crop-specific advisories in Tamil and Malayalam via RAG + Claude
-- Delivers via SMS
+A 6-step weather intelligence pipeline that:
+- **Ingests** station-level weather observations (bring your own data source, or use the built-in IMD scraper)
+- **Heals** anomalies using a Claude AI agent with 5 specialized tools
+- **Forecasts** 7 days via NeuralGCM (Google DeepMind) + XGBoost bias correction
+- **Downscales** to farmer GPS coordinates using NASA satellite data
+- **Translates** into crop-specific advisories in any language via RAG + Claude
+- **Delivers** via SMS/WhatsApp
 
-The pipeline runs weekly, costs ~$3/month, and degrades gracefully — every component has a zero-cost fallback.
+Runs weekly, costs ~$3/month, and degrades gracefully — every component has a zero-cost fallback.
+
+## Fork & Adapt
+
+This pipeline is designed to be forked and adapted for any geography. The core ML infrastructure (NeuralGCM, XGBoost MOS, FAISS RAG, Claude advisory generation) works globally. Only the station config and data source are region-specific.
+
+**See [REBUILD.md](REBUILD.md)** for a Claude Code prompt that adapts the full pipeline to your region in one shot.
+
+**What you provide:**
+- Your stations (lat/lon/altitude/crops) → `stations.json`
+- Your weather data source (own API, CSV, or Open-Meteo as global fallback)
+- Optionally: simulated farmer profiles → `farmers.json`
+
+**What works globally (no changes needed):**
+- Open-Meteo weather data, NASA POWER satellite data, NeuralGCM forecasting
+- Claude advisory generation (any language), XGBoost MOS correction
+- PostgreSQL database, FAISS RAG, full pipeline orchestration
 
 ## Architecture
 
 ```
-IMD Scraper + imdlib  → Ingest    (real station data, 3-level fallback)
-Tomorrow.io           → Heal      (AI agent cross-validation)
+Station Data Source  → Ingest    (your API, IMD, or synthetic — pluggable)
+Tomorrow.io          → Heal      (AI agent cross-validation)
 NeuralGCM / Open-Meteo → Forecast (neural weather model on GPU)
-NASA POWER            → Downscale (satellite → farmer GPS)
-Claude + RAG          → Translate (bilingual advisories)
-Twilio SMS            → Deliver   (console dry-run)
+NASA POWER           → Downscale (satellite grid → farmer GPS)
+Claude + RAG         → Translate (crop advisories in any language)
+Twilio SMS           → Deliver   (console dry-run by default)
 ```
 
 ## Tech Stack
@@ -45,27 +61,35 @@ Twilio SMS            → Deliver   (console dry-run)
 | NWP Model | NeuralGCM (JAX/GPU) | 7-day global weather forecasts |
 | ML Correction | XGBoost | MOS bias correction on NWP output |
 | AI Healing | Claude Sonnet (tool-use) | Agentic data quality repair |
-| Advisory Gen | Claude + FAISS/BM25 RAG | Bilingual crop-specific advice |
+| Advisory Gen | Claude + FAISS/BM25 RAG | Crop-specific advice in any language |
 | Downscaling | NASA POWER + IDW | Satellite grid → farmer GPS |
 | Database | PostgreSQL (Neon) | Production data store |
-| Frontend | React + Tailwind | Portfolio dashboard |
-| Dashboard | Streamlit | Operator view |
+| Frontend | React + Tailwind | Dashboard |
 | API | FastAPI | REST endpoints |
-| Scheduling | GitHub Actions | Weekly pipeline trigger |
 | Orchestration | Dagster (optional) | DAG-based pipeline |
 
 ## Run Locally
 
 ```bash
 pip install -r requirements.txt
-cp .env.example .env  # add API keys
+cp .env.example .env  # add API keys + DATABASE_URL (see Neon free tier)
 python run_pipeline.py
-streamlit run streamlit_app/app.py
 ```
 
-## Adapt for Your Location
+## What's Global vs Region-Specific
 
-This pipeline works globally — only the station config is region-specific. See [REBUILD.md](REBUILD.md) for a Claude Code prompt that adapts it to any region.
+| Component | Global? | Notes |
+|-----------|---------|-------|
+| NeuralGCM / Open-Meteo | Yes | Works anywhere on Earth |
+| NASA POWER | Yes | Global satellite coverage |
+| Claude API | Yes | Any language |
+| XGBoost MOS | Yes | Trains on local data automatically |
+| FAISS RAG | Yes | Rebuild index with local ag corpus |
+| Station config | **No** | Replace `stations.json` for your region |
+| IMD ingestion | **No** | India-specific; use `custom` ingestion for your data source |
+| Farmer profiles | **No** | Replace `farmers.json` or skip |
+| Curated advisories | **No** | Replace crop matrix for your region |
+| Healing seasonal context | **No** | Regenerate for your climate |
 
 ## Cost
 
@@ -73,4 +97,4 @@ This pipeline works globally — only the station config is region-specific. See
 
 ## License
 
-MIT
+[MIT](LICENSE)

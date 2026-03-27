@@ -44,9 +44,25 @@ jobs:
           ANTHROPIC_API_KEY: test-key
           TOMORROW_IO_API_KEY: test-key
           JWT_SECRET_KEY: test-secret
-        run: pytest tests/ -v --tb=short -x
+        run: pytest tests/ -v --tb=short -x --timeout=60
+
+      - name: Lint
+        run: |
+          pip install ruff
+          ruff check src/ scripts/ tests/ --select E,F,W
 
       - name: Type check (basic)
         run: |
           pip install pyright
           pyright src/models.py src/api.py --level basic || true
+
+      - name: Scan for hardcoded secrets
+        run: |
+          ! grep -rn "sk-ant-api\|hf_[A-Za-z0-9]\{20\}\|gho_[A-Za-z0-9]\{20\}" \
+            --include="*.py" --include="*.toml" --include="*.yml" --include="*.yaml" . || \
+            (echo "ERROR: Possible hardcoded secrets found" && exit 1)
+
+      - name: Audit dependencies
+        run: |
+          pip install pip-audit
+          pip-audit -r requirements.txt --desc || true

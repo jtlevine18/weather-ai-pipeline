@@ -19,6 +19,11 @@ COPY . .
 ENV STREAMLIT_HOME=/tmp/.streamlit
 RUN mkdir -p /tmp/.streamlit
 
+# Run as non-root user
+RUN adduser --disabled-password --gecos '' appuser && \
+    chown -R appuser:appuser /app /tmp/.streamlit
+USER appuser
+
 EXPOSE 7860
 
 # Health check

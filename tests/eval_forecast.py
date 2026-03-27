@@ -12,7 +12,7 @@ import json
 import math
 import os
 from collections import defaultdict
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pytest
 from rich.console import Console
@@ -236,7 +236,7 @@ def run_forecast_eval():
 
     results = {
         "eval_name": "forecast",
-        "timestamp": datetime.utcnow().isoformat(),
+        "timestamp": datetime.now(timezone.utc).isoformat(),
         "total_pairs": len(pairs),
         "nwp_source_distribution": dict(nwp_dist),
         "overall": overall,
