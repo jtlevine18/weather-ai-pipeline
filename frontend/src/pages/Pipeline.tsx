@@ -47,16 +47,16 @@ const DATA_SOURCES = [
 
 const PIPELINE_STEPS = [
   { num: 1, name: 'Ingest', table: 'raw_telemetry', desc: 'IMD station data', color: '#2E7D32' },
-  { num: 2, name: 'Heal', table: 'clean_telemetry', desc: 'Anomaly detection + imputation', color: '#1565C0' },
-  { num: 3, name: 'Forecast', table: 'forecasts', desc: 'MOS: NWP + XGBoost residual', color: '#7B1FA2' },
-  { num: 4, name: 'Downscale', table: 'forecasts', desc: 'IDW + lapse-rate to farmer GPS', color: '#E65100' },
-  { num: 5, name: 'Translate', table: 'agricultural_alerts', desc: 'RAG + Claude advisory', color: '#C62828' },
+  { num: 2, name: 'Heal', table: 'clean_telemetry', desc: 'Anomaly detection + gap filling', color: '#1565C0' },
+  { num: 3, name: 'Forecast', table: 'forecasts', desc: 'Neural weather model + ML correction', color: '#7B1FA2' },
+  { num: 4, name: 'Downscale', table: 'forecasts', desc: 'Adjust for farmer location + altitude', color: '#E65100' },
+  { num: 5, name: 'Translate', table: 'agricultural_alerts', desc: 'Claude AI advisory in local language', color: '#C62828' },
   { num: 6, name: 'Deliver', table: 'delivery_log', desc: 'SMS + WhatsApp', color: '#d4a019' },
 ]
 
 const DEGRADATION_CHAIN = [
   { trigger: 'NeuralGCM unavailable', fallback: 'Open-Meteo API fallback' },
-  { trigger: 'Open-Meteo unavailable', fallback: 'Persistence model (last obs + diurnal)' },
+  { trigger: 'Open-Meteo unavailable', fallback: 'Last observation with time-of-day adjustment' },
   { trigger: 'Claude healing down', fallback: 'Rule-based fallback' },
   { trigger: 'Claude advisory down', fallback: 'Template advisories' },
   { trigger: 'Tomorrow.io down', fallback: 'NASA POWER cross-validation' },

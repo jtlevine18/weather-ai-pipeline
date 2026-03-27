@@ -1,4 +1,4 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, Link } from 'react-router-dom'
 import {
   Home,
   Database,
@@ -10,7 +10,7 @@ import {
 
 const NAV_ITEMS = [
   { to: '/', label: 'Home', icon: Home },
-  { to: '/stations', label: 'Data', icon: Database },
+  { to: '/stations', label: 'Stations', icon: Database },
   { to: '/forecasts', label: 'Forecasts', icon: CloudSun },
   { to: '/advisories', label: 'Advisories', icon: Wheat },
   { to: '/pipeline', label: 'System', icon: Settings },
@@ -43,7 +43,7 @@ export function Sidebar({ open, onClose }: Props) {
       >
         {/* Brand */}
         <div className="flex items-center justify-between h-16 px-5 border-b border-white/10">
-          <div className="flex items-center gap-2.5">
+          <Link to="/" className="flex items-center gap-2.5 no-underline">
             <div className="w-8 h-8 rounded-lg bg-gold flex items-center justify-center">
               <CloudSun size={18} className="text-white" />
             </div>
@@ -51,7 +51,7 @@ export function Sidebar({ open, onClose }: Props) {
               <h1 className="text-sm font-bold text-white leading-tight font-serif">Weather</h1>
               <p className="text-[10px] text-[#e0dcd5] font-sans font-medium uppercase tracking-wider">Pipeline</p>
             </div>
-          </div>
+          </Link>
           <button
             onClick={onClose}
             className="lg:hidden p-1 rounded-md hover:bg-white/10 text-[#e0dcd5]"

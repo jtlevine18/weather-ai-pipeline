@@ -96,25 +96,25 @@ export default function Advisories() {
   if (isLoading) return <TableSkeleton />
   if (error) return <div className="text-center py-12"><p className="text-error text-sm">Failed to load advisories</p></div>
 
-  const TABS = ['Advisory Feed', 'Lineage', 'Farmers & DPI', 'Delivery']
+  const TABS = ['Advisory Feed', 'Lineage', 'Farmer Profiles', 'Delivery']
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="page-title">Advisories</h1>
         <p className="page-caption">
-          Translation, delivery, and farmer profiles
+          Bilingual farming advice, delivery status, and farmer profiles
         </p>
       </div>
 
       <PageContext id="advisories">
-        Crop-specific farming advice generated weekly through RAG retrieval + Claude, translated into Tamil and Malayalam. Select a farmer in the Farmers &amp; DPI tab to view their simulated Digital Public Infrastructure profile.
+        Farming advice generated weekly by Claude AI, translated into Tamil and Malayalam. View individual farmer profiles and their linked government records in the Farmer Profiles tab.
       </PageContext>
 
       {/* 4 Metrics */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard label="Total Advisories" value={totalAdvisories} />
-        <MetricCard label="RAG+Claude" value={ragCount} />
+        <MetricCard label="AI Generated" value={ragCount} />
         <MetricCard label="Tamil / Malayalam" value={`${taCount} / ${mlCount}`} />
         <MetricCard label="Deliveries" value={sentCount} />
       </div>
@@ -401,7 +401,7 @@ function FarmersDPITab({ alerts, stationMap }: {
 
   return (
     <div className="space-y-4">
-      <div className="section-header">Farmer Profiles & DPI Context</div>
+      <div className="section-header">Farmer Profiles & Government Services</div>
       <p style={{ color: '#888', fontSize: '0.82rem' }}>
         Digital Public Infrastructure data from simulated government services
       </p>

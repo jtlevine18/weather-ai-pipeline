@@ -1037,14 +1037,14 @@ export default function Stations() {
     <div className="space-y-6">
       {/* Page header */}
       <div>
-        <h1 className="page-title">Data</h1>
+        <h1 className="page-title">Stations</h1>
         <p className="page-caption">
-          Weather station readings across Kerala and Tamil Nadu — raw ingestion, quality scores, and healing
+          Weather readings from 20 stations, with AI-powered quality checks
         </p>
       </div>
 
       <PageContext id="stations">
-        Raw weather observations from India's meteorological network, before and after AI-powered quality healing. Toggle between raw and healed data to see how anomalies are detected and corrected.
+        Weather data from 20 IMD stations, cleaned by an AI agent that detects anomalies, fills gaps, and cross-validates against satellite data.
       </PageContext>
 
       {/* Metric cards */}

@@ -119,7 +119,7 @@ export default function Dashboard() {
         ]
       case 'forecasts':
         return [
-          ['NWP Model', nwpModel],
+          ['Weather Model', nwpModel],
           ['Forecast Days', forecastCount > 0 ? `${Math.round(forecastCount / Math.max(stationCount, 1))} per station` : '\u2014'],
           ['Avg Confidence', forecastCount > 0 ? `${Math.round((forecasts.data ?? []).reduce((s, f) => s + (f.confidence ?? 0), 0) / forecastCount * 100)}%` : '\u2014'],
         ]

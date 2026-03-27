@@ -12,9 +12,9 @@ interface ChatMessage {
 const INITIAL_MSG: ChatMessage = {
   role: 'assistant',
   content:
-    "Welcome! I can explain any part of this AI weather pipeline, show you live data, " +
-    "or walk you through the architecture. Try asking: 'How does NeuralGCM work?', " +
-    "'Show me the latest forecast for Chennai', or 'What's the tech stack?'",
+    "Welcome! I can explain how this weather system works, show you forecasts for any station, " +
+    "or answer questions about the technology. Try: 'How are forecasts generated?', " +
+    "'Show the latest data for Chennai', or 'What technology powers this?'",
 }
 
 function renderMarkdown(text: string): string {

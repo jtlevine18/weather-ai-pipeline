@@ -1,47 +1,37 @@
-import { useState, useEffect } from 'react'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { useState } from 'react'
+import { Info } from 'lucide-react'
 
 interface Props {
   id: string
   children: string
 }
 
-export function PageContext({ id, children }: Props) {
-  const storageKey = `page_context_${id}`
-  const [collapsed, setCollapsed] = useState(() => {
-    try { return localStorage.getItem(storageKey) === 'collapsed' } catch { return false }
-  })
-
-  useEffect(() => {
-    try { localStorage.setItem(storageKey, collapsed ? 'collapsed' : 'expanded') } catch {}
-  }, [collapsed, storageKey])
+export function PageContext({ id: _id, children }: Props) {
+  const [visible, setVisible] = useState(false)
 
   return (
-    <div
-      className="border-l-2 border-gold pl-4 py-2 mb-6"
-      style={{ marginTop: '-4px' }}
-    >
-      {collapsed ? (
-        <button
-          onClick={() => setCollapsed(false)}
-          className="flex items-center gap-1.5 text-xs font-sans font-medium text-warm-muted hover:text-warm-body transition-colors"
+    <div className="relative inline-block mb-4" style={{ marginTop: '-4px' }}>
+      <button
+        onMouseEnter={() => setVisible(true)}
+        onMouseLeave={() => setVisible(false)}
+        onClick={() => setVisible(v => !v)}
+        className="flex items-center gap-1.5 text-xs font-sans font-medium text-warm-muted hover:text-warm-body transition-colors"
+        aria-label="About this page"
+      >
+        <Info size={14} />
+        <span>About this page</span>
+      </button>
+      {visible && (
+        <div
+          className="absolute left-0 top-full mt-2 z-20 card border-l-[3px] border-l-gold p-3 shadow-lg animate-fade-in"
+          style={{ width: '420px', maxWidth: 'calc(100vw - 80px)' }}
+          onMouseEnter={() => setVisible(true)}
+          onMouseLeave={() => setVisible(false)}
         >
-          <ChevronDown size={14} />
-          Show context
-        </button>
-      ) : (
-        <>
           <p className="text-sm font-sans text-warm-body leading-relaxed m-0">
             {children}
           </p>
-          <button
-            onClick={() => setCollapsed(true)}
-            className="flex items-center gap-1 text-xs font-sans font-medium text-warm-muted hover:text-warm-body transition-colors mt-1.5"
-          >
-            <ChevronUp size={14} />
-            Less
-          </button>
-        </>
+        </div>
       )}
     </div>
   )
