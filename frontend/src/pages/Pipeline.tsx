@@ -2,7 +2,7 @@ import { useState } from 'react'
 import {
   usePipelineRuns, useHealingStats, useHealingLog, usePipelineStats,
   useDeliveryLog, useEvals, useConversationLog, useDeliveryMetricsAgg,
-  useMosStatus, useTriggerPipeline, useRetrainMos,
+  useTriggerPipeline, useRetrainMos,
 } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
@@ -39,170 +39,114 @@ function formatTime(dateStr: string | undefined): string {
 // Visual Architecture Diagram
 // ---------------------------------------------------------------------------
 
-const DATA_SOURCES = [
-  { emoji: '\uD83D\uDD27', name: `${REGION.dataSource} / imdlib`, desc: 'Station observations', color: '#2E7D32' },
-  { emoji: '\uD83C\uDF10', name: 'Tomorrow.io', desc: 'Cross-validation ref', color: '#1565C0' },
-  { emoji: '\uD83D\uDCE1', name: 'NeuralGCM / Open-Meteo', desc: 'NWP forecasts', color: '#7B1FA2' },
-  { emoji: '\uD83D\uDEF0\uFE0F', name: 'NASA POWER', desc: 'Spatial grid (0.5\u00B0)', color: '#E65100' },
-  { emoji: '\uD83E\uDD16', name: 'Claude API', desc: 'Advisory + Translation', color: '#C62828' },
-]
-
 const PIPELINE_STEPS = [
-  { num: 1, name: 'Ingest', table: 'raw_telemetry', desc: `${REGION.dataSource} station data`, color: '#2E7D32' },
-  { num: 2, name: 'Heal', table: 'clean_telemetry', desc: 'Anomaly detection + gap filling', color: '#1565C0' },
-  { num: 3, name: 'Forecast', table: 'forecasts', desc: 'Neural weather model + ML correction', color: '#7B1FA2' },
-  { num: 4, name: 'Downscale', table: 'forecasts', desc: 'Adjust for farmer location + altitude', color: '#E65100' },
-  { num: 5, name: 'Translate', table: 'agricultural_alerts', desc: 'Claude AI advisory in local language', color: '#C62828' },
-  { num: 6, name: 'Deliver', table: 'delivery_log', desc: 'SMS + WhatsApp', color: '#d4a019' },
-]
-
-const DEGRADATION_CHAIN = [
-  { trigger: 'NeuralGCM unavailable', fallback: 'Open-Meteo API fallback' },
-  { trigger: 'Open-Meteo unavailable', fallback: 'Last observation with time-of-day adjustment' },
-  { trigger: 'Claude healing down', fallback: 'Rule-based fallback' },
-  { trigger: 'Claude advisory down', fallback: 'Template advisories' },
-  { trigger: 'Tomorrow.io down', fallback: 'NASA POWER cross-validation' },
-  { trigger: 'Translation fails', fallback: 'English advisory only' },
-]
-
-const DB_TABLES = [
-  'raw_telemetry', 'clean_telemetry', 'forecasts', 'agricultural_alerts', 'delivery_log',
+  {
+    num: 1, name: 'Ingest', table: 'raw_telemetry', color: '#2E7D32',
+    desc: 'Collect station-level weather observations',
+    options: [
+      { label: `${REGION.dataSource} Scraper`, note: 'Real-time station data', active: true },
+      { label: 'Custom Data Source', note: 'Your own API or CSV files' },
+      { label: 'Open-Meteo', note: 'Global, free, no key needed' },
+      { label: 'Synthetic', note: 'Generated data with fault injection' },
+    ],
+  },
+  {
+    num: 2, name: 'Heal', table: 'clean_telemetry', color: '#1565C0',
+    desc: 'Detect anomalies, fill gaps, cross-validate',
+    options: [
+      { label: 'Claude AI Agent', note: '5 tools, reasoning logged', active: true },
+      { label: 'Rule-Based', note: 'Zero-cost fallback, same output' },
+    ],
+  },
+  {
+    num: 3, name: 'Forecast', table: 'forecasts', color: '#7B1FA2',
+    desc: '7-day forecasts with ML bias correction',
+    options: [
+      { label: 'NeuralGCM + XGBoost MOS', note: 'Neural weather model on GPU', active: true },
+      { label: 'Open-Meteo + XGBoost MOS', note: 'No GPU needed' },
+      { label: 'Persistence', note: 'Last obs + diurnal adjustment' },
+    ],
+  },
+  {
+    num: 4, name: 'Downscale', table: 'forecasts', color: '#E65100',
+    desc: 'Adjust forecast to farmer GPS + elevation',
+    options: [
+      { label: 'NASA POWER + IDW', note: '0.5\u00B0 grid, lapse-rate correction', active: true },
+      { label: 'Station-Level', note: 'Skip if NASA POWER unavailable' },
+    ],
+  },
+  {
+    num: 5, name: 'Translate', table: 'agricultural_alerts', color: '#C62828',
+    desc: 'Generate crop-specific advisories in local language',
+    options: [
+      { label: 'RAG + Claude', note: 'FAISS/BM25 retrieval + generation', active: true },
+      { label: 'Curated Templates', note: 'Rule-based, zero API cost' },
+    ],
+  },
+  {
+    num: 6, name: 'Deliver', table: 'delivery_log', color: '#d4a019',
+    desc: 'Send advisories to farmers',
+    options: [
+      { label: 'Console', note: 'Dry-run, always works', active: true },
+      { label: 'Twilio SMS', note: 'Live delivery' },
+      { label: 'WhatsApp', note: 'Via Twilio' },
+    ],
+  },
 ]
 
 function ArchitectureDiagram() {
   return (
-    <div className="space-y-6">
-      {/* Data Sources */}
-      <div>
-        <div style={{
-          fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase' as const,
-          letterSpacing: '1.5px', color: '#888', marginBottom: '10px',
-        }}>
-          Data Sources (each API has ONE job)
-        </div>
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
-          {DATA_SOURCES.map(s => (
-            <div key={s.name} style={{
-              background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-              borderLeft: `4px solid ${s.color}`, padding: '12px 14px',
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '0', paddingLeft: '20px' }}>
+      {PIPELINE_STEPS.map((s, i) => (
+        <div key={s.num}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+            {/* Step number circle */}
+            <div style={{
+              width: '36px', height: '36px', borderRadius: '50%', background: s.color,
+              color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+              fontWeight: 700, fontSize: '0.85rem', flexShrink: 0, marginTop: '2px',
             }}>
-              <div style={{ fontSize: '1.2rem', marginBottom: '4px' }}>{s.emoji}</div>
-              <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#1a1a1a' }}>{s.name}</div>
-              <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '2px' }}>{s.desc}</div>
+              {s.num}
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Vertical flow indicator */}
-      <div style={{ textAlign: 'center', color: '#d4a019', fontSize: '1.5rem', lineHeight: 1 }}>
-        \u25BC \u25BC \u25BC
-      </div>
-
-      {/* Pipeline Steps — vertical flow */}
-      <div>
-        <div style={{
-          fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase' as const,
-          letterSpacing: '1.5px', color: '#888', marginBottom: '10px',
-        }}>
-          Pipeline (6 steps, linear)
-        </div>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '0', paddingLeft: '20px' }}>
-          {PIPELINE_STEPS.map((s, i) => (
-            <div key={s.num}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-                {/* Step number circle */}
-                <div style={{
-                  width: '36px', height: '36px', borderRadius: '50%', background: s.color,
-                  color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontWeight: 700, fontSize: '0.85rem', flexShrink: 0,
-                }}>
-                  {s.num}
-                </div>
-                {/* Card */}
-                <div style={{
-                  flex: 1, background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-                  padding: '12px 16px',
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
-                    <span style={{ fontWeight: 700, fontSize: '0.9rem', color: s.color }}>{s.name}</span>
-                    <code style={{
-                      background: '#f0ede8', padding: '2px 8px', borderRadius: '4px',
-                      fontSize: '0.72rem', color: '#555',
-                    }}>{s.table}</code>
-                  </div>
-                  <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>{s.desc}</div>
-                </div>
+            {/* Card */}
+            <div style={{
+              flex: 1, background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
+              padding: '14px 16px',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
+                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: s.color }}>{s.name}</span>
+                <code style={{
+                  background: '#f0ede8', padding: '2px 8px', borderRadius: '4px',
+                  fontSize: '0.72rem', color: '#555',
+                }}>{s.table}</code>
               </div>
-              {/* Connector line */}
-              {i < PIPELINE_STEPS.length - 1 && (
-                <div style={{
-                  width: '2px', height: '16px', background: '#d4a019', marginLeft: '17px',
-                }} />
-              )}
+              <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '8px' }}>{s.desc}</div>
+              {/* Options */}
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
+                {s.options.map(opt => (
+                  <div key={opt.label} title={opt.note} style={{
+                    background: opt.active ? `${s.color}10` : '#faf8f5',
+                    border: `1px solid ${opt.active ? s.color + '40' : '#e0dcd5'}`,
+                    borderRadius: '6px', padding: '4px 10px',
+                    fontSize: '0.72rem', color: opt.active ? s.color : '#888',
+                    fontWeight: opt.active ? 600 : 400,
+                    cursor: 'default',
+                  }}>
+                    {opt.label}
+                    {opt.active && <span style={{ marginLeft: '4px', fontSize: '0.65rem' }}>{'\u2713'}</span>}
+                  </div>
+                ))}
+              </div>
             </div>
-          ))}
+          </div>
+          {/* Connector line */}
+          {i < PIPELINE_STEPS.length - 1 && (
+            <div style={{
+              width: '2px', height: '14px', background: '#d4a019', marginLeft: '17px',
+            }} />
+          )}
         </div>
-      </div>
-
-      {/* Degradation Chain */}
-      <div>
-        <div style={{
-          fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase' as const,
-          letterSpacing: '1.5px', color: '#888', marginBottom: '10px',
-        }}>
-          Degradation Chain (independent, never cascades)
-        </div>
-        <div style={{
-          background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-          overflow: 'hidden',
-        }}>
-          {DEGRADATION_CHAIN.map((d, i) => (
-            <div key={i} style={{
-              display: 'flex', alignItems: 'center', gap: '12px',
-              padding: '8px 14px',
-              borderBottom: i < DEGRADATION_CHAIN.length - 1 ? '1px solid #f0ede8' : 'none',
-            }}>
-              <span style={{
-                fontSize: '0.78rem', color: '#e63946', fontWeight: 500, minWidth: '200px',
-              }}>
-                {d.trigger}
-              </span>
-              <span style={{ color: '#d4a019', fontSize: '0.9rem' }}>{'\u2192'}</span>
-              <span style={{ fontSize: '0.78rem', color: '#2a9d8f', fontWeight: 500 }}>
-                {d.fallback}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Database Tables */}
-      <div>
-        <div style={{
-          fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase' as const,
-          letterSpacing: '1.5px', color: '#888', marginBottom: '10px',
-        }}>
-          Database (core tables)
-        </div>
-        <div style={{
-          display: 'flex', alignItems: 'center', gap: '0', flexWrap: 'wrap',
-          background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-          padding: '12px 16px',
-        }}>
-          {DB_TABLES.map((t, i) => (
-            <div key={t} style={{ display: 'flex', alignItems: 'center' }}>
-              <code style={{
-                background: '#f0ede8', padding: '4px 10px', borderRadius: '4px',
-                fontSize: '0.76rem', fontWeight: 500, color: '#1a1a1a',
-              }}>{t}</code>
-              {i < DB_TABLES.length - 1 && (
-                <span style={{ color: '#d4a019', margin: '0 8px', fontSize: '0.85rem' }}>{'\u2192'}</span>
-              )}
-            </div>
-          ))}
-        </div>
-      </div>
+      ))}
     </div>
   )
 }
@@ -827,193 +771,40 @@ function HealingStatsTab() {
 // Pipeline Architecture Tab — stage action cards
 // ---------------------------------------------------------------------------
 
-const STAGE_COLORS = ['#2E7D32', '#1565C0', '#7B1FA2', '#00838F', '#d4a019', '#C62828']
-
-function StageCard({ step, name, desc, children }: {
-  step: number; name: string; desc: string; children?: React.ReactNode
-}) {
-  const color = STAGE_COLORS[step - 1] || '#888'
-  return (
-    <div style={{
-      background: '#fff', border: '1px solid #e0dcd5', borderRadius: '12px',
-      padding: '18px 18px 14px', position: 'relative', overflow: 'hidden',
-    }}>
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: '3px', background: color }} />
-      <div style={{
-        fontSize: '0.62rem', color: '#888', textTransform: 'uppercase', letterSpacing: '1.5px',
-        fontFamily: 'DM Sans, sans-serif',
-      }}>Step {step}</div>
-      <div style={{
-        fontSize: '1.05rem', fontWeight: 600, color: '#1a1a1a', margin: '2px 0 6px',
-        fontFamily: 'DM Sans, sans-serif',
-      }}>{name}</div>
-      <div style={{
-        fontSize: '0.76rem', color: '#777', lineHeight: 1.5, marginBottom: children ? '12px' : '0',
-      }}>{desc}</div>
-      {children}
-    </div>
-  )
-}
-
 function ArchitectureTab() {
-  const mosStatus = useMosStatus()
   const triggerPipeline = useTriggerPipeline()
   const retrainMos = useRetrainMos()
-
-  const mos = mosStatus.data
-  const metrics = mos?.metrics
 
   return (
     <div className="space-y-6">
       <ArchitectureDiagram />
 
-      {/* Run Full Pipeline — centered */}
-      <div style={{ display: 'flex', justifyContent: 'center' }}>
+      {/* Actions */}
+      <div className="section-header">Actions</div>
+      <div className="grid grid-cols-2 gap-3" style={{ maxWidth: '400px' }}>
         <button
           className="btn-primary"
-          style={{ padding: '12px 48px', fontSize: '0.88rem' }}
+          style={{ fontSize: '0.82rem' }}
           disabled={triggerPipeline.isPending}
           onClick={() => triggerPipeline.mutate()}
         >
           {triggerPipeline.isPending ? 'Triggering...' : 'Run Full Pipeline'}
         </button>
+        <button
+          className="btn-secondary"
+          style={{ fontSize: '0.82rem' }}
+          disabled={retrainMos.isPending}
+          onClick={() => retrainMos.mutate()}
+        >
+          {retrainMos.isPending ? 'Retraining...' : 'Retrain MOS Model'}
+        </button>
       </div>
       {triggerPipeline.isSuccess && (
-        <p style={{ textAlign: 'center', color: '#2a9d8f', fontSize: '0.82rem' }}>
-          Pipeline triggered — check Pipeline Runs tab for progress.
-        </p>
+        <p style={{ color: '#2a9d8f', fontSize: '0.82rem' }}>Pipeline triggered — check Pipeline Runs tab.</p>
       )}
-      {triggerPipeline.isError && (
-        <p style={{ textAlign: 'center', color: '#e63946', fontSize: '0.82rem' }}>
-          Failed to trigger pipeline. Check that the API is running.
-        </p>
+      {retrainMos.isSuccess && (
+        <p style={{ color: '#2a9d8f', fontSize: '0.82rem' }}>Retraining triggered — refresh in ~30s.</p>
       )}
-
-      {/* Stage Actions */}
-      <div className="section-header">Stage Actions</div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {/* Stage 1: Ingest */}
-        <StageCard step={1} name="Ingest" desc={`Fetch weather readings from 20 ${REGION.dataSource} stations across ${REGION.states.join(' and ')}`}>
-          <div style={{ fontSize: '0.78rem', color: '#555' }}>
-            <span style={{ fontWeight: 600 }}>Sources:</span> {REGION.dataSource} scraper → imdlib gridded → synthetic fallback
-          </div>
-        </StageCard>
-
-        {/* Stage 2: Heal */}
-        <StageCard step={2} name="Heal" desc="Cross-validate observations via Tomorrow.io, fix anomalies, impute missing data">
-          <div style={{ fontSize: '0.78rem', color: '#555' }}>
-            <span style={{ fontWeight: 600 }}>AI model:</span> Claude Sonnet (5 investigation tools)
-          </div>
-          <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '4px' }}>
-            Fallback: rule-based healer (zero API cost)
-          </div>
-        </StageCard>
-
-        {/* Stage 3: Forecast — MOS status + retrain */}
-        <StageCard step={3} name="Forecast" desc="MOS-corrected forecasts: NWP baseline + XGBoost residual correction">
-          {/* MOS status indicator */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '6px', marginBottom: '8px' }}>
-            <span style={{
-              width: '8px', height: '8px', borderRadius: '50%', display: 'inline-block',
-              background: mos?.trained ? '#2a9d8f' : '#e63946',
-            }} />
-            <span style={{
-              fontSize: '0.8rem', fontWeight: 600,
-              color: mos?.trained ? '#2a9d8f' : '#e63946',
-            }}>
-              {mosStatus.isLoading ? 'Checking...' : mos?.trained ? 'Model trained' : 'Model not trained'}
-            </span>
-          </div>
-
-          {/* Metrics if trained */}
-          {mos?.trained && metrics && (
-            <div style={{
-              display: 'flex', gap: '12px', flexWrap: 'wrap', marginBottom: '10px',
-            }}>
-              {metrics.rmse != null && (
-                <div style={{ fontSize: '0.75rem' }}>
-                  <span style={{ color: '#888' }}>RMSE:</span>{' '}
-                  <span style={{ fontWeight: 600 }}>{metrics.rmse.toFixed(2)}\u00B0C</span>
-                </div>
-              )}
-              {metrics.mae != null && (
-                <div style={{ fontSize: '0.75rem' }}>
-                  <span style={{ color: '#888' }}>MAE:</span>{' '}
-                  <span style={{ fontWeight: 600 }}>{metrics.mae.toFixed(2)}\u00B0C</span>
-                </div>
-              )}
-              {metrics.r2 != null && (
-                <div style={{ fontSize: '0.75rem' }}>
-                  <span style={{ color: '#888' }}>R\u00B2:</span>{' '}
-                  <span style={{ fontWeight: 600 }}>{metrics.r2.toFixed(3)}</span>
-                </div>
-              )}
-              {metrics.n_train != null && (
-                <div style={{ fontSize: '0.75rem' }}>
-                  <span style={{ color: '#888' }}>Samples:</span>{' '}
-                  <span style={{ fontWeight: 600 }}>{metrics.n_train + (metrics.n_test ?? 0)}</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {!mos?.trained && !mosStatus.isLoading && (
-            <p style={{ fontSize: '0.72rem', color: '#888', marginBottom: '10px' }}>
-              Forecasts use raw NWP passthrough until the MOS model is trained on observation/forecast pairs.
-            </p>
-          )}
-
-          <button
-            className="btn-secondary w-full"
-            style={{ fontSize: '0.78rem' }}
-            disabled={retrainMos.isPending}
-            onClick={() => retrainMos.mutate()}
-          >
-            {retrainMos.isPending ? 'Retraining...' : 'Retrain MOS Model'}
-          </button>
-          {retrainMos.isSuccess && (
-            <p style={{ color: '#2a9d8f', fontSize: '0.72rem', marginTop: '4px' }}>
-              Retraining triggered — exports data then trains XGBoost. Refresh in ~30s.
-            </p>
-          )}
-          {retrainMos.isError && (
-            <p style={{ color: '#e63946', fontSize: '0.72rem', marginTop: '4px' }}>
-              Retrain failed. Ensure the pipeline has run at least once (need observation/forecast pairs in the DB).
-            </p>
-          )}
-        </StageCard>
-
-        {/* Stage 4: Downscale */}
-        <StageCard step={4} name="Downscale" desc="IDW interpolation from station grid to farmer GPS + lapse-rate elevation correction">
-          <div style={{ fontSize: '0.78rem', color: '#555' }}>
-            <span style={{ fontWeight: 600 }}>Source:</span> NASA POWER 5×5 spatial grid (0.5° radius)
-          </div>
-          <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '4px' }}>
-            Lapse-rate: −6.5°C per 1000m elevation difference
-          </div>
-        </StageCard>
-
-        {/* Stage 5: Translate */}
-        <StageCard step={5} name="Translate" desc="RAG-powered advisory generation in Tamil and Malayalam via Claude">
-          <div style={{ fontSize: '0.78rem', color: '#555' }}>
-            <span style={{ fontWeight: 600 }}>Provider:</span> FAISS + BM25 hybrid RAG → Claude Sonnet
-          </div>
-          <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '4px' }}>
-            Fallback: rule-based template advisories (17 crops × 9 conditions, zero cost)
-          </div>
-        </StageCard>
-
-        {/* Stage 6: Deliver */}
-        <StageCard step={6} name="Deliver" desc="Send advisories to farmers via console, SMS, or WhatsApp">
-          <div style={{ fontSize: '0.78rem', color: '#555' }}>
-            <span style={{ fontWeight: 600 }}>Channels:</span> Console (always), SMS (Twilio), WhatsApp
-          </div>
-          <div style={{ fontSize: '0.72rem', color: '#888', marginTop: '4px' }}>
-            Dry-run by default — use <code style={{ fontSize: '0.72rem' }}>--live-delivery</code> for real SMS
-          </div>
-        </StageCard>
-      </div>
     </div>
   )
 }
@@ -1243,30 +1034,124 @@ export default function Pipeline() {
             </div>
           </div>
 
-          {/* Full prompt — link to REBUILD.md */}
+          {/* Full adaptation prompt with copy button */}
           <div>
             <div className="section-header">Adaptation Prompt</div>
-            <div className="card card-body" style={{ textAlign: 'center', padding: '28px 20px' }}>
-              <p style={{ fontSize: '0.88rem', color: '#1a1a1a', lineHeight: 1.7, marginBottom: '16px', maxWidth: '520px', marginLeft: 'auto', marginRight: 'auto' }}>
-                REBUILD.md contains a comprehensive prompt that tells Claude Code exactly how to adapt
-                every layer of the pipeline — stations, ingestion, farmer profiles, crop advisories,
-                seasonal context, and dashboard — for your region.
-              </p>
-              <a
-                href="https://github.com/jtlevine18/weather-ai-pipeline/blob/main/REBUILD.md"
-                target="_blank"
-                rel="noopener"
+            <p style={{ fontSize: '0.78rem', color: '#888', marginBottom: '8px' }}>
+              Fill in the bracketed parts with your region's details, then copy and paste into <a href="https://claude.ai/code" target="_blank" rel="noopener" style={{ color: '#d4a019', fontWeight: 600 }}>Claude Code</a> in your fork.
+            </p>
+            <div style={{ position: 'relative' }}>
+              <button
+                onClick={() => {
+                  const el = document.getElementById('rebuild-prompt')
+                  if (el) {
+                    navigator.clipboard.writeText(el.textContent ?? '').then(() => {
+                      const btn = document.getElementById('copy-btn')
+                      if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy prompt' }, 2000) }
+                    })
+                  }
+                }}
+                id="copy-btn"
                 style={{
-                  display: 'inline-block', background: '#d4a019', color: '#fff', borderRadius: '8px',
-                  padding: '10px 28px', fontSize: '0.85rem', fontWeight: 600, textDecoration: 'none',
+                  position: 'sticky', top: '8px', float: 'right', zIndex: 1,
+                  background: '#d4a019', color: '#fff', border: 'none', borderRadius: '6px',
+                  padding: '8px 18px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
                   fontFamily: 'DM Sans, sans-serif', letterSpacing: '0.3px',
+                  marginRight: '10px', marginTop: '10px',
                 }}
               >
-                Open REBUILD.md on GitHub
-              </a>
-              <p style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '10px' }}>
-                Copy the prompt, fill in your stations, paste into Claude Code in your fork.
-              </p>
+                Copy prompt
+              </button>
+              <pre id="rebuild-prompt" style={{
+                background: '#1a1a1a', color: '#e0dcd5', borderRadius: '8px',
+                padding: '20px', fontSize: '0.78rem', lineHeight: 1.65,
+                overflow: 'auto', whiteSpace: 'pre-wrap', maxHeight: '600px',
+              }}>
+{`I want to adapt this weather pipeline for my region. Read CLAUDE.md first to understand the full architecture, then make all the changes described below.
+
+=== MY REGION ===
+
+Region name: [e.g. "Central Mexico", "East Africa", "Northern France"]
+States/provinces: [e.g. "Jalisco, Michoacán, Guanajuato"]
+Timezone: [e.g. "America/Mexico_City", "Africa/Nairobi", "Europe/Paris"]
+Language(s) for advisories: [e.g. "es" for Spanish, "sw" for Swahili, "fr" for French]
+Currency symbol: [e.g. "$", "KSh", "€"]
+Locale code: [e.g. "es-MX", "en-KE", "fr-FR"]
+
+=== MY STATIONS (5-20) ===
+
+1. [City], lat: [XX.XX], lon: [XX.XX], altitude: [XXm], state/province: [Name], crops: [crop1, crop2, crop3]
+2. [City], lat: [XX.XX], lon: [XX.XX], altitude: [XXm], state/province: [Name], crops: [crop1, crop2, crop3]
+... (add more)
+
+=== MY DATA SOURCE ===
+
+[Describe your weather data source. Options:
+- "I have my own API at [endpoint] that returns [format]"
+- "I have CSV files with columns [list columns]"
+- "Use Open-Meteo current conditions (free, global, no API key)"
+- "I want to use [NOAA / Bureau of Meteorology / ECMWF / other]"
+- "I'll use synthetic data for now, just set up the pipeline structure"]
+
+=== WHAT TO CHANGE ===
+
+Make ALL of the following changes. This is a 6-step weather pipeline that ingests station data, heals anomalies, generates forecasts, downscales to farmer GPS, produces crop advisories, and delivers via SMS. The reference implementation is for Southern India (Kerala & Tamil Nadu). You are adapting it for my region.
+
+--- 1. STATIONS (config layer) ---
+
+Generate stations.json in the project root with my stations. Format:
+[{"station_id": "[XX_CCC]", "name": "[City]", "lat": X, "lon": X, "altitude_m": X, "state": "[State]", "crop_context": "[crops]", "language": "[ISO 639-1]", "imd_id": ""}]
+
+Update _HARDCODED_STATIONS in config.py to match. Set REGION_NAME and TIMEZONE in .env.
+
+--- 2. DATA INGESTION (src/ingestion.py) ---
+
+Write a custom async ingestion function for my data source:
+  async def my_fetch(station: StationConfig) -> dict:
+      return {"temperature": float, "humidity": float, "wind_speed": float, "pressure": float, "rainfall": float}
+
+Register it: WeatherDataConfig.ingestion_source = "custom", WeatherDataConfig.custom_ingest_fn = my_fetch
+
+If using Open-Meteo: write a function calling the Open-Meteo current weather API for each station's lat/lon.
+
+--- 3. FARMER PROFILES (src/dpi/simulator.py) ---
+
+Generate farmers.json with realistic demo profiles for my stations:
+{"[station_id]": {"district": "...", "state": "...", "lang": "...", "crops": [...], "soil": [...], "irrigation": [...], "area": [min, max], "pH": [min, max], "names": [["Name", "Local Script Name"]], "count": 2}}
+
+Use realistic names, crops, soil types, and farm sizes for my region.
+
+--- 4. CROP ADVISORIES (src/translation/curated_advisories.py) ---
+
+Replace the ADVISORY_MATRIX with crop-specific advisories for MY region. Structure:
+ADVISORY_MATRIX = {"heavy_rain": {"crop_name": "2-4 sentence advisory...", "default": "..."}, "moderate_rain": {...}, "heat_stress": {...}, "drought_risk": {...}, "frost_risk": {...}, "high_wind": {...}, "foggy": {...}, "clear": {...}, "cyclone_risk": {...}}
+
+Write advisories for every crop in my stations' crop_context fields. Include specific pest/disease risks, irrigation, harvest timing, fertilizer guidance.
+
+--- 5. SEASONAL CONTEXT (src/healing.py) ---
+
+Replace SEASONAL_CONTEXT (currently Kerala/TN × 12 months) with my region:
+SEASONAL_CONTEXT = {("[State]", month): {"season": "...", "weather": "temp ranges, rainfall", "crops": "what's growing"}, ...}
+
+Create entries for each state × 12 months. Update the SYSTEM_PROMPT_TEMPLATE to reference my region.
+
+--- 6. DASHBOARD (frontend/src/regionConfig.ts) ---
+
+Replace the REGION object: name, states, languages, dataSource, sourceLabels, locale, currency, timezoneLabel, sidebarFooter, farmerServices. See the file for field descriptions.
+
+--- 7. DOCUMENTATION ---
+
+Update CLAUDE.md title, vision, station list, and architecture to reference my region and data source.
+
+--- 8. VERIFICATION ---
+
+Run: python run_pipeline.py
+If it fails, debug and fix. Common issues: DATABASE_URL missing, API keys missing, custom ingestion function errors.
+
+=== WHAT NOT TO CHANGE ===
+
+These are globally portable: src/forecasting.py, src/weather_clients.py, src/downscaling/, src/translation/rag_provider.py, src/delivery/, src/database/, src/pipeline.py, src/models.py, src/api.py, dagster_pipeline/`}
+              </pre>
             </div>
           </div>
 
