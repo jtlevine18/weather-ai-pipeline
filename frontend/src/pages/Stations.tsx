@@ -16,6 +16,7 @@ import type {
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
 import { PageContext } from '../components/PageContext'
+import { TabPanel } from '../components/TabPanel'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -1077,22 +1078,24 @@ export default function Stations() {
       </div>
 
       {/* Tab content */}
-      {activeTab === 'readings' && (
+      <TabPanel active={activeTab === 'readings'}>
         <StationReadingsTab
           stations={stations}
           rawData={rawData}
           cleanData={cleanData}
         />
-      )}
-      {activeTab === 'healing' && (
+      </TabPanel>
+      <TabPanel active={activeTab === 'healing'}>
         <HealingTab
           cleanData={cleanData}
           healingLog={healingLog}
           healingStats={healingStats}
           stationNames={stationNameMap}
         />
-      )}
-      {activeTab === 'health' && <MapTab stations={stations} cleanData={cleanData} />}
+      </TabPanel>
+      <TabPanel active={activeTab === 'health'}>
+        <MapTab stations={stations} cleanData={cleanData} />
+      </TabPanel>
     </div>
   )
 }

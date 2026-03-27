@@ -6,6 +6,7 @@ import {
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
 import { PageContext } from '../components/PageContext'
+import { TabPanel } from '../components/TabPanel'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -865,7 +866,7 @@ export default function Pipeline() {
       </div>
 
       {/* Tab 0: Pipeline Runs (with Scheduler compact card at top) */}
-      {activeTab === 0 && (
+      <TabPanel active={activeTab === 0}>
         <div className="space-y-6">
           {/* Scheduler compact card */}
           <div style={{
@@ -989,10 +990,10 @@ export default function Pipeline() {
             )}
           </div>
         </div>
-      )}
+      </TabPanel>
 
       {/* Tab 1: Pipeline Stats (Quality + Delivery + Agent Log) */}
-      {activeTab === 1 && (
+      <TabPanel active={activeTab === 1}>
         <div className="space-y-8">
           {/* Healing Stats */}
           <div>
@@ -1023,10 +1024,10 @@ export default function Pipeline() {
             <AgentLogTab />
           </div>
         </div>
-      )}
+      </TabPanel>
 
       {/* Tab 2: Build Your Own */}
-      {activeTab === 2 && (
+      <TabPanel active={activeTab === 2}>
         <div className="space-y-6">
           <div className="section-header">Fork This Pipeline for Your Location</div>
 
@@ -1143,7 +1144,7 @@ Please:
             </div>
           </div>
         </div>
-      )}
+      </TabPanel>
     </div>
   )
 }

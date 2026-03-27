@@ -233,6 +233,22 @@
     @apply text-gold border-gold font-semibold;
   }
 
+  /* ── Stage cards (Dashboard) ── */
+  .stage-card {
+    @apply bg-white rounded-[14px] border border-warm-border relative overflow-hidden;
+    padding: 22px 20px 16px;
+    text-decoration: none;
+    color: inherit;
+    font-family: 'DM Sans', sans-serif;
+    transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  }
+
+  .stage-card:hover {
+    border-color: #ccc8c0;
+    box-shadow: 0 8px 28px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.03);
+    transform: translateY(-3px);
+  }
+
   /* ── Section headers ── */
   .section-header {
     @apply uppercase text-[0.78rem] font-sans font-semibold text-warm-muted pb-2 mb-4;

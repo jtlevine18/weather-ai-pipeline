@@ -142,27 +142,13 @@ export default function Dashboard() {
 
       {/* Hero */}
       <div>
-        <h1 style={{
-          margin: 0,
-          fontWeight: 700,
-          color: '#1a1a1a',
-          fontFamily: 'DM Sans, sans-serif',
-          letterSpacing: '-0.5px',
-          lineHeight: 1.25,
-          fontSize: '1.65rem',
-        }}>
+        <h1 className="font-sans font-bold text-[#1a1a1a] text-[1.65rem] leading-tight tracking-tight m-0">
           AI Weather Forecasts &amp; Farming Advisories<br />
-          <span style={{ color: '#999', fontWeight: 400 }}>
+          <span className="text-warm-muted font-normal">
             for Smallholder Farmers in Southern India
           </span>
         </h1>
-        <p style={{
-          color: '#999',
-          lineHeight: 1.6,
-          margin: '6px 0 0',
-          fontFamily: 'DM Sans, sans-serif',
-          fontSize: '0.86rem',
-        }}>
+        <p className="text-warm-muted-light text-[0.86rem] leading-relaxed mt-1.5 font-sans">
           This system collects real weather data from 20 IMD stations across Kerala and Tamil Nadu,
           generates machine-learning-corrected forecasts personalized to each farmer's GPS location,
           and generates crop-specific advisories in Tamil and Malayalam with simulated SMS delivery.
@@ -170,72 +156,43 @@ export default function Dashboard() {
       </div>
 
       {/* 3 Stage Cards with arrows */}
-      <div className="flex items-stretch gap-0" style={{ maxWidth: '100%' }}>
+      <div className="flex items-stretch gap-0 animate-stagger" style={{ maxWidth: '100%' }}>
         {STAGES.map((stage, idx) => (
           <div key={stage.key} className="contents">
             <Link
               to={stage.href}
-              className="flex-1 flex flex-col relative overflow-hidden no-underline"
-              style={{
-                background: '#fff',
-                border: '1px solid #e0dcd5',
-                borderRadius: '14px',
-                padding: '22px 20px 16px',
-                textDecoration: 'none',
-                color: 'inherit',
-                fontFamily: 'DM Sans, sans-serif',
-                transition: 'all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94)',
-              }}
-              onMouseEnter={e => {
-                const el = e.currentTarget as HTMLElement
-                el.style.borderColor = '#ccc8c0'
-                el.style.boxShadow = '0 8px 28px rgba(0,0,0,0.06), 0 2px 8px rgba(0,0,0,0.03)'
-                el.style.transform = 'translateY(-3px)'
-              }}
-              onMouseLeave={e => {
-                const el = e.currentTarget as HTMLElement
-                el.style.borderColor = '#e0dcd5'
-                el.style.boxShadow = 'none'
-                el.style.transform = 'translateY(0)'
-              }}
+              className="flex-1 flex flex-col stage-card no-underline"
             >
               {/* Top color border */}
-              <div style={{
-                position: 'absolute', top: 0, left: 0, right: 0, height: '3px',
-                background: stage.color, borderRadius: '14px 14px 0 0',
-              }} />
+              <div
+                className="absolute top-0 left-0 right-0 h-[3px] rounded-t-[14px]"
+                style={{ background: stage.color }}
+              />
 
               {/* Icon + title */}
-              <div className="flex items-center gap-2.5" style={{ marginBottom: '10px' }}>
-                <div style={{
-                  width: '38px', height: '38px', borderRadius: '10px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                  fontSize: '1.1rem', background: `${stage.color}12`, flexShrink: 0,
-                }}>
+              <div className="flex items-center gap-2.5 mb-2.5">
+                <div
+                  className="w-[38px] h-[38px] rounded-[10px] flex items-center justify-center text-lg shrink-0"
+                  style={{ background: `${stage.color}12` }}
+                >
                   {stage.icon}
                 </div>
-                <div style={{
-                  fontFamily: 'DM Sans, sans-serif', fontWeight: 600,
-                  fontSize: '1.1rem', color: '#1a1a1a',
-                }}>
+                <div className="font-sans font-semibold text-lg text-[#1a1a1a]">
                   {stage.title}
                 </div>
               </div>
 
               {/* Description */}
-              <div style={{
-                color: '#888', fontSize: '0.78rem', lineHeight: 1.55,
-                marginBottom: '14px', flex: 1,
-              }}>
+              <div className="text-warm-muted text-[0.78rem] leading-relaxed mb-3.5 flex-1">
                 {stage.desc}
               </div>
 
               {/* Stats */}
-              <div style={{ borderTop: '1px solid #f0ede8', paddingTop: '10px' }}>
+              <div className="border-t border-warm-border/50 pt-2.5">
                 {stageStats(stage).map(([label, val]) => (
-                  <div key={label} className="flex justify-between" style={{ padding: '3px 0' }}>
-                    <span style={{ color: '#999', fontSize: '0.76rem' }}>{label}</span>
-                    <span style={{ color: '#1a1a1a', fontSize: '0.76rem', fontWeight: 600 }}>{val}</span>
+                  <div key={label} className="flex justify-between py-0.5">
+                    <span className="text-warm-muted-light text-[0.76rem]">{label}</span>
+                    <span className="text-[#1a1a1a] text-[0.76rem] font-semibold">{val}</span>
                   </div>
                 ))}
               </div>
@@ -252,7 +209,7 @@ export default function Dashboard() {
       </div>
 
       {/* 4 Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-stagger">
         <MetricCard label="Pipeline Runs" value={`${okRuns}/${runList.length}`} />
         <MetricCard label="Avg Quality" value={avgQuality > 0 ? `${Math.round(avgQuality * 100)}%` : '0%'} />
         <MetricCard label="Advisories" value={alertCount} />

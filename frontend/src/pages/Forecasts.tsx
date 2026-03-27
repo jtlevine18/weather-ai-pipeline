@@ -3,6 +3,7 @@ import { useForecasts, useStations, useFarmers } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
 import { PageContext } from '../components/PageContext'
+import { TabPanel } from '../components/TabPanel'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell,
@@ -189,7 +190,11 @@ export default function Forecasts() {
         <MetricCard label="Stations Reporting" value={uniqueStations} />
         <MetricCard label="Total Forecasts" value={totalForecasts} />
         <MetricCard label="Avg Confidence" value={avgConf > 0 ? `${Math.round(avgConf * 100)}%` : '--'} />
-        <MetricCard label="MOS Corrected" value={totalForecasts > 0 ? `${mosCount} (${mosPct}%)` : '--'} />
+        <MetricCard
+          label="MOS Correction"
+          value={mosCount > 0 ? `${mosPct}% corrected` : 'Training'}
+          subtitle={mosCount > 0 ? undefined : 'Accumulating data for XGBoost'}
+        />
         <MetricCard label="NWP Source" value={nwpSource} />
       </div>
 
@@ -207,7 +212,7 @@ export default function Forecasts() {
       </div>
 
       {/* Tab content */}
-      {activeTab === 0 && (
+      <TabPanel active={activeTab === 0}>
         <div className="space-y-6">
           {/* Filters */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -310,9 +315,9 @@ export default function Forecasts() {
             ))
           )}
         </div>
-      )}
+      </TabPanel>
 
-      {activeTab === 1 && (
+      <TabPanel active={activeTab === 1}>
         <div className="space-y-8">
           {/* Degradation Chain */}
           <div>
@@ -409,9 +414,11 @@ export default function Forecasts() {
             </div>
           </div>
         </div>
-      )}
+      </TabPanel>
 
-      {activeTab === 2 && <DownscalingTab stations={stations ?? []} forecasts={allForecasts} />}
+      <TabPanel active={activeTab === 2}>
+        <DownscalingTab stations={stations ?? []} forecasts={allForecasts} />
+      </TabPanel>
     </div>
   )
 }

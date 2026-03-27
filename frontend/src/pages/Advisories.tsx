@@ -3,6 +3,7 @@ import { useAlerts, useStations, useForecasts, useDeliveryLog, useFarmers, useFa
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
 import { PageContext } from '../components/PageContext'
+import { TabPanel } from '../components/TabPanel'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -128,7 +129,7 @@ export default function Advisories() {
       </div>
 
       {/* Advisory Feed */}
-      {activeTab === 0 && (
+      <TabPanel active={activeTab === 0}>
         <div className="space-y-4">
           {/* Filters */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -218,10 +219,10 @@ export default function Advisories() {
             </div>
           )}
         </div>
-      )}
+      </TabPanel>
 
       {/* Lineage tab */}
-      {activeTab === 1 && (
+      <TabPanel active={activeTab === 1}>
         <div className="space-y-4">
           <div className="section-header">Forecast to Advisory Lineage</div>
           {allAlerts.slice(0, 20).map((alert, i) => {
@@ -278,13 +279,15 @@ export default function Advisories() {
             )
           })}
         </div>
-      )}
+      </TabPanel>
 
       {/* Farmers & DPI tab */}
-      {activeTab === 2 && <FarmersDPITab alerts={allAlerts} stationMap={stationMap} />}
+      <TabPanel active={activeTab === 2}>
+        <FarmersDPITab alerts={allAlerts} stationMap={stationMap} />
+      </TabPanel>
 
       {/* Delivery tab */}
-      {activeTab === 3 && (
+      <TabPanel active={activeTab === 3}>
         <div className="space-y-4">
           <div className="section-header">Delivery Status</div>
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
@@ -342,7 +345,7 @@ export default function Advisories() {
             </div>
           )}
         </div>
-      )}
+      </TabPanel>
     </div>
   )
 }
