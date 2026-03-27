@@ -836,7 +836,7 @@ export default function Pipeline() {
   const okRuns = runList.filter(r => r.status === 'ok' || r.status === 'success' || r.status === 'completed').length
   const failedRuns = runList.filter(r => r.status === 'failed' || r.status === 'error').length
 
-  const TABS = ['Architecture', 'Pipeline Runs', 'Quality', 'Delivery', 'Agent Log', 'Build Your Own']
+  const TABS = ['Pipeline Runs', 'Pipeline Stats', 'Build Your Own']
 
   // Cost calculator derived values
   const perRunCost = (stationCount / 20) * (claudeModel === 'sonnet' ? 0.27 : 0.03) + 0.02
@@ -845,14 +845,14 @@ export default function Pipeline() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="page-title">System Overview</h1>
+        <h1 className="page-title">System</h1>
         <p className="page-caption">
-          Architecture, pipeline history, and infrastructure
+          Pipeline operations, quality metrics, and deployment
         </p>
       </div>
 
       <PageContext id="pipeline">
-        System architecture and operational metrics. The pipeline runs 6 steps in sequence, with independent degradation chains ensuring no single API failure cascades.
+        The pipeline runs 6 steps weekly via GitHub Actions, with independent degradation chains ensuring no single API failure cascades.
       </PageContext>
 
       {/* Tabs */}
@@ -864,125 +864,8 @@ export default function Pipeline() {
         ))}
       </div>
 
-      {/* Tab 0: Architecture + Degradation Chain + Cost Calculator */}
+      {/* Tab 0: Pipeline Runs (with Scheduler compact card at top) */}
       {activeTab === 0 && (
-        <div className="space-y-6">
-          <ArchitectureDiagram />
-
-          {/* Interactive Cost Calculator */}
-          <div>
-            <div className="section-header">Cost Calculator</div>
-            <div style={{
-              background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-              padding: '20px',
-            }}>
-              {/* Controls row */}
-              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stations</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={200}
-                    step={5}
-                    value={stationCount}
-                    onChange={e => setStationCount(Math.max(1, Math.min(200, Number(e.target.value))))}
-                    style={{
-                      width: '90px', padding: '6px 10px', borderRadius: '6px',
-                      border: '1px solid #e0dcd5', fontSize: '0.85rem', background: '#faf8f5',
-                    }}
-                  />
-                </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Runs/week</span>
-                  <input
-                    type="number"
-                    min={1}
-                    max={28}
-                    step={1}
-                    value={runsPerWeek}
-                    onChange={e => setRunsPerWeek(Math.max(1, Math.min(28, Number(e.target.value))))}
-                    style={{
-                      width: '90px', padding: '6px 10px', borderRadius: '6px',
-                      border: '1px solid #e0dcd5', fontSize: '0.85rem', background: '#faf8f5',
-                    }}
-                  />
-                </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Claude model</span>
-                  <select
-                    value={claudeModel}
-                    onChange={e => setClaudeModel(e.target.value as 'sonnet' | 'haiku')}
-                    style={{
-                      padding: '6px 10px', borderRadius: '6px',
-                      border: '1px solid #e0dcd5', fontSize: '0.85rem', background: '#faf8f5',
-                    }}
-                  >
-                    <option value="sonnet">Sonnet (~$3/M tokens)</option>
-                    <option value="haiku">Haiku (~$0.25/M tokens)</option>
-                  </select>
-                </label>
-              </div>
-
-              {/* Calculated output */}
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div style={{
-                  background: '#faf8f5', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
-                }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', color: '#888', marginBottom: '6px' }}>Per-Run Cost</div>
-                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~${perRunCost.toFixed(2)}</div>
-                  <div style={{ color: '#666', fontSize: '0.82rem', marginTop: '4px' }}>
-                    Claude: ~${(perRunCost - 0.02).toFixed(2)} + GPU: ~$0.02
-                  </div>
-                </div>
-                <div style={{
-                  background: '#faf8f5', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
-                }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', color: '#888', marginBottom: '6px' }}>Monthly Estimate</div>
-                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~${monthlyCost.toFixed(2)}/mo</div>
-                  <div style={{ color: '#666', fontSize: '0.82rem', marginTop: '4px' }}>
-                    {runsPerWeek}x/week * 4.33 weeks * ${perRunCost.toFixed(2)}/run
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Static cost table (reference) */}
-          <details style={{
-            background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-            overflow: 'hidden',
-          }}>
-            <summary style={{
-              padding: '12px 16px', cursor: 'pointer', fontSize: '0.82rem',
-              fontWeight: 600, color: '#1a1a1a', userSelect: 'none',
-            }}>
-              API Cost Breakdown (reference table)
-            </summary>
-            <div style={{ padding: '0 16px 16px' }}>
-              <div className="table-container">
-                <table>
-                  <thead>
-                    <tr><th>Component</th><th>Unit Cost</th><th>Est. per Run</th><th>Notes</th></tr>
-                  </thead>
-                  <tbody>
-                    <tr><td style={{ fontWeight: 500 }}>Claude Healing (Sonnet)</td><td>~$3/M tokens</td><td>~$0.15</td><td>20 stations, ~500 tokens each</td></tr>
-                    <tr><td style={{ fontWeight: 500 }}>Claude Advisory (Sonnet)</td><td>~$3/M tokens</td><td>~$0.08</td><td>20 advisories, RAG context</td></tr>
-                    <tr><td style={{ fontWeight: 500 }}>Claude Translation</td><td>~$3/M tokens</td><td>~$0.04</td><td>20 translations (Tamil/Malayalam)</td></tr>
-                    <tr><td style={{ fontWeight: 500 }}>Tomorrow.io</td><td>Free tier</td><td>$0.00</td><td>500 calls/day free</td></tr>
-                    <tr><td style={{ fontWeight: 500 }}>Open-Meteo</td><td>Free</td><td>$0.00</td><td>No API key needed</td></tr>
-                    <tr><td style={{ fontWeight: 500 }}>NASA POWER</td><td>Free</td><td>$0.00</td><td>Public API</td></tr>
-                    <tr><td style={{ fontWeight: 500 }}>NeuralGCM (GPU)</td><td>~$0.80/hr (L4)</td><td>~$0.02</td><td>~90s inference on L4</td></tr>
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          </details>
-        </div>
-      )}
-
-      {/* Tab 1: Pipeline Runs (with Scheduler compact card at top) */}
-      {activeTab === 1 && (
         <div className="space-y-6">
           {/* Scheduler compact card */}
           <div style={{
@@ -1108,38 +991,42 @@ export default function Pipeline() {
         </div>
       )}
 
-      {/* Tab 2: Quality (Healing Stats + Eval Metrics stacked) */}
-      {activeTab === 2 && (
+      {/* Tab 1: Pipeline Stats (Quality + Delivery + Agent Log) */}
+      {activeTab === 1 && (
         <div className="space-y-8">
+          {/* Healing Stats */}
           <div>
             <div className="section-header" style={{ fontSize: '0.88rem', marginBottom: '12px' }}>Healing Stats</div>
             <HealingStatsTab />
           </div>
           <hr style={{ border: 'none', borderTop: '1px solid #e0dcd5' }} />
+
+          {/* Eval Metrics */}
           <div>
             <div className="section-header" style={{ fontSize: '0.88rem', marginBottom: '12px' }}>Eval Metrics</div>
             <EvalMetricsTab />
           </div>
-        </div>
-      )}
+          <hr style={{ border: 'none', borderTop: '1px solid #e0dcd5' }} />
 
-      {/* Tab 3: Delivery (Funnel + Delivery Log stacked) */}
-      {activeTab === 3 && (
-        <div className="space-y-8">
+          {/* Delivery Funnel + Log */}
           <DeliveryFunnelTab />
           <hr style={{ border: 'none', borderTop: '1px solid #e0dcd5' }} />
           <div>
             <div className="section-header" style={{ fontSize: '0.88rem', marginBottom: '12px' }}>Delivery Log</div>
             <SystemDeliveryLogTab />
           </div>
+          <hr style={{ border: 'none', borderTop: '1px solid #e0dcd5' }} />
+
+          {/* Agent Log */}
+          <div>
+            <div className="section-header" style={{ fontSize: '0.88rem', marginBottom: '12px' }}>Agent Log</div>
+            <AgentLogTab />
+          </div>
         </div>
       )}
 
-      {/* Tab 4: Agent Log */}
-      {activeTab === 4 && <AgentLogTab />}
-
-      {/* Tab 5: Build Your Own */}
-      {activeTab === 5 && (
+      {/* Tab 2: Build Your Own */}
+      {activeTab === 2 && (
         <div className="space-y-6">
           <div className="section-header">Fork This Pipeline for Your Location</div>
 
@@ -1202,6 +1089,57 @@ Please:
                 <li>Kerala/TN crop context {'\u2192'} replaced by your crops</li>
                 <li>DPI services (Aadhaar, PM-KISAN) {'\u2192'} skipped</li>
               </ul>
+            </div>
+          </div>
+
+          {/* Cost Calculator */}
+          <div>
+            <div className="section-header">Cost Calculator</div>
+            <div style={{
+              background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
+              padding: '20px',
+            }}>
+              <p style={{ fontSize: '0.82rem', color: '#666', marginBottom: '16px' }}>
+                Estimate the running cost for your deployment based on station count, run frequency, and Claude model choice.
+              </p>
+              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stations</span>
+                  <input type="number" min={1} max={200} step={5} value={stationCount}
+                    onChange={e => setStationCount(Math.max(1, Math.min(200, Number(e.target.value))))}
+                    className="input" style={{ width: '90px' }} />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Runs/week</span>
+                  <input type="number" min={1} max={28} step={1} value={runsPerWeek}
+                    onChange={e => setRunsPerWeek(Math.max(1, Math.min(28, Number(e.target.value))))}
+                    className="input" style={{ width: '90px' }} />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Claude model</span>
+                  <select value={claudeModel} onChange={e => setClaudeModel(e.target.value as 'sonnet' | 'haiku')}
+                    className="input">
+                    <option value="sonnet">Sonnet (~$3/M tokens)</option>
+                    <option value="haiku">Haiku (~$0.25/M tokens)</option>
+                  </select>
+                </label>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div style={{ background: '#faf8f5', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', color: '#888', marginBottom: '6px' }}>Per-Run Cost</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~${perRunCost.toFixed(2)}</div>
+                  <div style={{ color: '#666', fontSize: '0.82rem', marginTop: '4px' }}>
+                    Claude: ~${(perRunCost - 0.02).toFixed(2)} + GPU: ~$0.02
+                  </div>
+                </div>
+                <div style={{ background: '#faf8f5', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px' }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', color: '#888', marginBottom: '6px' }}>Monthly Estimate</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~${monthlyCost.toFixed(2)}/mo</div>
+                  <div style={{ color: '#666', fontSize: '0.82rem', marginTop: '4px' }}>
+                    {runsPerWeek}x/week {'\u00D7'} 4.33 weeks {'\u00D7'} ${perRunCost.toFixed(2)}/run
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
