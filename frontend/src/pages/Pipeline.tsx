@@ -797,10 +797,7 @@ export default function Pipeline() {
   const okRuns = runList.filter(r => r.status === 'ok' || r.status === 'success' || r.status === 'completed').length
   const failedRuns = runList.filter(r => r.status === 'failed' || r.status === 'error').length
 
-  const TABS = [
-    'Architecture', 'Scheduler', 'Pipeline Runs', 'Delivery Log',
-    'Cost Estimate', 'Eval Metrics', 'Healing Stats', 'Agent Log', 'Delivery Funnel',
-  ]
+  const TABS = ['Architecture', 'Pipeline Runs', 'Quality', 'Delivery', 'Agent Log']
 
   return (
     <div className="space-y-6">
@@ -824,217 +821,238 @@ export default function Pipeline() {
         ))}
       </div>
 
-      {/* Architecture */}
-      {activeTab === 0 && <ArchitectureDiagram />}
+      {/* Tab 0: Architecture + Degradation Chain + Cost Estimate */}
+      {activeTab === 0 && (
+        <div className="space-y-6">
+          <ArchitectureDiagram />
 
-      {/* Scheduler */}
+          {/* Cost Estimate (collapsible) */}
+          <details style={{
+            background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
+            overflow: 'hidden',
+          }}>
+            <summary style={{
+              padding: '12px 16px', cursor: 'pointer', fontSize: '0.82rem',
+              fontWeight: 600, color: '#1a1a1a', userSelect: 'none',
+            }}>
+              API Cost Estimate (per pipeline run)
+            </summary>
+            <div style={{ padding: '0 16px 16px' }} className="space-y-6">
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr><th>Component</th><th>Unit Cost</th><th>Est. per Run</th><th>Notes</th></tr>
+                  </thead>
+                  <tbody>
+                    <tr><td style={{ fontWeight: 500 }}>Claude Healing (Sonnet)</td><td>~$3/M tokens</td><td>~$0.15</td><td>20 stations, ~500 tokens each</td></tr>
+                    <tr><td style={{ fontWeight: 500 }}>Claude Advisory (Sonnet)</td><td>~$3/M tokens</td><td>~$0.08</td><td>20 advisories, RAG context</td></tr>
+                    <tr><td style={{ fontWeight: 500 }}>Claude Translation</td><td>~$3/M tokens</td><td>~$0.04</td><td>20 translations (Tamil/Malayalam)</td></tr>
+                    <tr><td style={{ fontWeight: 500 }}>Tomorrow.io</td><td>Free tier</td><td>$0.00</td><td>500 calls/day free</td></tr>
+                    <tr><td style={{ fontWeight: 500 }}>Open-Meteo</td><td>Free</td><td>$0.00</td><td>No API key needed</td></tr>
+                    <tr><td style={{ fontWeight: 500 }}>NASA POWER</td><td>Free</td><td>$0.00</td><td>Public API</td></tr>
+                    <tr><td style={{ fontWeight: 500 }}>NeuralGCM (GPU)</td><td>~$0.80/hr (L4)</td><td>~$0.02</td><td>~90s inference on L4</td></tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div style={{
+                  background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
+                }}>
+                  <div className="section-header">Per-Run Total</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~$0.29</div>
+                  <div style={{ color: '#666', fontSize: '0.82rem' }}>
+                    Claude: ~$0.27 + GPU: ~$0.02
+                  </div>
+                  <div style={{ color: '#2a9d8f', fontSize: '0.82rem', marginTop: '4px' }}>
+                    Fallback (no Claude): ~$0.02/run
+                  </div>
+                </div>
+                <div style={{
+                  background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
+                }}>
+                  <div className="section-header">Monthly Estimate (1x/day)</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~$9/mo</div>
+                  <div style={{ color: '#666', fontSize: '0.82rem' }}>
+                    30 runs/month at ~$0.29 each
+                  </div>
+                </div>
+              </div>
+            </div>
+          </details>
+        </div>
+      )}
+
+      {/* Tab 1: Pipeline Runs (with Scheduler compact card at top) */}
       {activeTab === 1 && (
         <div className="space-y-6">
-          <h2 className="text-lg font-semibold" style={{ color: '#1a1a1a' }}>
-            Daily Pipeline Scheduler
-          </h2>
-          <p style={{ color: '#888', fontSize: '0.82rem' }}>
-            Runs the full 6-step pipeline once per day at 6:00 AM IST (background thread)
-          </p>
-
-          {/* Toggle (display only in React — backend control) */}
-          <label className="flex items-center gap-3 cursor-pointer">
-            <div style={{
-              width: '44px', height: '24px', borderRadius: '12px',
-              background: '#e0dcd5', position: 'relative', transition: 'background 0.2s',
-            }}>
-              <div style={{
-                width: '20px', height: '20px', borderRadius: '50%', background: '#fff',
-                position: 'absolute', top: '2px', left: '2px',
-                boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-              }} />
-            </div>
-            <span style={{ fontSize: '0.85rem', color: '#555' }}>Enable daily pipeline run</span>
-          </label>
-
-          <p style={{ color: '#888', fontSize: '0.82rem', fontStyle: 'italic' }}>
-            Scheduler is <strong>off</strong> — toggle on to start daily runs
-          </p>
-
-          {/* Schedule card */}
+          {/* Scheduler compact card */}
           <div style={{
-            background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
+            background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
+            padding: '16px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px',
           }}>
-            <div style={{ fontSize: '0.82rem', color: '#666' }}>Schedule</div>
-            <div style={{ fontSize: '1.1rem', fontWeight: 600, color: '#1a1a1a' }}>
-              Every day at 6:00 AM IST
-            </div>
-            <div style={{ fontSize: '0.78rem', color: '#888', marginTop: '6px' }}>
-              APScheduler background thread (cron: 00:30 UTC)<br />
-              State persists in <code>scheduler_state.json</code> — auto-resumes after restart
-            </div>
-          </div>
-
-          {/* Recent runs */}
-          {runList.length > 0 && (
-            <div>
-              <div className="section-header">Recent Runs</div>
-              <div className="space-y-2">
-                {runList.slice(0, 3).map((r, i) => {
-                  const s = r.status || '?'
-                  const color = STATUS_COLOR[s] || '#888'
-                  const started = (r.started_at || '').slice(0, 16)
-                  return (
-                    <div key={r.id ?? i} className="flex items-center gap-3">
-                      <span style={{
-                        background: color, color: '#fff', padding: '2px 8px',
-                        borderRadius: '3px', fontSize: '0.7rem', fontWeight: 600,
-                      }}>{s}</span>
-                      <span style={{ color: '#555', fontSize: '0.82rem' }}>{started}</span>
-                    </div>
-                  )
-                })}
+            <div style={{ flex: '1 1 auto', minWidth: '200px' }}>
+              <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#1a1a1a', marginBottom: '4px' }}>
+                Daily Pipeline Scheduler
+              </div>
+              <div style={{ fontSize: '0.78rem', color: '#888' }}>
+                Runs the full 6-step pipeline once per day at 6:00 AM IST (background thread)
               </div>
             </div>
-          )}
 
-          {/* Manual controls */}
-          <div>
-            <div className="section-header">Manual Controls</div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-              {['Run Full Pipeline', 'Ingest + Heal', 'Forecast \u2192 Deliver', 'Retrain MOS Model'].map(label => (
-                <button
-                  key={label}
-                  className="btn-secondary w-full"
-                  style={{ fontSize: '0.78rem' }}
-                  onClick={() => alert(`${label}: would trigger via API (not yet wired)`)}
-                >
-                  {label}
-                </button>
-              ))}
+            {/* Toggle */}
+            <label className="flex items-center gap-3 cursor-pointer" style={{ flexShrink: 0 }}>
+              <div style={{
+                width: '44px', height: '24px', borderRadius: '12px',
+                background: '#e0dcd5', position: 'relative', transition: 'background 0.2s',
+              }}>
+                <div style={{
+                  width: '20px', height: '20px', borderRadius: '50%', background: '#fff',
+                  position: 'absolute', top: '2px', left: '2px',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
+                }} />
+              </div>
+              <span style={{ fontSize: '0.82rem', color: '#555' }}>Enable</span>
+            </label>
+
+            <div style={{ fontSize: '0.78rem', color: '#888', fontStyle: 'italic', flexBasis: '100%' }}>
+              Scheduler is <strong>off</strong> — toggle on to start daily runs.{' '}
+              APScheduler background thread (cron: 00:30 UTC). State persists in <code>scheduler_state.json</code>.
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* Pipeline Runs */}
-      {activeTab === 2 && (
-        <div className="space-y-4">
-          <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-            <MetricCard label="Total Runs" value={runList.length} />
-            <MetricCard label="Successful" value={okRuns} />
-            <MetricCard label="Partial / Failed" value={failedRuns + runList.filter(r => r.status === 'partial').length} />
-          </div>
-
-          {runList.length === 0 ? (
-            <div className="card card-body text-center py-8">
-              <p style={{ color: '#888', fontSize: '0.85rem' }}>No pipeline runs recorded</p>
+            {/* Manual controls */}
+            <div style={{ flexBasis: '100%' }}>
+              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+                {['Run Full Pipeline', 'Ingest + Heal', 'Forecast \u2192 Deliver', 'Retrain MOS Model'].map(label => (
+                  <button
+                    key={label}
+                    className="btn-secondary w-full"
+                    style={{ fontSize: '0.78rem' }}
+                    onClick={() => alert(`${label}: would trigger via API (not yet wired)`)}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
             </div>
-          ) : (
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr>
-                    <th>Status</th>
-                    <th>Run ID</th>
-                    <th>Started</th>
-                    <th>Duration</th>
-                    <th>Stations</th>
-                    <th>Records</th>
-                    <th>Summary</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {runList.map((r, i) => {
+
+            {/* Recent runs (compact) */}
+            {runList.length > 0 && (
+              <div style={{ flexBasis: '100%' }}>
+                <div style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '1px', color: '#888', marginBottom: '6px' }}>
+                  Recent Runs
+                </div>
+                <div className="flex gap-3 flex-wrap">
+                  {runList.slice(0, 3).map((r, i) => {
                     const s = r.status || '?'
                     const color = STATUS_COLOR[s] || '#888'
+                    const started = (r.started_at || '').slice(0, 16)
                     return (
-                      <tr key={r.id ?? i}>
-                        <td>
-                          <span style={{
-                            background: color, color: '#fff', padding: '2px 10px',
-                            borderRadius: '5px', fontSize: '0.68rem', fontWeight: 700,
-                            display: 'inline-block', minWidth: '50px', textAlign: 'center',
-                          }}>{s}</span>
-                        </td>
-                        <td style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#aaa' }}>
-                          {(r.run_id || r.id?.toString() || '').slice(0, 8)}
-                        </td>
-                        <td style={{ fontSize: '0.82rem' }}>{formatTime(r.started_at)}</td>
-                        <td>
-                          {r.duration_seconds != null ? `${r.duration_seconds.toFixed(1)}s` : '--'}
-                        </td>
-                        <td>{r.stations_processed ?? '--'}</td>
-                        <td>{r.records_ingested ?? '--'}</td>
-                        <td style={{ fontSize: '0.82rem', color: '#555', maxWidth: '200px' }} className="truncate">
-                          {(r.error_detail || '').slice(0, 80) || '--'}
-                        </td>
-                      </tr>
+                      <div key={r.id ?? i} className="flex items-center gap-2">
+                        <span style={{
+                          background: color, color: '#fff', padding: '2px 8px',
+                          borderRadius: '3px', fontSize: '0.7rem', fontWeight: 600,
+                        }}>{s}</span>
+                        <span style={{ color: '#555', fontSize: '0.78rem' }}>{started}</span>
+                      </div>
                     )
                   })}
-                </tbody>
-              </table>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Run history table */}
+          <div className="space-y-4">
+            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+              <MetricCard label="Total Runs" value={runList.length} />
+              <MetricCard label="Successful" value={okRuns} />
+              <MetricCard label="Partial / Failed" value={failedRuns + runList.filter(r => r.status === 'partial').length} />
             </div>
-          )}
+
+            {runList.length === 0 ? (
+              <div className="card card-body text-center py-8">
+                <p style={{ color: '#888', fontSize: '0.85rem' }}>No pipeline runs recorded</p>
+              </div>
+            ) : (
+              <div className="table-container">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Status</th>
+                      <th>Run ID</th>
+                      <th>Started</th>
+                      <th>Duration</th>
+                      <th>Stations</th>
+                      <th>Records</th>
+                      <th>Summary</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {runList.map((r, i) => {
+                      const s = r.status || '?'
+                      const color = STATUS_COLOR[s] || '#888'
+                      return (
+                        <tr key={r.id ?? i}>
+                          <td>
+                            <span style={{
+                              background: color, color: '#fff', padding: '2px 10px',
+                              borderRadius: '5px', fontSize: '0.68rem', fontWeight: 700,
+                              display: 'inline-block', minWidth: '50px', textAlign: 'center',
+                            }}>{s}</span>
+                          </td>
+                          <td style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#aaa' }}>
+                            {(r.run_id || r.id?.toString() || '').slice(0, 8)}
+                          </td>
+                          <td style={{ fontSize: '0.82rem' }}>{formatTime(r.started_at)}</td>
+                          <td>
+                            {r.duration_seconds != null ? `${r.duration_seconds.toFixed(1)}s` : '--'}
+                          </td>
+                          <td>{r.stations_processed ?? '--'}</td>
+                          <td>{r.records_ingested ?? '--'}</td>
+                          <td style={{ fontSize: '0.82rem', color: '#555', maxWidth: '200px' }} className="truncate">
+                            {(r.error_detail || '').slice(0, 80) || '--'}
+                          </td>
+                        </tr>
+                      )
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
-      {/* Delivery Log */}
-      {activeTab === 3 && <SystemDeliveryLogTab />}
-
-      {/* Cost Estimate */}
-      {activeTab === 4 && (
-        <div className="space-y-6">
-          <div className="section-header">API Cost Estimate (per pipeline run)</div>
-          <div className="table-container">
-            <table>
-              <thead>
-                <tr><th>Component</th><th>Unit Cost</th><th>Est. per Run</th><th>Notes</th></tr>
-              </thead>
-              <tbody>
-                <tr><td style={{ fontWeight: 500 }}>Claude Healing (Sonnet)</td><td>~$3/M tokens</td><td>~$0.15</td><td>20 stations, ~500 tokens each</td></tr>
-                <tr><td style={{ fontWeight: 500 }}>Claude Advisory (Sonnet)</td><td>~$3/M tokens</td><td>~$0.08</td><td>20 advisories, RAG context</td></tr>
-                <tr><td style={{ fontWeight: 500 }}>Claude Translation</td><td>~$3/M tokens</td><td>~$0.04</td><td>20 translations (Tamil/Malayalam)</td></tr>
-                <tr><td style={{ fontWeight: 500 }}>Tomorrow.io</td><td>Free tier</td><td>$0.00</td><td>500 calls/day free</td></tr>
-                <tr><td style={{ fontWeight: 500 }}>Open-Meteo</td><td>Free</td><td>$0.00</td><td>No API key needed</td></tr>
-                <tr><td style={{ fontWeight: 500 }}>NASA POWER</td><td>Free</td><td>$0.00</td><td>Public API</td></tr>
-                <tr><td style={{ fontWeight: 500 }}>NeuralGCM (GPU)</td><td>~$0.80/hr (L4)</td><td>~$0.02</td><td>~90s inference on L4</td></tr>
-              </tbody>
-            </table>
+      {/* Tab 2: Quality (Healing Stats + Eval Metrics stacked) */}
+      {activeTab === 2 && (
+        <div className="space-y-8">
+          <div>
+            <div className="section-header" style={{ fontSize: '0.88rem', marginBottom: '12px' }}>Healing Stats</div>
+            <HealingStatsTab />
           </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div style={{
-              background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
-            }}>
-              <div className="section-header">Per-Run Total</div>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~$0.29</div>
-              <div style={{ color: '#666', fontSize: '0.82rem' }}>
-                Claude: ~$0.27 + GPU: ~$0.02
-              </div>
-              <div style={{ color: '#2a9d8f', fontSize: '0.82rem', marginTop: '4px' }}>
-                Fallback (no Claude): ~$0.02/run
-              </div>
-            </div>
-            <div style={{
-              background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
-            }}>
-              <div className="section-header">Monthly Estimate (1x/day)</div>
-              <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~$9/mo</div>
-              <div style={{ color: '#666', fontSize: '0.82rem' }}>
-                30 runs/month at ~$0.29 each
-              </div>
-            </div>
+          <hr style={{ border: 'none', borderTop: '1px solid #e0dcd5' }} />
+          <div>
+            <div className="section-header" style={{ fontSize: '0.88rem', marginBottom: '12px' }}>Eval Metrics</div>
+            <EvalMetricsTab />
           </div>
         </div>
       )}
 
-      {/* Eval Metrics */}
-      {activeTab === 5 && <EvalMetricsTab />}
+      {/* Tab 3: Delivery (Funnel + Delivery Log stacked) */}
+      {activeTab === 3 && (
+        <div className="space-y-8">
+          <DeliveryFunnelTab />
+          <hr style={{ border: 'none', borderTop: '1px solid #e0dcd5' }} />
+          <div>
+            <div className="section-header" style={{ fontSize: '0.88rem', marginBottom: '12px' }}>Delivery Log</div>
+            <SystemDeliveryLogTab />
+          </div>
+        </div>
+      )}
 
-      {/* Healing Stats */}
-      {activeTab === 6 && <HealingStatsTab />}
-
-      {/* Agent Log */}
-      {activeTab === 7 && <AgentLogTab />}
-
-      {/* Delivery Funnel */}
-      {activeTab === 8 && <DeliveryFunnelTab />}
+      {/* Tab 4: Agent Log */}
+      {activeTab === 4 && <AgentLogTab />}
     </div>
   )
 }

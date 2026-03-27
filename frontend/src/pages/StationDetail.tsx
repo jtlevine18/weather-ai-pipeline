@@ -11,6 +11,7 @@ import {
 import { useStationLatest, useForecasts } from '../api/hooks'
 import { ForecastStrip } from '../components/ForecastStrip'
 import { DetailSkeleton } from '../components/LoadingSpinner'
+import { AreaChart, Area, ResponsiveContainer, Tooltip } from 'recharts'
 
 function formatDate(dateStr: string | undefined): string {
   if (!dateStr) return '--'
@@ -180,6 +181,47 @@ export default function StationDetail() {
           )}
         </div>
       </div>
+
+      {/* Temperature Trend sparkline */}
+      {stationForecasts.length > 0 && (
+        <div>
+          <h2 className="text-lg font-semibold text-slate-900 mb-3">
+            Temperature Trend
+          </h2>
+          <div className="card card-body">
+            <ResponsiveContainer width="100%" height={120}>
+              <AreaChart
+                data={stationForecasts.map((f, i) => ({
+                  day: f.forecast_day !== undefined && f.forecast_day !== null
+                    ? (f.forecast_day === 0 ? 'Today' : `Day ${f.forecast_day + 1}`)
+                    : `Day ${i + 1}`,
+                  temp: f.temp_max ?? (f as any).temperature ?? 0,
+                }))}
+                margin={{ top: 4, right: 4, left: 4, bottom: 4 }}
+              >
+                <defs>
+                  <linearGradient id="tempGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="#d4a019" stopOpacity={0.15} />
+                    <stop offset="100%" stopColor="#d4a019" stopOpacity={0.02} />
+                  </linearGradient>
+                </defs>
+                <Tooltip
+                  contentStyle={{ borderRadius: '8px', border: '1px solid #e0dcd5', fontFamily: 'DM Sans, sans-serif' }}
+                  formatter={(value: number) => [`${value.toFixed(1)}\u00B0C`, 'Temp']}
+                />
+                <Area
+                  type="monotone"
+                  dataKey="temp"
+                  stroke="#d4a019"
+                  fill="url(#tempGrad)"
+                  fillOpacity={1}
+                  strokeWidth={2}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          </div>
+        </div>
+      )}
     </div>
   )
 }

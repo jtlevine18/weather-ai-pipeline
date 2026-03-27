@@ -17,6 +17,54 @@ const INITIAL_MSG: ChatMessage = {
     "'Show me the latest forecast for Chennai', or 'What's the tech stack?'",
 }
 
+function renderMarkdown(text: string): string {
+  // Escape HTML first to prevent injection
+  let html = text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+
+  // Bold: **text**
+  html = html.replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
+
+  // Inline code: `text`
+  html = html.replace(/`([^`]+)`/g, '<code>$1</code>')
+
+  // Process lines for lists and line breaks
+  const lines = html.split('\n')
+  const result: string[] = []
+  let inList = false
+
+  for (const line of lines) {
+    const listMatch = line.match(/^- (.+)/)
+    if (listMatch) {
+      if (!inList) {
+        result.push('<ul>')
+        inList = true
+      }
+      result.push(`<li>${listMatch[1]}</li>`)
+    } else {
+      if (inList) {
+        result.push('</ul>')
+        inList = false
+      }
+      result.push(line)
+    }
+  }
+  if (inList) {
+    result.push('</ul>')
+  }
+
+  // Join with <br /> for non-list lines
+  html = result.join('<br />')
+  // Clean up extra <br /> around <ul> and </ul>
+  html = html.replace(/<br \/><ul>/g, '<ul>')
+  html = html.replace(/<\/ul><br \/>/g, '</ul>')
+  html = html.replace(/<\/li><br \/><li>/g, '</li><li>')
+
+  return html
+}
+
 export function ChatWidget() {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
@@ -123,7 +171,7 @@ export function ChatWidget() {
   }
 
   return (
-    <div style={{
+    <div className="chat-widget-container" style={{
       position: 'fixed', bottom: '24px', right: '24px', zIndex: 1000,
       width: '380px', maxWidth: 'calc(100vw - 48px)',
       height: '600px', maxHeight: 'calc(100vh - 48px)',
@@ -133,6 +181,19 @@ export function ChatWidget() {
       display: 'flex', flexDirection: 'column',
       overflow: 'hidden',
     }}>
+      <style>{`
+        .chat-widget-container code {
+          background: #f5f3ef;
+          padding: 1px 4px;
+          border-radius: 3px;
+          font-size: 0.8rem;
+          font-family: monospace;
+        }
+        .chat-widget-container ul {
+          margin: 4px 0;
+          padding-left: 16px;
+        }
+      `}</style>
       {/* Header */}
       <div style={{
         background: '#1a1a1a', color: '#fff',
@@ -238,9 +299,8 @@ export function ChatWidget() {
               background: msg.role === 'user' ? '#d4a019' : '#fff',
               color: msg.role === 'user' ? '#fff' : '#1a1a1a',
               border: msg.role === 'user' ? 'none' : '1px solid #e0dcd5',
-              whiteSpace: 'pre-wrap',
             }}>
-              {msg.content}
+              <span dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
             </div>
           </div>
         ))}

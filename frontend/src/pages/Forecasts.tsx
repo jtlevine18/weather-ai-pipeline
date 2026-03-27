@@ -3,6 +3,10 @@ import { useForecasts, useStations, useFarmers } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
 import { PageContext } from '../components/PageContext'
+import {
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
+  ResponsiveContainer, Cell,
+} from 'recharts'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -333,24 +337,37 @@ export default function Forecasts() {
             </div>
           </div>
 
-          {/* Model Usage Breakdown */}
+          {/* Model Confidence Chart */}
           <div>
             <div className="section-header">Usage Breakdown</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {modelBreakdown.map(([model, count]) => {
-                const pct = totalForecasts > 0 ? Math.round(100 * count / totalForecasts) : 0
-                const color = MODEL_COLOR[model] || '#888'
-                return (
-                  <div key={model} style={{
-                    background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-                    padding: '16px', textAlign: 'center',
-                  }}>
-                    <div style={{ fontSize: '2rem', fontWeight: 700, color }}>{pct}%</div>
-                    <div style={{ fontSize: '0.82rem', color: '#666' }}>{model.replace(/_/g, ' ')}</div>
-                    <div style={{ fontSize: '0.78rem', color: '#999' }}>{count} forecasts</div>
-                  </div>
-                )
-              })}
+            <div style={{
+              background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
+              padding: '16px',
+            }}>
+              <ResponsiveContainer width="100%" height={240}>
+                <BarChart
+                  data={modelBreakdown.map(([model]) => {
+                    const items = allForecasts.filter(f => f.model === model)
+                    const confs = items.map(f => f.confidence ?? 0).filter(c => c > 0)
+                    const avg = confs.length > 0 ? confs.reduce((a, b) => a + b, 0) / confs.length : 0
+                    return { model: model.replace(/_/g, ' '), avgConfidence: Math.round(avg * 100), _key: model }
+                  })}
+                  margin={{ top: 8, right: 16, left: 0, bottom: 4 }}
+                >
+                  <CartesianGrid strokeDasharray="3 3" stroke="#e0dcd5" />
+                  <XAxis dataKey="model" tick={{ fill: '#888', fontSize: 12, fontFamily: 'DM Sans' }} />
+                  <YAxis domain={[0, 100]} tick={{ fill: '#888', fontSize: 12, fontFamily: 'DM Sans' }} unit="%" />
+                  <Tooltip
+                    contentStyle={{ borderRadius: '8px', border: '1px solid #e0dcd5', fontFamily: 'DM Sans, sans-serif' }}
+                    formatter={(value: number) => [`${value}%`, 'Avg Confidence']}
+                  />
+                  <Bar dataKey="avgConfidence" radius={[4, 4, 0, 0]}>
+                    {modelBreakdown.map(([model]) => (
+                      <Cell key={model} fill={MODEL_COLOR[model] || '#888'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
             </div>
           </div>
 
