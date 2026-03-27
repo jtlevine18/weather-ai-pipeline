@@ -1243,64 +1243,31 @@ export default function Pipeline() {
             </div>
           </div>
 
-          {/* The one-shot prompt with copy button */}
+          {/* Full prompt — link to REBUILD.md */}
           <div>
-            <div className="section-header">One-Shot Prompt</div>
-            <div style={{ position: 'relative' }}>
-              <button
-                onClick={() => {
-                  const el = document.getElementById('rebuild-prompt')
-                  if (el) {
-                    navigator.clipboard.writeText(el.textContent ?? '').then(() => {
-                      const btn = document.getElementById('copy-btn')
-                      if (btn) { btn.textContent = 'Copied!'; setTimeout(() => { btn.textContent = 'Copy' }, 2000) }
-                    })
-                  }
-                }}
-                id="copy-btn"
+            <div className="section-header">Adaptation Prompt</div>
+            <div className="card card-body" style={{ textAlign: 'center', padding: '28px 20px' }}>
+              <p style={{ fontSize: '0.88rem', color: '#1a1a1a', lineHeight: 1.7, marginBottom: '16px', maxWidth: '520px', marginLeft: 'auto', marginRight: 'auto' }}>
+                REBUILD.md contains a comprehensive prompt that tells Claude Code exactly how to adapt
+                every layer of the pipeline — stations, ingestion, farmer profiles, crop advisories,
+                seasonal context, and dashboard — for your region.
+              </p>
+              <a
+                href="https://github.com/jtlevine18/weather-ai-pipeline/blob/main/REBUILD.md"
+                target="_blank"
+                rel="noopener"
                 style={{
-                  position: 'absolute', top: '10px', right: '10px', zIndex: 1,
-                  background: '#d4a019', color: '#fff', border: 'none', borderRadius: '6px',
-                  padding: '6px 14px', fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+                  display: 'inline-block', background: '#d4a019', color: '#fff', borderRadius: '8px',
+                  padding: '10px 28px', fontSize: '0.85rem', fontWeight: 600, textDecoration: 'none',
                   fontFamily: 'DM Sans, sans-serif', letterSpacing: '0.3px',
                 }}
               >
-                Copy
-              </button>
-              <pre id="rebuild-prompt" style={{
-                background: '#1a1a1a', color: '#e0dcd5', borderRadius: '8px',
-                padding: '20px', paddingRight: '80px', fontSize: '0.82rem', lineHeight: 1.7,
-                overflow: 'auto', whiteSpace: 'pre-wrap',
-              }}>
-{`I want to adapt this weather pipeline for [YOUR REGION]. Here are my stations:
-
-1. [City], lat: [XX.XX], lon: [XX.XX], altitude: [XXm], crops: [crop1, crop2]
-2. [City], lat: [XX.XX], lon: [XX.XX], altitude: [XXm], crops: [crop1, crop2]
-... (5-20 stations)
-
-Region name: [e.g. "Central Mexico", "Northern France", "East Africa"]
-Timezone: [e.g. "America/Mexico_City", "Europe/Paris", "Africa/Nairobi"]
-Language for advisories: [e.g. "es", "fr", "sw"]
-
-My data source: [describe your weather data — e.g. "I have NOAA stations", "I have CSV files", "just use Open-Meteo"]
-
-Please:
-1. Generate stations.json with my stations
-2. Generate farmers.json with realistic demo farmer profiles for my region
-3. Set REGION_NAME and TIMEZONE in .env
-4. Configure ingestion for my data source
-5. Update src/translation/curated_advisories.py with crop advisories for my region's crops and weather conditions
-6. Update src/healing.py SEASONAL_CONTEXT with my region's seasonal weather patterns
-7. Update frontend/src/regionConfig.ts with my region name, states, languages, locale, currency, and data source label
-8. Update CLAUDE.md with the new station list and region info
-9. Test with python run_pipeline.py`}
-              </pre>
+                Open REBUILD.md on GitHub
+              </a>
+              <p style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '10px' }}>
+                Copy the prompt, fill in your stations, paste into Claude Code in your fork.
+              </p>
             </div>
-            <p style={{ fontSize: '0.75rem', color: '#aaa', marginTop: '6px' }}>
-              Fill in the bracketed parts, then paste into Claude Code in your fork.
-              See <a href="https://github.com/jtlevine18/weather-ai-pipeline/blob/main/REBUILD.md" target="_blank" rel="noopener" style={{ color: '#d4a019' }}>REBUILD.md</a> for
-              full documentation, data source options, and JSON format examples.
-            </p>
           </div>
 
           {/* What works globally vs what's region-specific */}

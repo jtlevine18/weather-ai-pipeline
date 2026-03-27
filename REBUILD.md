@@ -1,192 +1,263 @@
 # Rebuild This Pipeline for Your Region
 
-This guide helps you adapt this weather pipeline for any geography. The fastest path is the **one-shot Claude Code prompt** below — fork the repo, open [Claude Code](https://claude.ai/code), and paste.
+Fork the repo, open [Claude Code](https://claude.ai/code), fill in the bracketed parts in the prompt below, and paste it. Claude Code will adapt the entire pipeline — stations, data ingestion, farmer profiles, crop advisories, seasonal climate context, and dashboard — for your geography.
 
 ## Prerequisites
 
-1. **API Keys** (see `.env.example`):
-   - `ANTHROPIC_API_KEY` — [console.anthropic.com](https://console.anthropic.com/) (pay-per-use, ~$0.27/pipeline run)
-   - `TOMORROW_IO_API_KEY` — [tomorrow.io/signup](https://app.tomorrow.io/signup) (free tier: 500 calls/day)
-
-2. **PostgreSQL database**:
-   - [Neon](https://neon.tech) free tier works great (serverless, no credit card)
-   - Set `DATABASE_URL` in your `.env`
-
+1. **API Keys** — `ANTHROPIC_API_KEY` ([console.anthropic.com](https://console.anthropic.com/)), `TOMORROW_IO_API_KEY` ([tomorrow.io](https://app.tomorrow.io/signup), free 500 calls/day)
+2. **PostgreSQL** — [Neon](https://neon.tech) free tier (serverless, no credit card). Set `DATABASE_URL` in `.env`
 3. **Python 3.11+**
 
-## What You Need to Provide
+## The Prompt
 
-| What | File | Required? |
-|------|------|-----------|
-| Your weather stations | `stations.json` | Yes |
-| Your weather data source | Custom ingestion function or use Open-Meteo | Yes |
-| Your timezone and region name | `.env` or `config.py` | Yes |
-| Simulated farmer profiles | `farmers.json` | Optional (for demos) |
+```text
+I want to adapt this weather pipeline for my region. Read CLAUDE.md first to understand
+the full architecture, then make all the changes described below.
 
-### stations.json format
+=== MY REGION ===
 
-```json
+Region name: [e.g. "Central Mexico", "East Africa", "Northern France"]
+States/provinces: [e.g. "Jalisco, Michoacán, Guanajuato"]
+Timezone: [e.g. "America/Mexico_City", "Africa/Nairobi", "Europe/Paris"]
+Language(s) for advisories: [e.g. "es" for Spanish, "sw" for Swahili, "fr" for French]
+Currency symbol: [e.g. "$", "KSh", "€"]
+Locale code: [e.g. "es-MX", "en-KE", "fr-FR"]
+
+=== MY STATIONS (5-20) ===
+
+1. [City], lat: [XX.XX], lon: [XX.XX], altitude: [XXm], state/province: [Name], crops: [crop1, crop2, crop3]
+2. [City], lat: [XX.XX], lon: [XX.XX], altitude: [XXm], state/province: [Name], crops: [crop1, crop2, crop3]
+... (add more)
+
+=== MY DATA SOURCE ===
+
+[Describe your weather data source. Options:
+- "I have my own API at [endpoint] that returns [format]"
+- "I have CSV files with columns [list columns]"
+- "Use Open-Meteo current conditions (free, global, no API key)"
+- "I want to use [NOAA / Bureau of Meteorology / ECMWF / other]"
+- "I'll use synthetic data for now, just set up the pipeline structure"]
+
+=== WHAT TO CHANGE ===
+
+Make ALL of the following changes. This is a 6-step weather pipeline that ingests station
+data, heals anomalies, generates forecasts, downscales to farmer GPS, produces crop
+advisories, and delivers via SMS. The reference implementation is for Southern India
+(Kerala & Tamil Nadu). You are adapting it for my region.
+
+--- 1. STATIONS (config layer) ---
+
+Generate stations.json in the project root with my stations. Format:
 [
   {
-    "station_id": "US_NYC",
-    "name": "New York City",
-    "lat": 40.7128,
-    "lon": -74.0060,
-    "altitude_m": 10,
-    "state": "New York",
-    "crop_context": "vegetables, apples, grapes, dairy forage",
-    "language": "en",
-    "imd_id": ""
+    "station_id": "[XX_CCC]",  // 2-letter region prefix + 3-letter city code
+    "name": "[City Name]",
+    "lat": [XX.XXXX],
+    "lon": [XX.XXXX],
+    "altitude_m": [X],
+    "state": "[State/Province]",
+    "crop_context": "[crop1, crop2, crop3]",
+    "language": "[ISO 639-1 code]",
+    "imd_id": ""               // leave empty for non-India deployments
   }
 ]
-```
 
-### farmers.json format (optional)
+Update the _HARDCODED_STATIONS list in config.py to match (this is the fallback if
+stations.json is missing).
 
-```json
+Set these in .env:
+  REGION_NAME=[my region name]
+  TIMEZONE=[my timezone]
+
+--- 2. DATA INGESTION (src/ingestion.py) ---
+
+Write a custom async ingestion function for my data source. The function signature is:
+
+  async def my_fetch(station: StationConfig) -> dict:
+      return {
+          "temperature": float,   # °C
+          "humidity": float,      # %
+          "wind_speed": float,    # km/h
+          "pressure": float,      # hPa
+          "rainfall": float,      # mm
+      }
+
+Register it in config.py by setting:
+  WeatherDataConfig.ingestion_source = "custom"
+  WeatherDataConfig.custom_ingest_fn = my_fetch
+
+The custom ingestion path in ingest_all_stations() will call this function for each
+station, wrap the result in the standard raw_telemetry record format, and insert into
+the database.
+
+If using Open-Meteo: write a function that calls the Open-Meteo current weather API
+(https://api.open-meteo.com/v1/forecast with current=true) for each station's lat/lon.
+
+Update the _baseline() function docstring to note it is region-specific (used only for
+synthetic fallback). If my region has very different climate zones than Kerala/Tamil Nadu,
+update the altitude thresholds and base temperatures to match my region.
+
+--- 3. FARMER PROFILES (src/dpi/simulator.py) ---
+
+Generate farmers.json in the project root with realistic demo profiles for my stations:
 {
-  "US_NYC": {
-    "district": "Long Island", "state": "New York", "lang": "en",
-    "crops": ["vegetables", "apples", "grapes"], "soil": ["sandy loam", "clay"],
-    "irrigation": ["drip", "rainfed"], "area": [1.0, 5.0], "pH": [5.5, 7.0],
-    "names": [["John Smith", "John Smith"], ["Maria Garcia", "Maria Garcia"]],
+  "[station_id]": {
+    "district": "[Local district name]",
+    "state": "[State/Province]",
+    "lang": "[ISO 639-1]",
+    "crops": ["crop1", "crop2", "crop3"],
+    "soil": ["soil_type1", "soil_type2"],
+    "irrigation": ["irrigation_type1", "irrigation_type2"],
+    "area": [min_hectares, max_hectares],
+    "pH": [min_pH, max_pH],
+    "names": [["Full Name", "Name in local script"], ["Full Name 2", "Local 2"]],
     "count": 2
   }
 }
-```
 
-These are **demo profiles** tied to your stations. In a real deployment, you'd connect actual farmer data instead of simulated profiles.
+Use realistic names, crops, soil types, and farm sizes for my region. Include at least
+2 names per station with both Latin script and local script versions. The simulator
+loads this file automatically and generates complete farmer profiles with identity,
+land records, soil health, subsidy, insurance, and credit data.
 
-### frontend/src/regionConfig.ts (dashboard strings)
+--- 4. CROP ADVISORIES (src/translation/curated_advisories.py) ---
 
-This single file controls every geography-specific string in the dashboard. Here's what it looks like adapted for Central Mexico:
+Replace the entire ADVISORY_MATRIX dict with crop-specific advisories for MY region's
+crops and weather conditions. The structure is:
 
-```typescript
+ADVISORY_MATRIX = {
+    "heavy_rain": {
+        "crop_name": "Detailed advisory text with specific agronomic guidance...",
+        "default": "Generic heavy rain advisory...",
+    },
+    "moderate_rain": { ... },
+    "heat_stress": { ... },
+    "drought_risk": { ... },
+    "frost_risk": { ... },
+    "high_wind": { ... },
+    "foggy": { ... },
+    "clear": { ... },
+    "cyclone_risk": { ... },
+}
+
+Each advisory should be 2-4 sentences with specific, actionable farming guidance:
+pest/disease risks, irrigation adjustments, harvest timing, fertilizer recommendations.
+Write advisories for every crop listed in my stations' crop_context fields. These are
+the fallback when the Claude RAG provider is unavailable.
+
+--- 5. SEASONAL CONTEXT (src/healing.py) ---
+
+Replace the SEASONAL_CONTEXT dict (currently 24 entries for Kerala × 12 months +
+Tamil Nadu × 12 months) with entries for my region. Format:
+
+SEASONAL_CONTEXT = {
+    ("[State/Province]", month_number): {
+        "season": "[season name]",
+        "weather": "[typical weather description with temp ranges, rainfall amounts]",
+        "crops": "[what's growing/being planted/harvested this month]",
+    },
+    ...
+}
+
+Create entries for each of my states/provinces × 12 months. This context is used by the
+Claude healing agent to validate whether readings are plausible for the season.
+
+Also update the SYSTEM_PROMPT_TEMPLATE at the top of the file to reference my region
+instead of "Kerala and Tamil Nadu" / "IMD stations".
+
+--- 6. DASHBOARD (frontend/src/regionConfig.ts) ---
+
+Replace the entire REGION object with my region's values:
+
 export const REGION = {
-  name: 'Central Mexico',
-  states: ['Jalisco', 'Michoacán', 'Guanajuato'],
-  languages: { es: 'Spanish' } as Record<string, string>,
+  name: '[My Region Name]',
+  states: ['[State1]', '[State2]'],
+  languages: { [lang_code]: '[Language Name]' } as Record<string, string>,
   get languageList() { return Object.values(this.languages).join(' and ') },
   get languageMetric() { return Object.values(this.languages).join(' / ') },
-
-  dataSource: 'CONAGUA',           // your met service name (shown in descriptions)
-  sourceLabels: {                   // badge labels for data source types in the UI
-    conagua: ['CONAGUA', '#2E7D32'],
+  dataSource: '[My Data Source Name]',
+  sourceLabels: {
+    [source_key]: ['[Source Display Name]', '#2E7D32'],
     open_meteo: ['Open-Meteo', '#1565C0'],
     synthetic: ['Synthetic', '#888'],
     custom: ['Custom', '#6B5B95'],
   } as Record<string, [string, string]>,
-
-  locale: 'es-MX',                 // date/number formatting
-  currency: '$',                    // currency symbol for financial displays
-  timezoneLabel: 'CST',            // shown in scheduler description
-
-  sidebarFooter: 'Jalisco \u00B7 Michoacán \u00B7 Guanajuato',
-
-  farmerServices: {                 // labels for the farmer profile cards
-    pmkisan: 'PROCAMPO',           // income support program
-    pmfby: 'Crop Insurance',       // crop insurance
-    kcc: 'Farm Credit',            // credit facility
-    soil: 'Soil Health Card',      // soil testing
+  locale: '[locale-code]',
+  currency: '[symbol]',
+  timezoneLabel: '[TZ abbreviation]',
+  sidebarFooter: '[State1 · State2]',
+  farmerServices: {
+    pmkisan: '[Income support program name]',
+    pmfby: '[Crop insurance program name]',
+    kcc: '[Farm credit program name]',
+    soil: '[Soil testing program name]',
   },
 }
-```
 
-The keys in `sourceLabels` should match the `source` field your ingestion function writes to `raw_telemetry`. The keys in `farmerServices` (`pmkisan`, `pmfby`, `kcc`, `soil`) are used by the React components to look up card titles — keep the same keys, just change the display labels.
+The sourceLabels keys must match the "source" field your ingestion function writes.
+The farmerServices keys (pmkisan, pmfby, kcc, soil) are referenced by React components —
+keep the keys, change only the display labels.
 
-## One-Shot Claude Code Prompt
+--- 7. DOCUMENTATION ---
 
-Fork the repo, open Claude Code, and paste this (fill in the bracketed parts):
+Update CLAUDE.md:
+- Change the project title and vision to reference my region
+- Replace the station list with my stations
+- Update the Architecture section to reference my data source instead of IMD
+- Update language references
 
-```text
-I want to adapt this weather pipeline for [YOUR REGION]. Here are my stations:
+--- 8. VERIFICATION ---
 
-1. [City], lat: [XX.XX], lon: [XX.XX], altitude: [XXm], crops: [crop1, crop2]
-2. [City], lat: [XX.XX], lon: [XX.XX], altitude: [XXm], crops: [crop1, crop2]
-... (5-20 stations)
+After making all changes, run these commands and confirm they pass:
 
-Region name: [e.g. "Central Mexico", "Northern France", "East Africa"]
-Timezone: [e.g. "America/Mexico_City", "Europe/Paris", "Africa/Nairobi"]
-Language for advisories: [e.g. "es", "fr", "sw"]
+python -c "from config import STATIONS; print(f'{len(STATIONS)} stations loaded'); [print(f'  {s.station_id}: {s.name}') for s in STATIONS]"
 
-My data source: [describe your weather data — see "Data source options" in REBUILD.md]
+python -c "from src.dpi.simulator import get_registry; r = get_registry(); print(f'{r.farmer_count} farmers'); [print(f'  {f[\"name\"]} — {f[\"district\"]}') for f in r.list_farmers()[:5]]"
 
-Please:
-1. Generate stations.json with my stations
-2. Generate farmers.json with realistic demo farmer profiles for my region
-3. Set REGION_NAME and TIMEZONE in .env
-4. Configure ingestion for my data source
-5. Update src/translation/curated_advisories.py with crop advisories for my region's crops and weather conditions
-6. Update src/healing.py SEASONAL_CONTEXT with my region's seasonal weather patterns
-7. Update frontend/src/regionConfig.ts with my region name, states, languages, locale, currency, and data source label
-8. Update CLAUDE.md with the new station list and region info
-9. Test with python run_pipeline.py
-```
-
-### Data source options
-
-Tell Claude Code which applies to you:
-
-**"I have my own weather API"** — Provide the API endpoint and response format. Claude Code will write a custom ingestion function and set `ingestion_source: "custom"`.
-
-**"I have CSV/database weather data"** — Describe the schema. Claude Code will write a loader function.
-
-**"I just want to use Open-Meteo (global, free)"** — Claude Code will write an Open-Meteo-based ingestion function that fetches current conditions for your stations. No API key needed.
-
-**"I have [specific service] data"** (NOAA, Bureau of Meteorology, ECMWF, etc.) — Describe the service. Claude Code will write the appropriate client.
-
-## What Works Globally (no changes needed)
-
-- **Open-Meteo** weather forecasts (global coverage, free, no key)
-- **NASA POWER** satellite data (global coverage, free)
-- **NeuralGCM** neural weather model (global, runs on GPU)
-- **Claude** advisory generation and translation (any language)
-- **XGBoost MOS** bias correction (trains automatically on local data)
-- **FAISS + BM25 RAG** retrieval (rebuild index with your ag corpus)
-- **PostgreSQL** database schema (geography-neutral)
-- **Pipeline orchestration** (Dagster, scheduler, quality checks)
-- **Delivery** (Twilio SMS/WhatsApp — works globally)
-
-## What's Region-Specific (the prompt handles these)
-
-| Component | File(s) | What to change |
-|-----------|---------|---------------|
-| **Stations** | `stations.json`, `config.py` | Replace with your stations |
-| **Data ingestion** | `src/ingestion.py` | Write custom fetch function for your data source |
-| **Farmer profiles** | `farmers.json` | Replace with your region's demo profiles (names, crops, soil types) |
-| **Crop advisories** | `src/translation/curated_advisories.py` | Replace advisory matrix with your crops and conditions |
-| **Seasonal context** | `src/healing.py` | Replace monthly weather patterns for your region |
-| **Farmer services** | `src/dpi/` | India-specific service names (Aadhaar, PM-KISAN, etc.) for universal concepts (identity, land records, soil health, subsidies, insurance, credit). Rename or replace for your country's systems. |
-| **Dashboard config** | `frontend/src/regionConfig.ts` | Single file: region name, states, languages, locale, data source label, currency, farmer service names |
-
-## Verification
-
-After adaptation, confirm everything works:
-
-```bash
-# 1. Pipeline runs end-to-end
 python run_pipeline.py
 
-# 2. Tests pass
-pytest tests/
+If the pipeline run fails, debug and fix the issue. Common problems:
+- Database not set up: check DATABASE_URL in .env
+- API key missing: check ANTHROPIC_API_KEY and TOMORROW_IO_API_KEY
+- Custom ingestion function errors: check the function returns all 5 fields
+- Import errors: check the custom_ingest_fn is properly imported in config.py
 
-# 3. Check your stations loaded correctly
-python -c "from config import STATIONS; print(f'{len(STATIONS)} stations loaded'); print([s.name for s in STATIONS])"
+=== WHAT NOT TO CHANGE ===
 
-# 4. Check farmer profiles generated
-python -c "from src.dpi.simulator import get_registry; r = get_registry(); print(f'{r.farmer_count} farmers generated')"
+These components are globally portable and should work without modification:
+- src/forecasting.py — NeuralGCM + XGBoost MOS (timezone is already configurable)
+- src/weather_clients.py — OpenMeteo, NASA POWER, Tomorrow.io clients
+- src/downscaling/ — IDW + lapse-rate math (universal)
+- src/translation/rag_provider.py — FAISS+BM25 RAG (language-agnostic)
+- src/translation/claude_provider.py — Claude advisory generation
+- src/delivery/ — Console/Twilio/WhatsApp delivery
+- src/database/ — All 17 PostgreSQL tables (geography-neutral schemas)
+- src/pipeline.py — Pipeline orchestrator
+- src/models.py — Pydantic data contracts
+- src/api.py, src/auth.py — FastAPI REST API + JWT auth
+- dagster_pipeline/ — Dagster orchestration
+- tests/ — Test structure (update fixtures if needed)
 ```
 
-## Common Scenarios
+## After the Prompt
 
-### "I have NOAA stations (US)"
-Use NOAA's Climate Data Online API or ISD data. Set your stations to NOAA USAF-WBAN IDs. Claude Code can write a NOAA client that maps to the same reading format.
+Once Claude Code finishes, you should have:
+- `stations.json` with your stations
+- `farmers.json` with demo farmer profiles
+- `.env` with your region name and timezone
+- Custom ingestion wired up for your data source
+- Crop advisories for your region's crops
+- Seasonal climate context for your states
+- Dashboard displaying your region's names and languages
+- A working pipeline confirmed by `python run_pipeline.py`
 
-### "I just want global coverage with no local data source"
-Use Open-Meteo for ingestion (it provides current conditions globally, free). Set `ingestion_source: "custom"` with an Open-Meteo current-conditions fetcher.
+## Data Source Reference
 
-### "I want to skip the farmer profiles entirely"
-Set `config.dpi.simulation = False` and the pipeline will use station-level data for advisories without farmer-specific profiles.
-
-### "I want to change the advisory language"
-Set the `language` field in your `stations.json` entries. Claude API handles translation to any language — just specify the ISO 639-1 code (e.g., "es", "fr", "hi", "sw").
+| Source | Coverage | Auth | Notes |
+|--------|----------|------|-------|
+| Open-Meteo | Global | None | Free, best default for non-India regions |
+| NOAA ISD/CDO | US + global | API key (free) | Integrated Surface Data, hourly |
+| Bureau of Meteorology | Australia | API key | Australian weather stations |
+| ECMWF Open Data | Global | None | Medium-range forecasts |
+| Copernicus CDS | Global | API key (free) | ERA5 reanalysis + more |
+| Your own API/CSV | Your region | Varies | Write a custom fetch function |
