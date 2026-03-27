@@ -62,8 +62,8 @@ export function WelcomeBanner() {
             Welcome to the AI Weather Pipeline
           </p>
           <p className="text-xs font-sans text-warm-body leading-relaxed m-0">
-            This dashboard shows a live AI system processing real weather data from 20 Indian
-            meteorological stations. Explore the three stages below to see how raw observations
+            This dashboard shows an AI weather pipeline that processes real data from 20 Indian
+            meteorological stations every week. Explore the three stages below to see how raw observations
             become ML-corrected forecasts and bilingual farming advisories.
           </p>
         </div>

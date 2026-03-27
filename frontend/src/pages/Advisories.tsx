@@ -107,7 +107,7 @@ export default function Advisories() {
       </div>
 
       <PageContext id="advisories">
-        Crop-specific farming advice generated through RAG retrieval + Claude, translated into Tamil and Malayalam, and delivered via SMS. Select a farmer below to see their complete Digital Public Infrastructure profile.
+        Crop-specific farming advice generated weekly through RAG retrieval + Claude, translated into Tamil and Malayalam. Select a farmer in the Farmers &amp; DPI tab to view their simulated Digital Public Infrastructure profile.
       </PageContext>
 
       {/* 4 Metrics */}

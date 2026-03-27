@@ -26,6 +26,7 @@ export interface Forecast {
   humidity?: number
   condition?: string
   model?: string
+  model_used?: string
   confidence?: number
   created_at?: string
 }

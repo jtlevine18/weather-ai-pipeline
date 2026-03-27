@@ -56,7 +56,7 @@ const STAGES: StageCard[] = [
     href: '/advisories',
     icon: '\u{1F33E}',
     color: '#d4a019',
-    desc: 'Crop-specific farming advice in Tamil and Malayalam, generated daily and delivered by SMS',
+    desc: 'Crop-specific farming advice in Tamil and Malayalam, generated weekly and delivered via SMS',
   },
 ]
 
@@ -88,7 +88,7 @@ export default function Dashboard() {
 
   // MOS count
   const mosCount = (forecasts.data ?? []).filter(f =>
-    (f.model ?? '').includes('mos')
+    (f.model_used || f.model || '').includes('mos')
   ).length
   const mosPct = forecastCount > 0 ? Math.round(100 * mosCount / forecastCount) : 0
 
@@ -98,24 +98,35 @@ export default function Dashboard() {
     ? srcData.map(s => s.name || s.type || 'Unknown').join(', ')
     : '\u2014'
 
+  // NWP source from forecasts
+  const nwpModel = (forecasts.data ?? []).find(f => (f.model_used || f.model || '').includes('neuralgcm'))
+    ? 'NeuralGCM' : (forecastCount > 0 ? 'Open-Meteo' : '\u2014')
+
+  // Last run info
+  const lastRun = runList[0]
+  const lastRunLabel = lastRun?.started_at
+    ? new Date(lastRun.started_at).toLocaleDateString('en-IN', { weekday: 'short', month: 'short', day: 'numeric' })
+    : '\u2014'
+
   // Build stats per stage card
   function stageStats(stage: StageCard): [string, string][] {
     switch (stage.key) {
       case 'data':
         return [
-          ['Stations', String(stationCount)],
-          ['Data Sources', srcLabel],
+          ['Stations', `${stationCount} (Kerala + Tamil Nadu)`],
           ['Avg Quality', avgQuality > 0 ? `${Math.round(avgQuality * 100)}%` : '\u2014'],
+          ['Last Run', lastRunLabel],
         ]
       case 'forecasts':
         return [
-          ['Forecasts', String(forecastCount)],
-          ['ML Model Used', forecastCount > 0 ? `${mosPct}%` : '\u2014'],
+          ['NWP Model', nwpModel],
+          ['Forecast Days', forecastCount > 0 ? `${Math.round(forecastCount / Math.max(stationCount, 1))} per station` : '\u2014'],
+          ['Avg Confidence', forecastCount > 0 ? `${Math.round((forecasts.data ?? []).reduce((s, f) => s + (f.confidence ?? 0), 0) / forecastCount * 100)}%` : '\u2014'],
         ]
       case 'advisories':
         return [
-          ['Advisories', String(alertCount)],
-          ['Delivered', String(deliveryCount)],
+          ['Languages', alertCount > 0 ? 'Tamil, Malayalam' : '\u2014'],
+          ['Advisories', `${alertCount} (${deliveryCount} delivered)`],
         ]
       default:
         return []
@@ -154,7 +165,7 @@ export default function Dashboard() {
         }}>
           This system collects real weather data from 20 IMD stations across Kerala and Tamil Nadu,
           generates machine-learning-corrected forecasts personalized to each farmer's GPS location,
-          and delivers crop-specific advisories in Tamil and Malayalam via SMS.
+          and generates crop-specific advisories in Tamil and Malayalam with simulated SMS delivery.
         </p>
       </div>
 
