@@ -1,4 +1,4 @@
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { apiFetch } from './client'
 
 // ── Types ──────────────────────────────────────────────────
@@ -361,5 +361,53 @@ export function useFarmerDetail(phone: string) {
     queryKey: ['farmer-detail', phone],
     queryFn: () => apiFetch(`/api/farmers/${encodeURIComponent(phone)}`),
     enabled: !!phone,
+  })
+}
+
+// ── MOS Model Status ──────────────────────────────────────
+
+export interface MosStatus {
+  trained: boolean
+  metrics: {
+    rmse?: number
+    mae?: number
+    r2?: number
+    n_train?: number
+    n_test?: number
+    residual_mean?: number
+    residual_std?: number
+    feature_importances?: Record<string, number>
+  } | null
+}
+
+export function useMosStatus() {
+  return useQuery<MosStatus>({
+    queryKey: ['mos-status'],
+    queryFn: () => apiFetch('/api/pipeline/mos-status'),
+    staleTime: 30_000,
+  })
+}
+
+// ── Pipeline Actions (mutations) ──────────────────────────
+
+export function useTriggerPipeline() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<{ status: string; run_id?: string }>('/api/pipeline/trigger', { method: 'POST' }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['pipeline-runs'] })
+      qc.invalidateQueries({ queryKey: ['pipeline-stats'] })
+    },
+  })
+}
+
+export function useRetrainMos() {
+  const qc = useQueryClient()
+  return useMutation({
+    mutationFn: () => apiFetch<{ status: string }>('/api/pipeline/retrain-mos', { method: 'POST' }),
+    onSuccess: () => {
+      // Invalidate after a delay to give the background job time to finish
+      setTimeout(() => qc.invalidateQueries({ queryKey: ['mos-status'] }), 5000)
+    },
   })
 }

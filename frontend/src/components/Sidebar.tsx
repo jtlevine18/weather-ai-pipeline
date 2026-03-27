@@ -7,13 +7,14 @@ import {
   Settings,
   X,
 } from 'lucide-react'
+import { REGION } from '../regionConfig'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Home', icon: Home },
   { to: '/stations', label: 'Stations', icon: Database },
   { to: '/forecasts', label: 'Forecasts', icon: CloudSun },
   { to: '/advisories', label: 'Advisories', icon: Wheat },
-  { to: '/pipeline', label: 'System', icon: Settings },
+  { to: '/pipeline', label: 'Pipeline', icon: Settings },
 ]
 
 interface Props {
@@ -85,7 +86,7 @@ export function Sidebar({ open, onClose }: Props) {
         {/* Footer */}
         <div className="px-5 py-3 border-t border-white/10">
           <p className="text-[10px] text-[#e0dcd5]/60 font-sans uppercase tracking-wider">
-            Kerala &middot; Tamil Nadu
+            {REGION.sidebarFooter}
           </p>
         </div>
       </aside>

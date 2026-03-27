@@ -1,0 +1,23 @@
+{
+  "rmse": 0.1035,
+  "mae": 0.0813,
+  "r2": 0.9988,
+  "n_train": 64,
+  "n_test": 16,
+  "residual_mean": -0.84,
+  "residual_std": 3.1267,
+  "feature_importances": {
+    "nwp_temp": 0.3653,
+    "nwp_rainfall": 0.0,
+    "humidity": 0.2408,
+    "wind_speed": 0.2478,
+    "pressure": 0.146,
+    "station_altitude": 0.0,
+    "soil_moisture": 0.0,
+    "rolling_6h_error": 0.0,
+    "recent_temp_trend": 0.0,
+    "hour_sin": 0.0,
+    "hour_cos": 0.0,
+    "doy_sin": 0.0
+  }
+}

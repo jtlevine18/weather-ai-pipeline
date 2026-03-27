@@ -289,9 +289,10 @@ def get_pipeline_stats(request: Request, ):
             "forecasts", "agricultural_alerts", "delivery_log",
             "pipeline_runs",
         ]
+        from src.database.safe_sql import safe_table
         counts = {}
         for table in tables:
-            row = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()
+            row = conn.execute(f"SELECT COUNT(*) FROM {safe_table(table)}").fetchone()
             counts[table] = row[0] if row else 0
         return counts
 
@@ -495,7 +496,8 @@ def chat_message(request: Request, payload: dict,
     except ImportError:
         return {"response": "Chat requires the anthropic package."}
     except Exception as exc:
-        return {"response": f"Sorry, I couldn't process that: {str(exc)[:200]}"}
+        logging.getLogger(__name__).exception("Chat endpoint error")
+        return {"response": "Sorry, I couldn't process that request. Please try again."}
 
 
 # ---------------------------------------------------------------------------
@@ -575,6 +577,52 @@ async def trigger_pipeline(request: Request):
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
     return {"status": "triggered", "run_id": run_id}
+
+
+@app.get("/api/pipeline/mos-status")
+@limiter.limit("60/minute")
+def mos_status(request: Request):
+    """Check MOS model training status and metrics."""
+    model_path = os.path.join("models", "hybrid_mos.json")
+    metrics_path = os.path.join("metrics", "mos_metrics.json")
+    trained = os.path.exists(model_path)
+    metrics = None
+    if os.path.exists(metrics_path):
+        try:
+            with open(metrics_path) as f:
+                metrics = json.load(f)
+        except Exception:
+            pass
+    return {"trained": trained, "metrics": metrics}
+
+
+@app.post("/api/pipeline/retrain-mos")
+@limiter.limit("2/minute")
+async def retrain_mos(request: Request):
+    """Trigger MOS model retraining (export training data + train XGBoost) in background."""
+    import threading
+    import subprocess
+    import sys as _sys
+
+    def _retrain():
+        try:
+            subprocess.run(
+                [_sys.executable, "scripts/export_training_data.py"],
+                check=True, capture_output=True, text=True,
+            )
+            subprocess.run(
+                [_sys.executable, "scripts/train_mos.py"],
+                check=True, capture_output=True, text=True,
+            )
+            logging.getLogger(__name__).info("MOS model retrained successfully")
+        except subprocess.CalledProcessError as exc:
+            logging.getLogger(__name__).error(
+                "MOS retrain failed: %s", (exc.stderr or exc.stdout or str(exc))[:500]
+            )
+
+    thread = threading.Thread(target=_retrain, daemon=True)
+    thread.start()
+    return {"status": "triggered"}
 
 
 @app.get("/webhook/history")
