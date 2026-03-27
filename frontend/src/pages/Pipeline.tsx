@@ -37,19 +37,19 @@ function formatTime(dateStr: string | undefined): string {
 // ---------------------------------------------------------------------------
 
 const DATA_SOURCES = [
-  { emoji: '\uD83D\uDD27', name: 'IMD / imdlib', desc: 'Station observations', feeds: 'Step 1', color: '#2E7D32' },
-  { emoji: '\uD83C\uDF10', name: 'Tomorrow.io', desc: 'Cross-validation ref', feeds: 'Step 2', color: '#1565C0' },
-  { emoji: '\uD83D\uDCE1', name: 'NeuralGCM / Open-Meteo', desc: 'NWP forecasts', feeds: 'Step 3', color: '#7B1FA2' },
-  { emoji: '\uD83D\uDEF0\uFE0F', name: 'NASA POWER', desc: 'Spatial grid (0.5\u00B0)', feeds: 'Steps 2, 4', color: '#E65100' },
-  { emoji: '\uD83E\uDD16', name: 'Claude API', desc: 'Advisory + Translation', feeds: 'Step 5', color: '#C62828' },
+  { emoji: '\uD83D\uDD27', name: 'IMD / imdlib', desc: 'Station observations', color: '#2E7D32' },
+  { emoji: '\uD83C\uDF10', name: 'Tomorrow.io', desc: 'Cross-validation ref', color: '#1565C0' },
+  { emoji: '\uD83D\uDCE1', name: 'NeuralGCM / Open-Meteo', desc: 'NWP forecasts', color: '#7B1FA2' },
+  { emoji: '\uD83D\uDEF0\uFE0F', name: 'NASA POWER', desc: 'Spatial grid (0.5\u00B0)', color: '#E65100' },
+  { emoji: '\uD83E\uDD16', name: 'Claude API', desc: 'Advisory + Translation', color: '#C62828' },
 ]
 
 const PIPELINE_STEPS = [
   { num: 1, name: 'Ingest', table: 'raw_telemetry', desc: 'IMD station data', color: '#2E7D32' },
-  { num: 2, name: 'Heal', table: 'clean_telemetry', desc: 'Anomaly detection\n+ imputation', color: '#1565C0' },
-  { num: 3, name: 'Forecast', table: 'forecasts', desc: 'MOS: NWP +\nXGBoost residual', color: '#7B1FA2' },
-  { num: 4, name: 'Downscale', table: 'forecasts', desc: 'IDW + lapse-rate\n\u2192 farmer GPS', color: '#E65100' },
-  { num: 5, name: 'Translate', table: 'agricultural_alerts', desc: 'RAG + Claude\nadvisory', color: '#C62828' },
+  { num: 2, name: 'Heal', table: 'clean_telemetry', desc: 'Anomaly detection + imputation', color: '#1565C0' },
+  { num: 3, name: 'Forecast', table: 'forecasts', desc: 'MOS: NWP + XGBoost residual', color: '#7B1FA2' },
+  { num: 4, name: 'Downscale', table: 'forecasts', desc: 'IDW + lapse-rate to farmer GPS', color: '#E65100' },
+  { num: 5, name: 'Translate', table: 'agricultural_alerts', desc: 'RAG + Claude advisory', color: '#C62828' },
   { num: 6, name: 'Deliver', table: 'delivery_log', desc: 'SMS + WhatsApp', color: '#d4a019' },
 ]
 
@@ -60,6 +60,10 @@ const DEGRADATION_CHAIN = [
   { trigger: 'Claude advisory down', fallback: 'Template advisories' },
   { trigger: 'Tomorrow.io down', fallback: 'NASA POWER cross-validation' },
   { trigger: 'Translation fails', fallback: 'English advisory only' },
+]
+
+const DB_TABLES = [
+  'raw_telemetry', 'clean_telemetry', 'forecasts', 'agricultural_alerts', 'delivery_log',
 ]
 
 function ArchitectureDiagram() {
@@ -82,12 +86,6 @@ function ArchitectureDiagram() {
               <div style={{ fontSize: '1.2rem', marginBottom: '4px' }}>{s.emoji}</div>
               <div style={{ fontWeight: 600, fontSize: '0.82rem', color: '#1a1a1a' }}>{s.name}</div>
               <div style={{ fontSize: '0.75rem', color: '#888', marginTop: '2px' }}>{s.desc}</div>
-              <div style={{
-                fontSize: '0.68rem', color: s.color, fontWeight: 600,
-                marginTop: '6px', textTransform: 'uppercase' as const, letterSpacing: '0.5px',
-              }}>
-                \u2192 {s.feeds}
-              </div>
             </div>
           ))}
         </div>
@@ -98,7 +96,7 @@ function ArchitectureDiagram() {
         \u25BC \u25BC \u25BC
       </div>
 
-      {/* Pipeline Steps */}
+      {/* Pipeline Steps — vertical flow */}
       <div>
         <div style={{
           fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase' as const,
@@ -106,40 +104,38 @@ function ArchitectureDiagram() {
         }}>
           Pipeline (6 steps, linear)
         </div>
-        <div style={{
-          display: 'flex', gap: '0', overflowX: 'auto',
-          WebkitOverflowScrolling: 'touch', paddingBottom: '4px',
-        }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '0', paddingLeft: '20px' }}>
           {PIPELINE_STEPS.map((s, i) => (
-            <div key={s.num} style={{ display: 'flex', alignItems: 'stretch', flexShrink: 0 }}>
-              <div style={{
-                background: s.color, color: '#fff', borderRadius: '8px',
-                padding: '14px 16px', minWidth: '130px', position: 'relative',
-              }}>
-                <div style={{ fontSize: '0.68rem', opacity: 0.8, fontWeight: 600 }}>
-                  Step {s.num}
-                </div>
-                <div style={{ fontSize: '0.95rem', fontWeight: 700, marginTop: '2px' }}>
-                  {s.name}
-                </div>
-                <div style={{ fontSize: '0.72rem', opacity: 0.85, marginTop: '4px', whiteSpace: 'pre-line' }}>
-                  {s.desc}
-                </div>
+            <div key={s.num}>
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
+                {/* Step number circle */}
                 <div style={{
-                  fontSize: '0.65rem', opacity: 0.7, marginTop: '6px',
-                  fontFamily: 'monospace', background: 'rgba(255,255,255,0.15)',
-                  padding: '2px 6px', borderRadius: '3px', display: 'inline-block',
+                  width: '36px', height: '36px', borderRadius: '50%', background: s.color,
+                  color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  fontWeight: 700, fontSize: '0.85rem', flexShrink: 0,
                 }}>
-                  {s.table}
+                  {s.num}
+                </div>
+                {/* Card */}
+                <div style={{
+                  flex: 1, background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
+                  padding: '12px 16px',
+                }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.9rem', color: s.color }}>{s.name}</span>
+                    <code style={{
+                      background: '#f0ede8', padding: '2px 8px', borderRadius: '4px',
+                      fontSize: '0.72rem', color: '#555',
+                    }}>{s.table}</code>
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#666', marginTop: '4px' }}>{s.desc}</div>
                 </div>
               </div>
+              {/* Connector line */}
               {i < PIPELINE_STEPS.length - 1 && (
                 <div style={{
-                  display: 'flex', alignItems: 'center', padding: '0 6px',
-                  color: '#d4a019', fontSize: '1.2rem', fontWeight: 700, flexShrink: 0,
-                }}>
-                  \u2192
-                </div>
+                  width: '2px', height: '16px', background: '#d4a019', marginLeft: '17px',
+                }} />
               )}
             </div>
           ))}
@@ -169,10 +165,37 @@ function ArchitectureDiagram() {
               }}>
                 {d.trigger}
               </span>
-              <span style={{ color: '#d4a019', fontSize: '0.9rem' }}>\u2192</span>
+              <span style={{ color: '#d4a019', fontSize: '0.9rem' }}>{'\u2192'}</span>
               <span style={{ fontSize: '0.78rem', color: '#2a9d8f', fontWeight: 500 }}>
                 {d.fallback}
               </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Database Tables */}
+      <div>
+        <div style={{
+          fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase' as const,
+          letterSpacing: '1.5px', color: '#888', marginBottom: '10px',
+        }}>
+          Database (core tables)
+        </div>
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: '0', flexWrap: 'wrap',
+          background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
+          padding: '12px 16px',
+        }}>
+          {DB_TABLES.map((t, i) => (
+            <div key={t} style={{ display: 'flex', alignItems: 'center' }}>
+              <code style={{
+                background: '#f0ede8', padding: '4px 10px', borderRadius: '4px',
+                fontSize: '0.76rem', fontWeight: 500, color: '#1a1a1a',
+              }}>{t}</code>
+              {i < DB_TABLES.length - 1 && (
+                <span style={{ color: '#d4a019', margin: '0 8px', fontSize: '0.85rem' }}>{'\u2192'}</span>
+              )}
             </div>
           ))}
         </div>
@@ -184,6 +207,16 @@ function ArchitectureDiagram() {
 // ---------------------------------------------------------------------------
 // Eval Metrics Tab
 // ---------------------------------------------------------------------------
+
+const EVAL_SCRIPTS = [
+  { cmd: 'python tests/eval_healing.py', label: 'Self-Healing Detection', desc: 'Tests anomaly detection precision/recall and imputation accuracy' },
+  { cmd: 'python tests/eval_forecast.py', label: 'Forecast Accuracy', desc: 'Evaluates MAE/RMSE of MOS-corrected forecasts vs observations' },
+  { cmd: 'python tests/eval_rag.py', label: 'RAG Retrieval', desc: 'Measures precision@5 and recall of hybrid FAISS+BM25 retrieval' },
+  { cmd: 'python tests/eval_advisory.py', label: 'Advisory Quality', desc: 'Scores advisory accuracy, actionability, safety, and cultural fit' },
+  { cmd: 'python tests/eval_translation.py', label: 'Translation Quality', desc: 'Evaluates semantic similarity and agricultural term preservation' },
+  { cmd: 'python tests/eval_dpi.py', label: 'DPI Coverage', desc: 'Checks DPI profile completeness, station coverage, and consistency' },
+  { cmd: 'python tests/eval_conversation.py', label: 'Conversation Engine', desc: 'Tests state machine, language detection, and escalation accuracy' },
+]
 
 function EvalMetricsTab() {
   const { data: evals, isLoading } = useEvals()
@@ -197,19 +230,20 @@ function EvalMetricsTab() {
           <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '16px' }}>
             No eval results found yet. Run the eval scripts from the project root:
           </p>
-          <pre style={{
-            background: '#1a1a1a', color: '#e0dcd5', borderRadius: '8px',
-            padding: '16px', fontSize: '0.78rem', textAlign: 'left',
-            overflow: 'auto', lineHeight: 1.8,
-          }}>
-{`python tests/eval_healing.py         # Self-healing detection accuracy
-python tests/eval_forecast.py        # Forecast accuracy (MAE/RMSE)
-python tests/eval_rag.py             # RAG retrieval precision/recall
-python tests/eval_advisory.py        # Advisory quality scoring
-python tests/eval_translation.py     # Translation quality
-python tests/eval_dpi.py             # DPI profile coverage & realism
-python tests/eval_conversation.py    # Conversation engine quality`}
-          </pre>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ textAlign: 'left' }}>
+            {EVAL_SCRIPTS.map(e => (
+              <button
+                key={e.cmd}
+                className="btn-secondary"
+                title={e.desc}
+                style={{ fontSize: '0.78rem', textAlign: 'left', padding: '10px 14px' }}
+                onClick={() => alert(`Run this from your terminal:\n${e.cmd}`)}
+              >
+                <div style={{ fontWeight: 600, marginBottom: '2px' }}>{e.label}</div>
+                <code style={{ fontSize: '0.72rem', color: '#888' }}>{e.cmd}</code>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
     )
@@ -791,13 +825,22 @@ export default function Pipeline() {
 
   const [activeTab, setActiveTab] = useState(0)
 
+  // Cost calculator state
+  const [stationCount, setStationCount] = useState(20)
+  const [runsPerWeek, setRunsPerWeek] = useState(1)
+  const [claudeModel, setClaudeModel] = useState<'sonnet' | 'haiku'>('sonnet')
+
   if (runs.isLoading) return <TableSkeleton />
 
   const runList = runs.data ?? []
   const okRuns = runList.filter(r => r.status === 'ok' || r.status === 'success' || r.status === 'completed').length
   const failedRuns = runList.filter(r => r.status === 'failed' || r.status === 'error').length
 
-  const TABS = ['Architecture', 'Pipeline Runs', 'Quality', 'Delivery', 'Agent Log']
+  const TABS = ['Architecture', 'Pipeline Runs', 'Quality', 'Delivery', 'Agent Log', 'Build Your Own']
+
+  // Cost calculator derived values
+  const perRunCost = (stationCount / 20) * (claudeModel === 'sonnet' ? 0.27 : 0.03) + 0.02
+  const monthlyCost = perRunCost * runsPerWeek * 4.33
 
   return (
     <div className="space-y-6">
@@ -821,12 +864,91 @@ export default function Pipeline() {
         ))}
       </div>
 
-      {/* Tab 0: Architecture + Degradation Chain + Cost Estimate */}
+      {/* Tab 0: Architecture + Degradation Chain + Cost Calculator */}
       {activeTab === 0 && (
         <div className="space-y-6">
           <ArchitectureDiagram />
 
-          {/* Cost Estimate (collapsible) */}
+          {/* Interactive Cost Calculator */}
+          <div>
+            <div className="section-header">Cost Calculator</div>
+            <div style={{
+              background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
+              padding: '20px',
+            }}>
+              {/* Controls row */}
+              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stations</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={200}
+                    step={5}
+                    value={stationCount}
+                    onChange={e => setStationCount(Math.max(1, Math.min(200, Number(e.target.value))))}
+                    style={{
+                      width: '90px', padding: '6px 10px', borderRadius: '6px',
+                      border: '1px solid #e0dcd5', fontSize: '0.85rem', background: '#faf8f5',
+                    }}
+                  />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Runs/week</span>
+                  <input
+                    type="number"
+                    min={1}
+                    max={28}
+                    step={1}
+                    value={runsPerWeek}
+                    onChange={e => setRunsPerWeek(Math.max(1, Math.min(28, Number(e.target.value))))}
+                    style={{
+                      width: '90px', padding: '6px 10px', borderRadius: '6px',
+                      border: '1px solid #e0dcd5', fontSize: '0.85rem', background: '#faf8f5',
+                    }}
+                  />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Claude model</span>
+                  <select
+                    value={claudeModel}
+                    onChange={e => setClaudeModel(e.target.value as 'sonnet' | 'haiku')}
+                    style={{
+                      padding: '6px 10px', borderRadius: '6px',
+                      border: '1px solid #e0dcd5', fontSize: '0.85rem', background: '#faf8f5',
+                    }}
+                  >
+                    <option value="sonnet">Sonnet (~$3/M tokens)</option>
+                    <option value="haiku">Haiku (~$0.25/M tokens)</option>
+                  </select>
+                </label>
+              </div>
+
+              {/* Calculated output */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <div style={{
+                  background: '#faf8f5', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
+                }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', color: '#888', marginBottom: '6px' }}>Per-Run Cost</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~${perRunCost.toFixed(2)}</div>
+                  <div style={{ color: '#666', fontSize: '0.82rem', marginTop: '4px' }}>
+                    Claude: ~${(perRunCost - 0.02).toFixed(2)} + GPU: ~$0.02
+                  </div>
+                </div>
+                <div style={{
+                  background: '#faf8f5', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
+                }}>
+                  <div style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', color: '#888', marginBottom: '6px' }}>Monthly Estimate</div>
+                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~${monthlyCost.toFixed(2)}/mo</div>
+                  <div style={{ color: '#666', fontSize: '0.82rem', marginTop: '4px' }}>
+                    {runsPerWeek}x/week * 4.33 weeks * ${perRunCost.toFixed(2)}/run
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Static cost table (reference) */}
           <details style={{
             background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
             overflow: 'hidden',
@@ -835,9 +957,9 @@ export default function Pipeline() {
               padding: '12px 16px', cursor: 'pointer', fontSize: '0.82rem',
               fontWeight: 600, color: '#1a1a1a', userSelect: 'none',
             }}>
-              API Cost Estimate (per pipeline run)
+              API Cost Breakdown (reference table)
             </summary>
-            <div style={{ padding: '0 16px 16px' }} className="space-y-6">
+            <div style={{ padding: '0 16px 16px' }}>
               <div className="table-container">
                 <table>
                   <thead>
@@ -854,30 +976,6 @@ export default function Pipeline() {
                   </tbody>
                 </table>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div style={{
-                  background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
-                }}>
-                  <div className="section-header">Per-Run Total</div>
-                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~$0.29</div>
-                  <div style={{ color: '#666', fontSize: '0.82rem' }}>
-                    Claude: ~$0.27 + GPU: ~$0.02
-                  </div>
-                  <div style={{ color: '#2a9d8f', fontSize: '0.82rem', marginTop: '4px' }}>
-                    Fallback (no Claude): ~$0.02/run
-                  </div>
-                </div>
-                <div style={{
-                  background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
-                }}>
-                  <div className="section-header">Monthly Estimate (1x/day)</div>
-                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~$9/mo</div>
-                  <div style={{ color: '#666', fontSize: '0.82rem' }}>
-                    30 runs/month at ~$0.29 each
-                  </div>
-                </div>
-              </div>
             </div>
           </details>
         </div>
@@ -893,46 +991,32 @@ export default function Pipeline() {
           }}>
             <div style={{ flex: '1 1 auto', minWidth: '200px' }}>
               <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#1a1a1a', marginBottom: '4px' }}>
-                Daily Pipeline Scheduler
+                Weekly Pipeline Schedule
               </div>
               <div style={{ fontSize: '0.78rem', color: '#888' }}>
-                Runs the full 6-step pipeline once per day at 6:00 AM IST (background thread)
+                Runs every Monday at 06:00 IST via GitHub Actions. The pipeline processes all stations in ~6 minutes.
               </div>
-            </div>
-
-            {/* Toggle */}
-            <label className="flex items-center gap-3 cursor-pointer" style={{ flexShrink: 0 }}>
-              <div style={{
-                width: '44px', height: '24px', borderRadius: '12px',
-                background: '#e0dcd5', position: 'relative', transition: 'background 0.2s',
-              }}>
-                <div style={{
-                  width: '20px', height: '20px', borderRadius: '50%', background: '#fff',
-                  position: 'absolute', top: '2px', left: '2px',
-                  boxShadow: '0 1px 3px rgba(0,0,0,0.2)',
-                }} />
-              </div>
-              <span style={{ fontSize: '0.82rem', color: '#555' }}>Enable</span>
-            </label>
-
-            <div style={{ fontSize: '0.78rem', color: '#888', fontStyle: 'italic', flexBasis: '100%' }}>
-              Scheduler is <strong>off</strong> — toggle on to start daily runs.{' '}
-              APScheduler background thread (cron: 00:30 UTC). State persists in <code>scheduler_state.json</code>.
             </div>
 
             {/* Manual controls */}
             <div style={{ flexBasis: '100%' }}>
-              <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-                {['Run Full Pipeline', 'Ingest + Heal', 'Forecast \u2192 Deliver', 'Retrain MOS Model'].map(label => (
-                  <button
-                    key={label}
-                    className="btn-secondary w-full"
-                    style={{ fontSize: '0.78rem' }}
-                    onClick={() => alert(`${label}: would trigger via API (not yet wired)`)}
-                  >
-                    {label}
-                  </button>
-                ))}
+              <div className="grid grid-cols-2 gap-3" style={{ maxWidth: '400px' }}>
+                <button
+                  className="btn-secondary w-full"
+                  style={{ fontSize: '0.78rem' }}
+                  title="Triggers all 6 pipeline steps: ingest weather data, heal anomalies, generate forecasts, downscale to farmer GPS, create advisories, and deliver via SMS"
+                  onClick={() => alert('Run Full Pipeline: would trigger via API (not yet wired)')}
+                >
+                  Run Full Pipeline
+                </button>
+                <button
+                  className="btn-secondary w-full"
+                  style={{ fontSize: '0.78rem' }}
+                  title="Re-trains the XGBoost Model Output Statistics correction model on the latest observation-forecast pairs. Improves forecast accuracy over time."
+                  onClick={() => alert('Retrain MOS Model: would trigger via API (not yet wired)')}
+                >
+                  Retrain MOS Model
+                </button>
               </div>
             </div>
 
@@ -1053,6 +1137,75 @@ export default function Pipeline() {
 
       {/* Tab 4: Agent Log */}
       {activeTab === 4 && <AgentLogTab />}
+
+      {/* Tab 5: Build Your Own */}
+      {activeTab === 5 && (
+        <div className="space-y-6">
+          <div className="section-header">Fork This Pipeline for Your Location</div>
+
+          <div className="card card-body">
+            <p style={{ fontSize: '0.85rem', color: '#555', lineHeight: 1.7 }}>
+              This entire pipeline can be adapted for any region in the world.
+              Copy the prompt below, open <a href="https://claude.ai/code" target="_blank" rel="noopener" style={{ color: '#d4a019', fontWeight: 600 }}>Claude Code</a> in a fork of this repo, and paste it.
+            </p>
+          </div>
+
+          {/* The one-shot prompt in a styled code block */}
+          <div>
+            <div className="section-header">One-Shot Prompt</div>
+            <pre style={{
+              background: '#1a1a1a', color: '#e0dcd5', borderRadius: '8px',
+              padding: '20px', fontSize: '0.82rem', lineHeight: 1.7,
+              overflow: 'auto', whiteSpace: 'pre-wrap',
+            }}>
+{`I want to adapt this weather pipeline for [YOUR REGION]. Here are my stations:
+
+1. [City Name], lat: [XX.XX], lon: [XX.XX], altitude: [XXm], crops: [crop1, crop2]
+2. [City Name], lat: [XX.XX], lon: [XX.XX], altitude: [XXm], crops: [crop1, crop2]
+... (5-10 stations)
+
+Language for advisories: [language code, e.g. "es" for Spanish, "fr" for French]
+Region name: [e.g. "Central Mexico", "Northern France"]
+
+Please:
+1. Generate a new stations.json with my stations
+2. Set ingestion_source to "open_meteo" in config (since I don't have IMD)
+3. Update the dashboard title and subtitle for my region
+4. Update CLAUDE.md with the new station list
+5. Skip the DPI/farmer services (India-specific)
+6. Test that the pipeline runs with python run_pipeline.py`}
+            </pre>
+          </div>
+
+          {/* What works globally */}
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="card card-body">
+              <div style={{ fontWeight: 600, color: '#2a9d8f', marginBottom: '8px', fontSize: '0.85rem' }}>
+                Works Globally (no changes needed)
+              </div>
+              <ul style={{ fontSize: '0.82rem', color: '#555', lineHeight: 1.8, paddingLeft: '16px', margin: 0 }}>
+                <li>Open-Meteo weather data (global, free)</li>
+                <li>NASA POWER satellite data (global)</li>
+                <li>NeuralGCM forecasting (global neural weather model)</li>
+                <li>Claude advisory generation (any language)</li>
+                <li>XGBoost MOS correction (trains on local data)</li>
+                <li>PostgreSQL, FAISS RAG, pipeline orchestration</li>
+              </ul>
+            </div>
+            <div className="card card-body">
+              <div style={{ fontWeight: 600, color: '#e65100', marginBottom: '8px', fontSize: '0.85rem' }}>
+                India-Specific (the prompt handles this)
+              </div>
+              <ul style={{ fontSize: '0.82rem', color: '#555', lineHeight: 1.8, paddingLeft: '16px', margin: 0 }}>
+                <li>IMD/imdlib ingestion {'\u2192'} replaced by Open-Meteo</li>
+                <li>Tamil/Malayalam {'\u2192'} replaced by your language</li>
+                <li>Kerala/TN crop context {'\u2192'} replaced by your crops</li>
+                <li>DPI services (Aadhaar, PM-KISAN) {'\u2192'} skipped</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
