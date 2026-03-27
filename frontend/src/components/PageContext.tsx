@@ -3,7 +3,7 @@ import { Info } from 'lucide-react'
 
 interface Props {
   id: string
-  children: string
+  children: React.ReactNode
 }
 
 export function PageContext({ id: _id, children }: Props) {
