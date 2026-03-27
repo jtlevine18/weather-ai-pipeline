@@ -1,7 +1,6 @@
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { Layout } from './components/Layout'
 import Dashboard from './pages/Dashboard'
-import HowItWorks from './pages/HowItWorks'
 import Stations from './pages/Stations'
 import StationDetail from './pages/StationDetail'
 import Forecasts from './pages/Forecasts'
@@ -13,7 +12,6 @@ export default function App() {
     <Routes>
       <Route element={<Layout />}>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/how-it-works" element={<HowItWorks />} />
         <Route path="/stations" element={<Stations />} />
         <Route path="/stations/:id" element={<StationDetail />} />
         <Route path="/forecasts" element={<Forecasts />} />

@@ -302,14 +302,6 @@ export function useSources() {
   })
 }
 
-export function useHealth() {
-  return useQuery<{ status: string }>({
-    queryKey: ['health'],
-    queryFn: () => apiFetch('/health'),
-    staleTime: 60 * 1000,
-  })
-}
-
 export function useEvals() {
   return useQuery<Record<string, any>>({
     queryKey: ['evals'],

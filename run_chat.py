@@ -40,7 +40,7 @@ def main():
 
     if args.phone:
         from src.conversation import ConversationalAgent
-        agent = ConversationalAgent(config, db_path=config.db_path)
+        agent = ConversationalAgent(config)
 
         console.rule("[bold cyan]Weather Pipeline Chat — Personalized Mode[/bold cyan]")
         console.print(f"Identifying farmer: {args.phone}...")
@@ -79,8 +79,7 @@ def main():
 
         try:
             response = agent.chat(user_input, history,
-                                  session_id=session_id,
-                                  db_path=config.db_path)
+                                  session_id=session_id)
             console.print(f"\n[bold cyan]Agent:[/bold cyan] {response}\n")
             history.append({"role": "user",      "content": user_input})
             history.append({"role": "assistant",  "content": response})

@@ -8,8 +8,6 @@ from __future__ import annotations
 import json
 import os
 import uuid
-from dotenv import load_dotenv
-load_dotenv()
 from collections import deque
 from typing import Any, Dict, List
 

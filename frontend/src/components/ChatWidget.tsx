@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { MessageCircle, X, Send, User, Search, Trash2 } from 'lucide-react'
+import { MessageCircle, X, Send, Search, Trash2 } from 'lucide-react'
 import { apiFetch } from '../api/client'
 import { useFarmers } from '../api/hooks'
 import type { FarmerSummary } from '../api/hooks'

@@ -1,17 +1,4 @@
 const API_BASE = import.meta.env.VITE_API_URL || ''
-const TOKEN_KEY = 'weather_jwt'
-
-export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
-}
-
-export function setToken(token: string) {
-  localStorage.setItem(TOKEN_KEY, token)
-}
-
-export function clearToken() {
-  localStorage.removeItem(TOKEN_KEY)
-}
 
 export class ApiError extends Error {
   status: number
@@ -26,26 +13,15 @@ export async function apiFetch<T>(
   url: string,
   options: RequestInit = {}
 ): Promise<T> {
-  const token = getToken()
-
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
     ...((options.headers as Record<string, string>) || {}),
-  }
-
-  if (token) {
-    headers['Authorization'] = `Bearer ${token}`
   }
 
   const response = await fetch(`${API_BASE}${url}`, {
     ...options,
     headers,
   })
-
-  // Auth disabled for portfolio demo — don't redirect on 401
-  if (response.status === 401) {
-    throw new ApiError('Unauthorized', 401)
-  }
 
   if (!response.ok) {
     const body = await response.text().catch(() => '')
@@ -57,26 +33,6 @@ export async function apiFetch<T>(
 
   if (response.status === 204) {
     return undefined as T
-  }
-
-  return response.json()
-}
-
-export async function loginRequest(
-  username: string,
-  password: string
-): Promise<{ access_token: string; token_type: string }> {
-  const body = new URLSearchParams({ username, password })
-
-  const response = await fetch(`${API_BASE}/auth/token`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body,
-  })
-
-  if (!response.ok) {
-    const err = await response.text().catch(() => '')
-    throw new ApiError(err || 'Login failed', response.status)
   }
 
   return response.json()

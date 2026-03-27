@@ -1,5 +1,4 @@
 import { useState, useMemo } from 'react'
-import { Clock } from 'lucide-react'
 import { useAlerts, useStations, useForecasts, useDeliveryLog, useFarmers, useFarmerDetail } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { PageLoader } from '../components/LoadingSpinner'
