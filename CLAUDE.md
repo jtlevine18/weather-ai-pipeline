@@ -401,9 +401,9 @@ The project deploys across three services. **They have different push targets �
 - Must stay awake for the dashboard to show live data
 
 ### 3. HF Spaces — Pipeline runner (sleeps, wakes weekly)
-- **Space:** `jtlevine/ai_weather_pipeline`
+- **Space:** `jtlevine/ai-weather-pipeline`
 - **URL:** `https://jtlevine-ai-weather-pipeline.hf.space`
-- **Git remote:** `origin` → `https://huggingface.co/spaces/jtlevine/ai_weather_pipeline`
+- **Git remote:** `origin` → `https://huggingface.co/spaces/jtlevine/ai-weather-pipeline`
 - **Push command:** `git push origin main` (**only when pipeline code changes — don't push unnecessarily, it wakes a sleeping space**)
 - Runs the full 6-step pipeline (ingest → heal → forecast → downscale → translate → deliver)
 - Scheduled weekly via GitHub Actions or manual trigger from dashboard
