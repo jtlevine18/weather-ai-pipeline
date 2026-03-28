@@ -53,6 +53,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=[
         "https://jtlevine-ai-weather-pipeline.hf.space",
+        "https://jtlevine-weather-pipeline-api.hf.space",
         "https://weather-ai-pipeline.vercel.app",
         "http://localhost:5173",  # Vite dev server
         "http://localhost:5174",
