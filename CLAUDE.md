@@ -377,27 +377,53 @@ Set in `.env` for local development. On Streamlit Cloud, add to App Settings →
 
 ---
 
-## Deployment
+## Deployment (3 services)
 
-### Hugging Face Spaces with GPU (recommended for NeuralGCM)
-HF Spaces L4 GPU tier gives **24 GB VRAM** — runs NeuralGCM 1.4° comfortably.
-- Enable via Settings → Hardware → NVIDIA L4 (~$0.80/hr, auto-sleeps when idle)
-- Run with `--neuralgcm` flag or set `config.neuralgcm.enabled = True`
-- NeuralGCM checkpoint downloads from GCS on first run (~30s)
-- ERA5 initial conditions fetched from ARCO Zarr (free, anonymous)
-- Without GPU: falls back to Open-Meteo automatically
+The project deploys across three services. **They have different push targets — don't mix them up.**
 
-### Hugging Face Spaces CPU (free tier)
-HF Spaces free tier gives **16 GB RAM** — enough for RAG (sentence-transformers + FAISS).
-- `models/faiss_index/` (180 KB) is committed — RAG index is pre-built
-- BGE embedding model downloads from HF Hub on first use (~30 sec on HF infra)
-- Database hosted on Neon PostgreSQL (no local file needed)
-- NeuralGCM disabled (no GPU) — uses Open-Meteo for NWP
+### 1. Vercel — React frontend (always on)
+- **Source:** `frontend/` directory, auto-deploys from GitHub `main` branch
+- **URL:** `https://weather-ai-pipeline.vercel.app`
+- **Git remote:** `github` → `https://github.com/jtlevine18/weather-ai-pipeline.git`
+- **Push command:** `git push github main`
+- Static React app. Calls the API Space for all data (stations, forecasts, alerts, MOS status, pipeline runs)
+- API base URL configured in `frontend/src/api/client.ts` → defaults to the API Space URL
+- Rebuilds automatically on every push to `github main`
 
-### Streamlit Cloud
-- Main file: `streamlit_app/app.py`, Python 3.11
-- RAG needs ~1.5 GB RAM; free tier (1 GB) auto-falls back to rule-based advisories
-- Map uses CARTO Positron tiles (free, no Mapbox token)
+### 2. HF Spaces — API server (always on)
+- **Space:** `jtlevine/weather-pipeline-api`
+- **URL:** `https://jtlevine-weather-pipeline-api.hf.space`
+- **Git remote:** `hf-api` → `https://huggingface.co/spaces/jtlevine/weather-pipeline-api`
+- **Push command:** `git push hf-api main`
+- Runs FastAPI on port 7860 via Dockerfile
+- Serves all `/api/*` endpoints: stations, forecasts, alerts, pipeline runs, MOS status, evals, trigger pipeline, retrain MOS, run evals
+- CORS allows Vercel origin (configured in `src/api.py`)
+- Must stay awake for the dashboard to show live data
+
+### 3. HF Spaces — Pipeline runner (sleeps, wakes weekly)
+- **Space:** `jtlevine/ai_weather_pipeline`
+- **URL:** `https://jtlevine-ai-weather-pipeline.hf.space`
+- **Git remote:** `origin` → `https://huggingface.co/spaces/jtlevine/ai_weather_pipeline`
+- **Push command:** `git push origin main` (**only when pipeline code changes — don't push unnecessarily, it wakes a sleeping space**)
+- Runs the full 6-step pipeline (ingest → heal → forecast → downscale → translate → deliver)
+- Scheduled weekly via GitHub Actions or manual trigger from dashboard
+- Sleeps between runs to save compute costs
+- Optional L4 GPU for NeuralGCM (falls back to Open-Meteo without GPU)
+
+### Data flow
+```
+Pipeline Space (weekly) → writes to → Neon PostgreSQL
+API Space (always on)   → reads from → Neon PostgreSQL → serves JSON
+Vercel (always on)      → fetches from → API Space → renders dashboard
+```
+
+### Push checklist
+| What changed | Push to |
+|---|---|
+| Frontend only (`frontend/`) | `git push github main` |
+| API code (`src/api.py`, `src/database/`, etc.) | `git push github main` + `git push hf-api main` |
+| Pipeline code (`src/pipeline.py`, `src/ingestion.py`, etc.) | `git push github main` + `git push hf-api main` + `git push origin main` |
+| Docs only (`README.md`, `CLAUDE.md`, etc.) | `git push github main` |
 
 ---
 
