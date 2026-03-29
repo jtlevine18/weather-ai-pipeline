@@ -1,9 +1,8 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
-import { getSQL } from './_db'
+import { neon } from '@neondatabase/serverless'
 
 export default async function handler(_req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
-  const sql = getSQL()
+  const sql = neon(process.env.DATABASE_URL!)
   const rows = await sql`SELECT source, COUNT(*)::int AS count FROM raw_telemetry GROUP BY source`
-  res.json(rows)
+  return res.json(rows)
 }

@@ -3,12 +3,9 @@ import { readFileSync, existsSync } from 'fs'
 import { join } from 'path'
 
 export default function handler(_req: VercelRequest, res: VercelResponse) {
-  res.setHeader('Access-Control-Allow-Origin', '*')
   const names = ['healing', 'forecast', 'rag', 'advisory', 'translation', 'dpi', 'conversation']
   const results: Record<string, any> = {}
-
-  // Eval results are committed JSON files
-  for (const base of [join(process.cwd(), '..'), process.cwd(), '/var/task']) {
+  for (const base of [process.cwd(), join(process.cwd(), '..'), '/var/task']) {
     const dir = join(base, 'tests', 'eval_results')
     if (existsSync(dir)) {
       for (const name of names) {
@@ -20,5 +17,5 @@ export default function handler(_req: VercelRequest, res: VercelResponse) {
       break
     }
   }
-  res.json(results)
+  return res.json(results)
 }

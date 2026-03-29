@@ -222,7 +222,7 @@ export function useStationLatest(stationId: string) {
 export function usePipelineRuns(limit = 20) {
   return useQuery<PipelineRun[]>({
     queryKey: ['pipeline-runs', limit],
-    queryFn: () => apiFetch(`/api/pipeline/runs?limit=${limit}`),
+    queryFn: () => apiFetch(`/api/pipeline?mode=runs&limit=${limit}`),
   })
 }
 
@@ -240,7 +240,7 @@ export function useTelemetryRaw(limit = 50) {
   return useQuery<TelemetryRecord[]>({
     queryKey: ['telemetry-raw', limit],
     queryFn: async () => {
-      const data: any[] = await apiFetch(`/api/telemetry/raw?limit=${limit}`)
+      const data: any[] = await apiFetch(`/api/telemetry?type=raw&limit=${limit}`)
       return normalizeTelemetry(data)
     },
   })
@@ -250,7 +250,7 @@ export function useTelemetryClean(limit = 50) {
   return useQuery<TelemetryRecord[]>({
     queryKey: ['telemetry-clean', limit],
     queryFn: async () => {
-      const data: any[] = await apiFetch(`/api/telemetry/clean?limit=${limit}`)
+      const data: any[] = await apiFetch(`/api/telemetry?type=clean&limit=${limit}`)
       return normalizeTelemetry(data)
     },
   })
@@ -259,28 +259,28 @@ export function useTelemetryClean(limit = 50) {
 export function useDeliveryLog(limit = 50) {
   return useQuery<DeliveryRecord[]>({
     queryKey: ['delivery-log', limit],
-    queryFn: () => apiFetch(`/api/delivery/log?limit=${limit}`),
+    queryFn: () => apiFetch(`/api/delivery?mode=log&limit=${limit}`),
   })
 }
 
 export function useHealingLog(limit = 50) {
   return useQuery<HealingRecord[]>({
     queryKey: ['healing-log', limit],
-    queryFn: () => apiFetch(`/api/healing/log?limit=${limit}`),
+    queryFn: () => apiFetch(`/api/healing?mode=log&limit=${limit}`),
   })
 }
 
 export function useHealingStats() {
   return useQuery<HealingStats>({
     queryKey: ['healing-stats'],
-    queryFn: () => apiFetch('/api/healing/stats'),
+    queryFn: () => apiFetch('/api/healing?mode=stats'),
   })
 }
 
 export function usePipelineStats() {
   return useQuery<PipelineStats>({
     queryKey: ['pipeline-stats'],
-    queryFn: () => apiFetch('/api/pipeline/stats'),
+    queryFn: () => apiFetch('/api/pipeline?mode=stats'),
   })
 }
 
@@ -314,14 +314,14 @@ export function useEvals() {
 export function useConversationLog(limit = 50) {
   return useQuery<any[]>({
     queryKey: ['conversation-log', limit],
-    queryFn: () => apiFetch(`/api/conversation/log?limit=${limit}`),
+    queryFn: () => apiFetch(`/api/conversation?limit=${limit}`),
   })
 }
 
 export function useDeliveryMetricsAgg(limit = 200) {
   return useQuery<any[]>({
     queryKey: ['delivery-metrics', limit],
-    queryFn: () => apiFetch(`/api/delivery/metrics?limit=${limit}`),
+    queryFn: () => apiFetch(`/api/delivery?mode=metrics&limit=${limit}`),
   })
 }
 
@@ -383,7 +383,7 @@ export interface MosStatus {
 export function useMosStatus() {
   return useQuery<MosStatus>({
     queryKey: ['mos-status'],
-    queryFn: () => apiFetch('/api/pipeline/mos-status'),
+    queryFn: () => apiFetch('/api/pipeline?mode=mos-status'),
     staleTime: 30_000,
   })
 }
