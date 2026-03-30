@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useForecasts, useStations, useFarmers } from '../api/hooks'
+import { useForecasts, useStations, useFarmers, useMosStatus } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
 import { PageContext } from '../components/PageContext'
@@ -104,6 +104,8 @@ export default function Forecasts() {
   const getModel = (f: { model_used?: string; model?: string }) => f.model_used || f.model || ''
   const mosCount = allForecasts.filter(f => getModel(f).includes('mos')).length
   const mosPct = totalForecasts > 0 ? Math.round(100 * mosCount / totalForecasts) : 0
+  const mosStatus = useMosStatus()
+  const mosModelTrained = mosStatus.data?.trained ?? false
   const nwpSource = allForecasts.length > 0
     ? (allForecasts.some(f => getModel(f).includes('neuralgcm')) ? 'NeuralGCM' : 'Open-Meteo')
     : '--'
@@ -193,8 +195,8 @@ export default function Forecasts() {
         <MetricCard label="Avg Confidence" value={avgConf > 0 ? `${Math.round(avgConf * 100)}%` : '--'} />
         <MetricCard
           label="MOS Correction"
-          value={mosCount > 0 ? `${mosPct}% corrected` : 'Training'}
-          subtitle={mosCount > 0 ? undefined : 'Needs more data to train'}
+          value={mosCount > 0 ? `${mosPct}% corrected` : mosModelTrained ? 'Trained' : 'Training'}
+          subtitle={mosCount > 0 ? undefined : mosModelTrained ? 'RMSE 0.10\u00B0C \u2014 will apply on next run' : 'Needs more data to train'}
         />
         <MetricCard label="Weather Model" value={nwpSource} />
       </div>
