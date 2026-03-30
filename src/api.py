@@ -55,13 +55,10 @@ app.add_middleware(
         "https://jtlevine-ai-weather-pipeline.hf.space",
         "https://jtlevine-weather-pipeline-api.hf.space",
         "https://weather-ai-pipeline.vercel.app",
-        "http://localhost:5173",  # Vite dev server
-        "http://localhost:5174",
-        "http://localhost:8501",  # Streamlit
     ],
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Webhook-Secret"],
 )
 
 # ---------------------------------------------------------------------------

@@ -306,7 +306,7 @@ export function useSources() {
 export function useEvals() {
   return useQuery<Record<string, any>>({
     queryKey: ['evals'],
-    queryFn: () => apiFetch('/api/evals'),
+    queryFn: () => apiFetch('/api/metrics'),
     staleTime: 5 * 60 * 1000,
   })
 }
