@@ -771,23 +771,7 @@ function HealingStatsTab() {
 // ---------------------------------------------------------------------------
 
 function ArchitectureTab() {
-  return (
-    <div className="space-y-6">
-      <ArchitectureDiagram />
-
-      {/* How to run */}
-      <div className="section-header">How to Run</div>
-      <div className="card card-body" style={{ fontSize: '0.82rem', color: '#555', lineHeight: 1.7 }}>
-        <p style={{ marginBottom: '8px' }}>
-          The pipeline runs weekly on <a href="https://huggingface.co/spaces/jtlevine/ai-weather-pipeline" target="_blank" rel="noopener" style={{ color: '#d4a019', fontWeight: 600 }}>HF Spaces</a> (GPU).
-          MOS correction retrains automatically each run. To trigger manually:
-        </p>
-        <code style={{ display: 'block', background: '#f0ede8', padding: '8px 12px', borderRadius: '6px', fontSize: '0.78rem' }}>
-          python run_pipeline.py
-        </code>
-      </div>
-    </div>
-  )
+  return <ArchitectureDiagram />
 }
 
 // ---------------------------------------------------------------------------

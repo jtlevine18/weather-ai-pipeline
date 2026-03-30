@@ -36,9 +36,7 @@ def parse_args():
     )
     parser.add_argument("--live-delivery", action="store_true",
                         help="Actually send SMS/WhatsApp (default: dry-run)")
-    parser.add_argument("--schedule", type=int, metavar="MINUTES",
-                        help="Run every N minutes instead of once")
-    parser.add_argument("--step", type=int, choices=range(1, 7),
+parser.add_argument("--step", type=int, choices=range(1, 7),
                         metavar="N", help="Run only step N (1-6)")
     parser.add_argument("--source", choices=["real", "synthetic"],
                         default="real",
@@ -67,23 +65,8 @@ def main():
     if args.no_neuralgcm:
         config.neuralgcm.enabled = False
 
-    if args.schedule:
-        from src.scheduler import PipelineScheduler
-        log.info("Starting scheduler: every %d minutes", args.schedule)
-        scheduler = PipelineScheduler(config, args.schedule, args.live_delivery)
-        scheduler.start()
-        # Also run immediately
-        asyncio.run(run_once(config, args.live_delivery))
-        try:
-            import time
-            while True:
-                time.sleep(60)
-        except KeyboardInterrupt:
-            scheduler.stop()
-            log.info("Scheduler stopped")
-    else:
-        result = asyncio.run(run_once(config, args.live_delivery))
-        sys.exit(0 if result.get("status") in ("ok", "partial") else 1)
+    result = asyncio.run(run_once(config, args.live_delivery))
+    sys.exit(0 if result.get("status") in ("ok", "partial") else 1)
 
 
 if __name__ == "__main__":

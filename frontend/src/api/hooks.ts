@@ -1,4 +1,4 @@
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useQuery } from '@tanstack/react-query'
 import { apiFetch } from './client'
 
 // ── Types ──────────────────────────────────────────────────
@@ -388,36 +388,3 @@ export function useMosStatus() {
   })
 }
 
-// ── Pipeline Actions (mutations) ──────────────────────────
-
-export function useTriggerPipeline() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => apiFetch<{ status: string; run_id?: string }>('/api/pipeline/trigger', { method: 'POST' }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['pipeline-runs'] })
-      qc.invalidateQueries({ queryKey: ['pipeline-stats'] })
-    },
-  })
-}
-
-export function useRetrainMos() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => apiFetch<{ status: string }>('/api/pipeline/retrain-mos', { method: 'POST' }),
-    onSuccess: () => {
-      // Invalidate after a delay to give the background job time to finish
-      setTimeout(() => qc.invalidateQueries({ queryKey: ['mos-status'] }), 5000)
-    },
-  })
-}
-
-export function useRunEvals() {
-  const qc = useQueryClient()
-  return useMutation({
-    mutationFn: () => apiFetch<{ status: string; scripts: number }>('/api/pipeline/run-evals', { method: 'POST' }),
-    onSuccess: () => {
-      setTimeout(() => qc.invalidateQueries({ queryKey: ['evals'] }), 10000)
-    },
-  })
-}

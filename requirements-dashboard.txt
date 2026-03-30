@@ -20,8 +20,7 @@ psycopg2-binary==2.9.9
 # Data contracts
 pydantic==2.6.0
 
-# Dashboard
-streamlit==1.38.0
+# Data processing
 pandas==2.2.2
 numpy==2.0.0
 
