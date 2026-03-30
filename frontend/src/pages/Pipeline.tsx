@@ -2,7 +2,6 @@ import { useState } from 'react'
 import {
   usePipelineRuns, useHealingStats, useHealingLog, usePipelineStats,
   useDeliveryLog, useEvals, useConversationLog, useDeliveryMetricsAgg,
-  useTriggerPipeline, useRetrainMos, useRunEvals,
 } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
@@ -772,51 +771,21 @@ function HealingStatsTab() {
 // ---------------------------------------------------------------------------
 
 function ArchitectureTab() {
-  const triggerPipeline = useTriggerPipeline()
-  const retrainMos = useRetrainMos()
-  const runEvals = useRunEvals()
-
   return (
     <div className="space-y-6">
       <ArchitectureDiagram />
 
-      {/* Actions */}
-      <div className="section-header">Actions</div>
-      <div className="grid grid-cols-3 gap-3" style={{ maxWidth: '560px' }}>
-        <button
-          className="btn-primary"
-          style={{ fontSize: '0.82rem' }}
-          disabled={triggerPipeline.isPending}
-          onClick={() => triggerPipeline.mutate()}
-        >
-          {triggerPipeline.isPending ? 'Triggering...' : 'Run Full Pipeline'}
-        </button>
-        <button
-          className="btn-secondary"
-          style={{ fontSize: '0.82rem' }}
-          disabled={retrainMos.isPending}
-          onClick={() => retrainMos.mutate()}
-        >
-          {retrainMos.isPending ? 'Retraining...' : 'Retrain MOS Model'}
-        </button>
-        <button
-          className="btn-secondary"
-          style={{ fontSize: '0.82rem' }}
-          disabled={runEvals.isPending}
-          onClick={() => runEvals.mutate()}
-        >
-          {runEvals.isPending ? 'Running...' : 'Run Evaluations'}
-        </button>
+      {/* How to run */}
+      <div className="section-header">How to Run</div>
+      <div className="card card-body" style={{ fontSize: '0.82rem', color: '#555', lineHeight: 1.7 }}>
+        <p style={{ marginBottom: '8px' }}>
+          The pipeline runs weekly on <a href="https://huggingface.co/spaces/jtlevine/ai-weather-pipeline" target="_blank" rel="noopener" style={{ color: '#d4a019', fontWeight: 600 }}>HF Spaces</a> (GPU).
+          MOS correction retrains automatically each run. To trigger manually:
+        </p>
+        <code style={{ display: 'block', background: '#f0ede8', padding: '8px 12px', borderRadius: '6px', fontSize: '0.78rem' }}>
+          python run_pipeline.py
+        </code>
       </div>
-      {triggerPipeline.isSuccess && (
-        <p style={{ color: '#2a9d8f', fontSize: '0.82rem' }}>Pipeline triggered — check Pipeline Runs tab.</p>
-      )}
-      {retrainMos.isSuccess && (
-        <p style={{ color: '#2a9d8f', fontSize: '0.82rem' }}>Retraining triggered — refresh in ~30s.</p>
-      )}
-      {runEvals.isSuccess && (
-        <p style={{ color: '#2a9d8f', fontSize: '0.82rem' }}>Evaluations running (7 scripts) — check Pipeline Stats tab for results.</p>
-      )}
     </div>
   )
 }
