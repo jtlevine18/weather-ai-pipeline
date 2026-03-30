@@ -195,8 +195,8 @@ export default function Forecasts() {
         <MetricCard label="Avg Confidence" value={avgConf > 0 ? `${Math.round(avgConf * 100)}%` : '--'} />
         <MetricCard
           label="MOS Correction"
-          value={mosCount > 0 ? `${mosPct}% corrected` : mosModelTrained ? 'Trained' : 'Training'}
-          subtitle={mosCount > 0 ? undefined : mosModelTrained ? 'RMSE 0.10\u00B0C \u2014 will apply on next run' : 'Needs more data to train'}
+          value={mosModelTrained ? `${(mosStatus.data?.metrics?.rmse ?? 0).toFixed(2)}\u00B0C RMSE` : 'Training'}
+          subtitle={mosCount > 0 ? `${mosPct}% of forecasts corrected` : mosModelTrained ? 'Applies on next pipeline run' : 'Needs more data to train'}
         />
         <MetricCard label="Weather Model" value={nwpSource} />
       </div>
