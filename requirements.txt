@@ -20,7 +20,7 @@ numcodecs<0.16
 
 # RAG / NLP
 faiss-cpu==1.9.0
-sentence-transformers==2.7.0
+sentence-transformers==5.3.0
 langchain-huggingface==0.0.3
 
 # Claude API
