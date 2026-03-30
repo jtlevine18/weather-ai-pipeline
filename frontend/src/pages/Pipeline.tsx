@@ -1148,50 +1148,6 @@ These are globally portable: src/forecasting.py, src/weather_clients.py, src/dow
               </div>
             </div>
           </div>
-          {/* Also in the repo */}
-          <div>
-            <div className="section-header">Also in the Repo</div>
-            <p style={{ fontSize: '0.78rem', color: '#888', marginBottom: '12px' }}>
-              These run locally from the cloned repo — not on this dashboard.
-            </p>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="card card-body" style={{ padding: '16px' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1a1a1a', marginBottom: '6px' }}>
-                  Evaluation Scripts
-                </div>
-                <p style={{ fontSize: '0.78rem', color: '#888', lineHeight: 1.6, marginBottom: '10px' }}>
-                  7 scripts that test each pipeline stage independently. Run them after adapting the pipeline to make sure everything works.
-                </p>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', fontSize: '0.75rem' }}>
-                  {[
-                    ['eval_healing.py', 'Anomaly detection accuracy'],
-                    ['eval_forecast.py', 'Forecast MAE/RMSE'],
-                    ['eval_rag.py', 'Retrieval quality'],
-                    ['eval_advisory.py', 'Advisory quality'],
-                    ['eval_translation.py', 'Translation fidelity'],
-                    ['eval_dpi.py', 'Farmer profile coverage'],
-                    ['eval_conversation.py', 'Conversation engine'],
-                  ].map(([script, desc]) => (
-                    <div key={script} style={{ display: 'flex', gap: '8px' }}>
-                      <code style={{ color: '#d4a019', minWidth: '160px' }}>python tests/{script}</code>
-                      <span style={{ color: '#888' }}>{desc}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-              <div className="card card-body" style={{ padding: '16px' }}>
-                <div style={{ fontWeight: 600, fontSize: '0.85rem', color: '#1a1a1a', marginBottom: '6px' }}>
-                  Dagster Orchestration
-                </div>
-                <p style={{ fontSize: '0.78rem', color: '#888', lineHeight: 1.6, marginBottom: '10px' }}>
-                  Optional alternative to <code>run_pipeline.py</code>. Gives you a DAG UI with scheduling, sensors, and per-step monitoring.
-                </p>
-                <code style={{ display: 'block', background: '#f0ede8', padding: '8px 12px', borderRadius: '6px', fontSize: '0.75rem', color: '#555' }}>
-                  dagster dev -m dagster_pipeline
-                </code>
-              </div>
-            </div>
-          </div>
         </div>
       </TabPanel>
     </div>
