@@ -1,10 +1,11 @@
 """
 Translation provider factory.
-Selects RAGProvider (Claude+RAG) → ClaudeProvider (Claude only) → LocalProvider (rule-based).
+Selects LlamaProvider (HF Inference) → RAGProvider (Claude+RAG) → ClaudeProvider (Claude only) → LocalProvider (rule-based).
 """
 
 from __future__ import annotations
 import logging
+import os
 from typing import Any, Dict, List, Union
 
 from config import TranslationConfig, StationConfig
@@ -13,12 +14,30 @@ log = logging.getLogger(__name__)
 
 
 def get_provider(api_key: str, config: TranslationConfig):
-    """Return the best available advisory provider."""
+    """Return the best available advisory provider.
+
+    Priority:
+      1. LlamaProvider  — if HF_TOKEN is set (free serverless or dedicated endpoint)
+      2. RAGProvider     — if ANTHROPIC_API_KEY is set (Claude + RAG)
+      3. LocalProvider   — always available (rule-based, zero cost)
+
+    LlamaProvider still stores api_key + config so the fallback chain
+    can hand them to ClaudeProvider if Llama fails.
+    """
+    hf_token = os.getenv("HF_TOKEN", "")
+    if hf_token:
+        try:
+            from src.translation.llama_provider import LlamaProvider
+            log.info("Using LlamaProvider (HF Inference) as primary advisory provider")
+            return LlamaProvider(api_key=api_key, config=config, hf_token=hf_token)
+        except ImportError:
+            log.warning("huggingface_hub not installed — skipping LlamaProvider")
+
     if api_key:
         from src.translation.rag_provider import RAGProvider
         return RAGProvider(api_key=api_key, config=config)
     else:
-        log.warning("No Claude API key — using rule-based advisory provider")
+        log.warning("No HF_TOKEN or Claude API key — using rule-based advisory provider")
         from src.translation.local_provider import LocalProvider
         return LocalProvider()
 
