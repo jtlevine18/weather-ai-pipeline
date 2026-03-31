@@ -11,10 +11,10 @@ import { REGION } from '../regionConfig'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Home', icon: Home },
-  { to: '/stations', label: 'Stations', icon: Database },
+  { to: '/stations', label: 'Data', icon: Database },
   { to: '/forecasts', label: 'Forecasts', icon: CloudSun },
   { to: '/advisories', label: 'Advisories', icon: Wheat },
-  { to: '/pipeline', label: 'Pipeline', icon: Settings },
+  { to: '/pipeline', label: 'How It Works', icon: Settings },
 ]
 
 interface Props {

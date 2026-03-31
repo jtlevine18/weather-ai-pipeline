@@ -41,7 +41,7 @@ const STAGES: StageCard[] = [
     href: '/stations',
     icon: '\u{1F4E1}',
     color: '#2E7D32',
-    desc: `Weather readings from stations across ${REGION.states.join(' and ')}, automatically cleaned and quality-checked`,
+    desc: `Real weather readings from stations across ${REGION.states.join(' and ')}. AI automatically detects and fixes corrupted or missing data before forecasting.`,
   },
   {
     key: 'forecasts',
@@ -150,9 +150,9 @@ export default function Dashboard() {
           </span>
         </h1>
         <p className="text-warm-muted-light text-[0.86rem] leading-relaxed mt-1.5 font-sans">
-          This system collects real weather data from {REGION.dataSource} stations across {REGION.states.join(' and ')},
-          generates machine-learning-corrected forecasts personalized to each farmer's GPS location,
-          and generates crop-specific advisories in {REGION.languageList} with simulated SMS delivery.
+          Real weather data from 20 stations across {REGION.states.join(' and ')},
+          turned into locally accurate forecasts and crop-specific farming advice
+          in {REGION.languageList} — delivered weekly by SMS.
         </p>
       </div>
 
@@ -211,10 +211,10 @@ export default function Dashboard() {
 
       {/* 4 Metric Cards */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-stagger">
-        <MetricCard label="Pipeline Runs" value={`${okRuns}/${runList.length}`} />
-        <MetricCard label="Avg Quality" value={avgQuality > 0 ? `${Math.round(avgQuality * 100)}%` : '0%'} />
-        <MetricCard label="Advisories" value={alertCount} />
-        <MetricCard label="Deliveries" value={deliveryCount} />
+        <MetricCard label="Weekly Updates" value={`${okRuns}/${runList.length}`} />
+        <MetricCard label="Data Accuracy" value={avgQuality > 0 ? `${Math.round(avgQuality * 100)}%` : '0%'} />
+        <MetricCard label="Advisories Generated" value={alertCount} />
+        <MetricCard label="Advisories Delivered" value={deliveryCount} />
       </div>
 
       {/* Run History */}

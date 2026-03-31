@@ -33,10 +33,10 @@ const HEAL_STYLE: Record<string, [string, string]> = {
   ai_validated: ['AI OK', '#2a9d8f'],
   ai_corrected: ['AI Fixed', '#4361ee'],
   ai_filled: ['AI Filled', '#d4a019'],
-  ai_flagged: ['AI Flagged', '#e76f51'],
-  anomaly_flagged: ['Anomaly', '#e63946'],
+  ai_flagged: ['Needs Review', '#e76f51'],
+  anomaly_flagged: ['Unusual Reading', '#e63946'],
   typo_corrected: ['Typo Fix', '#4361ee'],
-  imputed_from_reference: ['Imputed', '#e76f51'],
+  imputed_from_reference: ['Filled from Satellite', '#e76f51'],
   none: ['Original', '#888'],
 }
 

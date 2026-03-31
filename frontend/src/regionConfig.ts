@@ -41,8 +41,8 @@ export const REGION = {
    */
   sourceLabels: {
     imd_api: ['India Met Dept', '#2E7D32'],
-    imdlib: ['IMD Gridded Archive', '#1565C0'],
-    synthetic: ['Synthetic', '#888'],
+    imdlib: ['Satellite Backup', '#1565C0'],
+    synthetic: ['Demo Data', '#888'],
     custom: ['Custom', '#6B5B95'],
   } as Record<string, [string, string]>,
 

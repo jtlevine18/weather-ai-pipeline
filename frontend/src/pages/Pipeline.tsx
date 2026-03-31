@@ -40,54 +40,54 @@ function formatTime(dateStr: string | undefined): string {
 
 const PIPELINE_STEPS = [
   {
-    num: 1, name: 'Ingest', table: 'raw_telemetry', color: '#2E7D32',
-    desc: 'Collect station-level weather observations',
+    num: 1, name: 'Collect', table: 'raw_telemetry', color: '#2E7D32',
+    desc: 'Gather weather readings from 20 stations',
     options: [
-      { label: `${REGION.dataSource} Scraper`, note: 'Real-time station data', active: true },
+      { label: 'India Met Department', note: 'Real-time station data', active: true },
       { label: 'Custom Data Source', note: 'Your own API or CSV files' },
       { label: 'Open-Meteo', note: 'Global, free, no key needed' },
-      { label: 'Synthetic', note: 'Generated data with fault injection' },
+      { label: 'Demo Data', note: 'Generated data for testing' },
     ],
   },
   {
-    num: 2, name: 'Heal', table: 'clean_telemetry', color: '#1565C0',
-    desc: 'Detect anomalies, fill gaps, cross-validate',
+    num: 2, name: 'Clean', table: 'clean_telemetry', color: '#1565C0',
+    desc: 'Fix broken or missing data automatically',
     options: [
-      { label: 'Claude AI Agent', note: '5 tools, reasoning logged', active: true },
-      { label: 'Rule-Based', note: 'Zero-cost fallback, same output' },
+      { label: 'AI Agent (Claude)', note: 'Checks against satellites and neighbors', active: true },
+      { label: 'Rule-Based', note: 'Zero-cost fallback' },
     ],
   },
   {
     num: 3, name: 'Forecast', table: 'forecasts', color: '#7B1FA2',
-    desc: '7-day forecasts with ML bias correction',
+    desc: 'Generate 7-day weather predictions',
     options: [
-      { label: 'NeuralGCM + XGBoost MOS', note: 'Neural weather model on GPU', active: true },
-      { label: 'Open-Meteo + XGBoost MOS', note: 'No GPU needed' },
-      { label: 'Persistence', note: 'Last obs + diurnal adjustment' },
+      { label: 'AI Weather Model + Local Correction', note: 'Google DeepMind model', active: true },
+      { label: 'Standard Models + Local Correction', note: 'No GPU needed' },
+      { label: 'Last Known Reading', note: 'Emergency fallback' },
     ],
   },
   {
-    num: 4, name: 'Downscale', table: 'forecasts', color: '#E65100',
-    desc: 'Adjust forecast to farmer GPS + elevation',
+    num: 4, name: 'Localize', table: 'forecasts', color: '#E65100',
+    desc: 'Adjust forecast to each farmer\'s exact location',
     options: [
-      { label: 'NASA POWER + IDW', note: '0.5\u00B0 grid, lapse-rate correction', active: true },
-      { label: 'Station-Level', note: 'Skip if NASA POWER unavailable' },
+      { label: 'NASA Satellite Data', note: 'Adjusted for altitude and terrain', active: true },
+      { label: 'Station-Level', note: 'Uses nearest station only' },
     ],
   },
   {
-    num: 5, name: 'Translate', table: 'agricultural_alerts', color: '#C62828',
-    desc: 'Generate crop-specific advisories in local language',
+    num: 5, name: 'Advise', table: 'agricultural_alerts', color: '#C62828',
+    desc: 'Write crop-specific farming advice in local languages',
     options: [
-      { label: 'RAG + Claude', note: 'FAISS/BM25 retrieval + generation', active: true },
-      { label: 'Curated Templates', note: 'Rule-based, zero API cost' },
+      { label: 'AI + Advisory Knowledge Base', note: 'Personalized, bilingual', active: true },
+      { label: 'Template-Based', note: 'Pre-written, zero cost' },
     ],
   },
   {
     num: 6, name: 'Deliver', table: 'delivery_log', color: '#d4a019',
-    desc: 'Send advisories to farmers',
+    desc: 'Send advisories to farmers by SMS',
     options: [
       { label: 'Console', note: 'Dry-run, always works', active: true },
-      { label: 'Twilio SMS', note: 'Live delivery' },
+      { label: 'SMS', note: 'Live delivery via Twilio' },
       { label: 'WhatsApp', note: 'Via Twilio' },
     ],
   },

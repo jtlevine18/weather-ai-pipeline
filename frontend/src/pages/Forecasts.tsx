@@ -45,12 +45,12 @@ const MODEL_COLOR: Record<string, string> = {
 }
 
 const DEGRADATION_TIERS = [
-  { tier: 'Tier 1', name: 'NeuralGCM + ML Correction', sub: 'Neural weather model (GPU)', color: '#4361ee',
-    desc: 'Google DeepMind\u2019s neural weather model produces global forecasts, corrected with machine learning trained on local observations.' },
-  { tier: 'Tier 2', name: 'Open-Meteo + ML Correction', sub: 'Fallback (no GPU needed)', color: '#2a9d8f',
-    desc: 'Standard weather models (GFS/ECMWF) via Open-Meteo when NeuralGCM is unavailable, with the same ML correction.' },
-  { tier: 'Tier 3', name: 'Last Observation', sub: 'Emergency fallback', color: '#e63946',
-    desc: 'Uses the most recent observation with time-of-day adjustment. No ML correction applied.' },
+  { tier: 'Tier 1', name: 'AI-Powered Forecasts', sub: 'Most accurate', color: '#4361ee',
+    desc: 'Google DeepMind\u2019s neural weather model produces global forecasts, refined with machine learning trained on local weather history.' },
+  { tier: 'Tier 2', name: 'Standard Weather Models', sub: 'Good accuracy, lower cost', color: '#2a9d8f',
+    desc: 'Traditional weather models via Open-Meteo when the AI model is unavailable, with the same local accuracy corrections.' },
+  { tier: 'Tier 3', name: 'Last Known Reading', sub: 'Emergency fallback', color: '#e63946',
+    desc: 'Uses the most recent observation with time-of-day adjustment. No corrections applied.' },
 ]
 
 const STATES = ['All', ...REGION.states]

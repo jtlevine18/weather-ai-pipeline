@@ -52,9 +52,9 @@ export function WelcomeBanner() {
             Welcome to the AI Weather Pipeline
           </p>
           <p className="text-xs font-sans text-warm-body leading-relaxed m-0">
-            This dashboard shows an AI weather pipeline that processes real data from 20 Indian
-            meteorological stations every week. Explore the three stages below to see how raw observations
-            become ML-corrected forecasts and bilingual farming advisories.
+            Every week, this system turns raw weather station data into farming advice.
+            Explore below to see how 20 stations feed into AI-powered forecasts,
+            which become personalized SMS tips for farmers in Tamil and Malayalam.
           </p>
         </div>
         <button
