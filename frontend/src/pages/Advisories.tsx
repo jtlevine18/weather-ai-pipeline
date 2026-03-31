@@ -102,7 +102,7 @@ export default function Advisories() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="page-title">Advisories</h1>
+        <h1 className="page-title" data-tour="advisories-title">Advisories</h1>
         <p className="page-caption">
           Bilingual farming advice, delivery status, and farmer profiles
         </p>
@@ -113,7 +113,7 @@ export default function Advisories() {
       </PageContext>
 
       {/* 4 Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div data-tour="advisories-metrics" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard label="Total Advisories" value={totalAdvisories} />
         <MetricCard label="AI Generated" value={ragCount} />
         <MetricCard label={REGION.languageMetric} value={`${taCount} / ${mlCount}`} />
@@ -121,7 +121,7 @@ export default function Advisories() {
       </div>
 
       {/* Tabs */}
-      <div className="tab-list">
+      <div data-tour="advisories-tabs" className="tab-list">
         {TABS.map((tab, i) => (
           <button key={tab} className={`tab-item ${activeTab === i ? 'active' : ''}`} onClick={() => setActiveTab(i)}>
             {tab}

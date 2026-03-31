@@ -142,7 +142,7 @@ export default function Dashboard() {
       </div>
 
       {/* Hero */}
-      <div>
+      <div data-tour="hero">
         <h1 className="font-sans font-bold text-[#1a1a1a] text-[1.65rem] leading-tight tracking-tight m-0">
           AI Weather Forecasts &amp; Farming Advisories<br />
           <span className="text-warm-muted font-normal">
@@ -157,7 +157,7 @@ export default function Dashboard() {
       </div>
 
       {/* 3 Stage Cards with arrows */}
-      <div className="flex items-stretch gap-0 animate-stagger" style={{ maxWidth: '100%' }}>
+      <div data-tour="stage-cards" className="flex items-stretch gap-0 animate-stagger" style={{ maxWidth: '100%' }}>
         {STAGES.map((stage, idx) => (
           <div key={stage.key} className="contents">
             <Link

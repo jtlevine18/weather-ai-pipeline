@@ -803,7 +803,7 @@ export default function Pipeline() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="page-title">Pipeline</h1>
+        <h1 className="page-title" data-tour="pipeline-title">Pipeline</h1>
         <p className="page-caption">
           Architecture, operations, and deployment
         </p>

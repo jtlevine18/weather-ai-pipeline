@@ -1034,7 +1034,7 @@ export default function Stations() {
     <div className="space-y-6">
       {/* Page header */}
       <div>
-        <h1 className="page-title">Stations</h1>
+        <h1 className="page-title" data-tour="stations-title">Stations</h1>
         <p className="page-caption">
           Weather readings from stations across {REGION.states.join(' and ')}, with AI-powered quality checks
         </p>
@@ -1045,7 +1045,7 @@ export default function Stations() {
       </PageContext>
 
       {/* Metric cards */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      <div data-tour="stations-metrics" className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <MetricCard
           label="Active Stations"
           value={`${activeStations}/${totalStations}`}
@@ -1062,7 +1062,7 @@ export default function Stations() {
       <hr className="border-warm-border" />
 
       {/* Tabs */}
-      <div className="tab-list">
+      <div data-tour="stations-tabs" className="tab-list">
         {tabs.map(({ key, label }) => (
           <button
             key={key}

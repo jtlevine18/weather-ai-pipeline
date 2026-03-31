@@ -165,7 +165,7 @@ export default function Forecasts() {
     <div className="space-y-6">
       {/* Title */}
       <div>
-        <h1 className="page-title">Forecasts</h1>
+        <h1 className="page-title" data-tour="forecasts-title">Forecasts</h1>
         <p className="page-caption">
           7-day predictions for each station, adjusted to individual farmer locations
         </p>
@@ -189,7 +189,7 @@ export default function Forecasts() {
       )}
 
       {/* 5 Metrics */}
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div data-tour="forecasts-metrics" className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <MetricCard label="Stations Reporting" value={uniqueStations} />
         <MetricCard label="Total Forecasts" value={totalForecasts} />
         <MetricCard label="Avg Confidence" value={avgConf > 0 ? `${Math.round(avgConf * 100)}%` : '--'} />
@@ -202,7 +202,7 @@ export default function Forecasts() {
       </div>
 
       {/* Tabs */}
-      <div className="tab-list">
+      <div data-tour="forecasts-tabs" className="tab-list">
         {TABS.map((tab, i) => (
           <button
             key={tab}
