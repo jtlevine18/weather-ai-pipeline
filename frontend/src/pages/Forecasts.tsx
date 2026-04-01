@@ -5,6 +5,7 @@ import { TableSkeleton } from '../components/LoadingSpinner'
 import { PageContext } from '../components/PageContext'
 import { TabPanel } from '../components/TabPanel'
 import { REGION } from '../regionConfig'
+import { ChevronDown, ChevronRight } from 'lucide-react'
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip,
   ResponsiveContainer, Cell,
@@ -87,6 +88,7 @@ export default function Forecasts() {
   const [stateFilter, setStateFilter] = useState('All')
   const [condFilter, setCondFilter] = useState('All')
   const [modelFilter, setModelFilter] = useState('All')
+  const [showModel, setShowModel] = useState(false)
 
   const stationMap = useMemo(() => {
     const map: Record<string, { name: string; state: string }> = {}
@@ -422,6 +424,44 @@ export default function Forecasts() {
       <TabPanel active={activeTab === 2}>
         <DownscalingTab stations={stations ?? []} forecasts={allForecasts} />
       </TabPanel>
+
+      {/* ── About this model (collapsible) ── */}
+      <div className="mt-8">
+        <button
+          onClick={() => setShowModel(!showModel)}
+          className="flex items-center gap-2 text-sm font-sans font-medium text-warm-muted cursor-pointer bg-transparent border-none"
+        >
+          {showModel ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+          About this model
+        </button>
+        {showModel && (
+          <div className="animate-tab-enter mt-3 card card-body" style={{ maxWidth: '560px' }}>
+            <div className="grid grid-cols-3 gap-4 mb-3">
+              <div>
+                <div className="text-[10px] text-warm-muted uppercase tracking-wider font-semibold mb-0.5">Forecasting</div>
+                <div className="text-sm font-semibold text-[#1a1a1a]">Neural weather model + local correction</div>
+              </div>
+              <div>
+                <div className="text-[10px] text-warm-muted uppercase tracking-wider font-semibold mb-0.5">Local Correction</div>
+                <div className="text-sm font-semibold text-[#1a1a1a]">
+                  {mosStatus.data?.metrics?.rmse != null
+                    ? `Trained on ${mosStatus.data.metrics.n_train ?? '—'} observations, ${mosStatus.data.metrics.rmse.toFixed(1)}°C accuracy`
+                    : 'Not yet trained'}
+                </div>
+              </div>
+              <div>
+                <div className="text-[10px] text-warm-muted uppercase tracking-wider font-semibold mb-0.5">Advisories</div>
+                <div className="text-sm font-semibold text-[#1a1a1a]">Bilingual crop advice from agricultural knowledge base</div>
+              </div>
+            </div>
+            <p className="text-xs text-warm-body leading-relaxed m-0">
+              A global neural weather model generates raw forecasts, then a correction model trained
+              on local observations adjusts for regional accuracy. Crop-specific farming advice is
+              generated in {REGION.languageList} from a curated knowledge base.
+            </p>
+          </div>
+        )}
+      </div>
     </div>
   )
 }
