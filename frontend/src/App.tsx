@@ -71,7 +71,7 @@ export default function App() {
           setTimeout(() => {
             setStepIndex(nextIndex)
             setRunTour(true)
-          }, 1500)
+          }, 800)
         } else {
           setTimeout(() => {
             setStepIndex(nextIndex)
@@ -110,8 +110,7 @@ export default function App() {
         callback={handleJoyrideCallback}
         styles={tourStyles}
         floaterProps={{
-          disableAnimation: true,
-          hideArrow: true,
+          disableAnimation: false,
         }}
         locale={{
           back: 'Back',
