@@ -94,7 +94,13 @@ export default function Advisories() {
     return items
   }, [allAlerts, langFilter, condFilter, provFilter])
 
-  if (isLoading) return <TableSkeleton />
+  if (isLoading) return (
+    <div>
+      <div data-tour="advisories-title" className="pt-2 pb-6"><h1 className="page-title" style={{ fontFamily: '"Source Serif 4", serif' }}>Advisories</h1></div>
+      <div data-tour="advisories-metrics"><TableSkeleton /></div>
+      <div data-tour="advisories-tabs" />
+    </div>
+  )
   if (error) return <div className="text-center py-12"><p className="text-error text-sm">Failed to load advisories</p></div>
 
   const TABS = ['Advisory Feed', 'Lineage', 'Farmer Profiles', 'Delivery']

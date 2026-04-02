@@ -71,7 +71,7 @@ export default function App() {
           setTimeout(() => {
             setStepIndex(nextIndex)
             setRunTour(true)
-          }, 500)
+          }, 1500)
         } else {
           setTimeout(() => {
             setStepIndex(nextIndex)
