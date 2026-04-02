@@ -54,6 +54,7 @@ export const tourSteps: Step[] = [
     content: 'A machine learning model trained on local weather history corrects the raw forecasts to be more accurate for this specific region. Confidence scores track how much to trust each prediction — the kind of post-processing that national weather services do, automated here.',
     placement: 'bottom',
     disableBeacon: true,
+    disableScrolling: true,
   },
   {
     target: '[data-tour="forecasts-tabs"]',
@@ -61,6 +62,7 @@ export const tourSteps: Step[] = [
     content: 'Weather stations are spread far apart, but farmers need forecasts for their exact location. The system uses NASA satellite data and altitude adjustments to tailor predictions to each farmer\'s GPS coordinates — farm-level weather without farm-level infrastructure.',
     placement: 'top',
     disableBeacon: true,
+    disableScrolling: true,
   },
 
   // ── Advisories ──
@@ -77,6 +79,7 @@ export const tourSteps: Step[] = [
     content: 'Advisories are generated in Tamil and Malayalam with English translations. The same approach works for any language — you customize the advisory knowledge base, not the system.',
     placement: 'bottom',
     disableBeacon: true,
+    disableScrolling: true,
   },
   {
     target: '[data-tour="advisories-tabs"]',
@@ -84,6 +87,7 @@ export const tourSteps: Step[] = [
     content: 'Advisories go out by SMS. The Farmer Profiles tab shows how each farmer\'s official records — land ownership, soil tests, crop insurance, credit — are used to personalize the advice they receive. The hard part isn\'t the technology. It\'s building trust so farmers actually act on it.',
     placement: 'top',
     disableBeacon: true,
+    disableScrolling: true,
   },
 
   // ── Pipeline ──
