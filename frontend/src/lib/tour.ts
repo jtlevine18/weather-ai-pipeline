@@ -44,14 +44,14 @@ export const tourSteps: Step[] = [
   {
     target: '[data-tour="forecasts-title"]',
     title: 'AI-powered forecasts',
-    content: 'Clean data feeds into Google DeepMind\'s neural weather model — recently open-sourced. Until recently, generating forecasts like this required institutional infrastructure and large teams. Now a single person can produce 7-day forecasts for any region on earth.',
+    content: 'Clean station data feeds into a neural weather model that generates 7-day forecasts for each station. These are the same kind of forecasts that national weather services produce — temperature, rainfall, humidity, wind — now running automatically for 20 stations at near-zero cost.',
     placement: 'bottom',
     disableBeacon: true,
   },
   {
     target: '[data-tour="forecasts-metrics"]',
     title: 'Local accuracy',
-    content: 'A machine learning model trained on local weather history corrects the raw forecasts to be more accurate for this specific region. Confidence scores track how much to trust each prediction — the kind of post-processing that national weather services do, automated here.',
+    content: 'Raw forecasts are corrected using local weather history — the same technique national weather services use, but automated. Each prediction gets a confidence score so you know how much to trust it.',
     placement: 'bottom',
     disableBeacon: true,
     disableScrolling: true,
@@ -69,7 +69,7 @@ export const tourSteps: Step[] = [
   {
     target: '[data-tour="advisories-title"]',
     title: 'From forecast to advice',
-    content: 'This is where it gets interesting. Personalized farming advice has always been expensive — it requires agronomists who understand both weather and local crops. AI makes it possible to generate crop-specific, language-native advice for every farmer, at scale.',
+    content: 'Personalized farming advice has always been expensive — it requires agronomists who understand both weather and local crops. Here, each farmer gets specific recommendations for their crops and conditions: when to irrigate, when to harvest, what to spray, when to hold off.',
     placement: 'bottom',
     disableBeacon: true,
   },
