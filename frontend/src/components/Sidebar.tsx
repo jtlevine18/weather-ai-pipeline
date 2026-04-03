@@ -50,7 +50,7 @@ export function Sidebar({ open, onClose }: Props) {
             </div>
             <div>
               <h1 className="text-sm font-bold text-white leading-tight font-serif">Weather</h1>
-              <p className="text-[10px] text-[#e0dcd5] font-sans font-medium uppercase tracking-wider">Pipeline</p>
+              <p className="text-[10px] text-[#e0dcd5] font-sans font-medium uppercase tracking-wider">AI</p>
             </div>
           </Link>
           <button
@@ -83,12 +83,6 @@ export function Sidebar({ open, onClose }: Props) {
           ))}
         </nav>
 
-        {/* Footer */}
-        <div className="px-5 py-3 border-t border-white/10">
-          <p className="text-[10px] text-[#e0dcd5]/60 font-sans uppercase tracking-wider">
-            {REGION.sidebarFooter}
-          </p>
-        </div>
       </aside>
     </>
   )
