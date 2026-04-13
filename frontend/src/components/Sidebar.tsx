@@ -49,8 +49,8 @@ export function Sidebar({ open, onClose }: Props) {
               <CloudSun size={18} className="text-white" />
             </div>
             <div>
-              <h1 className="text-sm font-bold text-white leading-tight font-serif">Weather</h1>
-              <p className="text-[10px] text-[#e0dcd5] font-sans font-medium uppercase tracking-wider">AI</p>
+              <h1 className="text-sm font-bold text-white leading-tight font-serif">Smallholder Weather</h1>
+              <p className="text-[10px] text-[#e0dcd5] font-sans font-medium uppercase tracking-wider">Advisor</p>
             </div>
           </Link>
           <button
