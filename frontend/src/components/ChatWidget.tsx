@@ -202,7 +202,7 @@ export function ChatWidget() {
       }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
           <MessageCircle size={16} />
-          <span style={{ fontWeight: 600, fontSize: '0.88rem' }}>Weather AI Chat</span>
+          <span style={{ fontWeight: 600, fontSize: '0.88rem' }}>Farmer Advisor Chat</span>
         </div>
         <button onClick={() => setOpen(false)} style={{
           background: 'none', border: 'none', color: '#aaa', cursor: 'pointer',
