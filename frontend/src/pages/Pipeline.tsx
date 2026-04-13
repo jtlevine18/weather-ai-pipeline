@@ -794,7 +794,7 @@ export default function Pipeline() {
   const okRuns = runList.filter(r => r.status === 'ok' || r.status === 'success' || r.status === 'completed').length
   const failedRuns = runList.filter(r => r.status === 'failed' || r.status === 'error').length
 
-  const TABS = ['Pipeline Architecture', 'Pipeline Runs', 'Pipeline Stats', 'Build Your Own']
+  const TABS = ['Architecture', 'Run History', 'Build Your Own']
 
   // Cost calculator derived values
   const perRunCost = (stationCount / 20) * (claudeModel === 'sonnet' ? 0.27 : 0.03) + 0.02
@@ -803,9 +803,9 @@ export default function Pipeline() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="page-title" data-tour="pipeline-title">Pipeline</h1>
+        <h1 className="page-title" data-tour="pipeline-title">How It Works</h1>
         <p className="page-caption">
-          Architecture, operations, and deployment
+          Six automated steps turn raw weather data into farming advice delivered by SMS
         </p>
       </div>
 
@@ -822,12 +822,12 @@ export default function Pipeline() {
         ))}
       </div>
 
-      {/* Tab 0: Pipeline Architecture */}
+      {/* Tab 0: Architecture */}
       <TabPanel active={activeTab === 0}>
         <ArchitectureTab />
       </TabPanel>
 
-      {/* Tab 1: Pipeline Runs */}
+      {/* Tab 1: Run History */}
       <TabPanel active={activeTab === 1}>
         <div className="space-y-6">
           {/* Scheduler compact card */}
@@ -932,42 +932,8 @@ export default function Pipeline() {
         </div>
       </TabPanel>
 
-      {/* Tab 2: Pipeline Stats (Quality + Delivery + Agent Log) */}
+      {/* Tab 2: Build Your Own */}
       <TabPanel active={activeTab === 2}>
-        <div className="space-y-8">
-          {/* Healing Stats */}
-          <div>
-            <div className="section-header" style={{ fontSize: '0.88rem', marginBottom: '12px' }}>Healing Stats</div>
-            <HealingStatsTab />
-          </div>
-          <hr style={{ border: 'none', borderTop: '1px solid #e0dcd5' }} />
-
-          {/* Eval Metrics */}
-          <div>
-            <div className="section-header" style={{ fontSize: '0.88rem', marginBottom: '12px' }}>Eval Metrics</div>
-            <EvalMetricsTab />
-          </div>
-          <hr style={{ border: 'none', borderTop: '1px solid #e0dcd5' }} />
-
-          {/* Delivery Funnel + Log */}
-          <DeliveryFunnelTab />
-          <hr style={{ border: 'none', borderTop: '1px solid #e0dcd5' }} />
-          <div>
-            <div className="section-header" style={{ fontSize: '0.88rem', marginBottom: '12px' }}>Delivery Log</div>
-            <SystemDeliveryLogTab />
-          </div>
-          <hr style={{ border: 'none', borderTop: '1px solid #e0dcd5' }} />
-
-          {/* Agent Log */}
-          <div>
-            <div className="section-header" style={{ fontSize: '0.88rem', marginBottom: '12px' }}>Agent Log</div>
-            <AgentLogTab />
-          </div>
-        </div>
-      </TabPanel>
-
-      {/* Tab 3: Build Your Own */}
-      <TabPanel active={activeTab === 3}>
         <div className="space-y-6">
           <div className="section-header">Build Your Own</div>
 
