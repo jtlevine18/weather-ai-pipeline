@@ -191,16 +191,20 @@ function StepOutput({ outputType }: { outputType: typeof HERO_STEPS[number]['out
   }
 
   if (outputType === 'forecast') {
-    const kl04 = (forecasts.data ?? [])
-      .filter((f) => f.station_id === 'KL-04')
-      .slice(0, 3)
-    if (kl04.length === 0) return <div style={panelStyle}>Loading…</div>
+    const all = forecasts.data ?? []
+    const firstStationId = all[0]?.station_id
+    const rows = firstStationId
+      ? all.filter((f) => f.station_id === firstStationId).slice(0, 3)
+      : []
+    if (rows.length === 0) return <div style={panelStyle}>Loading…</div>
+    const stationName =
+      rows[0]?.station_name ?? stationNameById[firstStationId ?? ''] ?? firstStationId ?? 'Station'
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
-    const cols = 'minmax(0, 0.7fr) minmax(0, 0.9fr) minmax(0, 0.9fr) minmax(0, 0.9fr)'
+    const cols = 'minmax(0, 0.7fr) minmax(0, 1fr) minmax(0, 1fr)'
     return (
       <div style={panelStyle}>
         <div className="eyebrow" style={{ marginBottom: '8px' }}>
-          Forecast · KL-04 Kannur · locally tuned
+          Forecast · {stationName} · locally tuned
         </div>
         <div
           style={{
@@ -216,12 +220,11 @@ function StepOutput({ outputType }: { outputType: typeof HERO_STEPS[number]['out
           }}
         >
           <span>Day</span>
-          <span>High</span>
-          <span>Low</span>
+          <span>Temp</span>
           <span>Rain</span>
         </div>
         <div>
-          {kl04.map((f, i) => (
+          {rows.map((f, i) => (
             <div
               key={f.id ?? i}
               style={{
@@ -229,14 +232,15 @@ function StepOutput({ outputType }: { outputType: typeof HERO_STEPS[number]['out
                 gridTemplateColumns: cols,
                 gap: '8px',
                 padding: '5px 0',
-                borderBottom: i < kl04.length - 1 ? '1px solid #f2efeb' : '1px solid #e8e5e1',
+                borderBottom: i < rows.length - 1 ? '1px solid #f2efeb' : '1px solid #e8e5e1',
                 fontVariantNumeric: 'tabular-nums',
                 fontSize: '11px',
               }}
             >
               <span style={{ color: '#8d909e' }}>{days[i] ?? `+${i}`}</span>
-              <span style={{ color: '#1b1e2d' }}>{f.temp_max?.toFixed(0) ?? '—'}°</span>
-              <span>{f.temp_min?.toFixed(0) ?? '—'}°</span>
+              <span style={{ color: '#1b1e2d' }}>
+                {f.temperature?.toFixed(0) ?? '—'}°
+              </span>
               <span>{(f.rainfall ?? 0).toFixed(0)}mm</span>
             </div>
           ))}
@@ -266,7 +270,9 @@ function StepOutput({ outputType }: { outputType: typeof HERO_STEPS[number]['out
             lineHeight: 1.55,
             color: '#1b1e2d',
             marginBottom: '6px',
-            maxWidth: '520px',
+            maxWidth: '100%',
+            overflowWrap: 'break-word',
+            wordBreak: 'break-word',
           }}
         >
           {alert.advisory_local}
@@ -277,7 +283,9 @@ function StepOutput({ outputType }: { outputType: typeof HERO_STEPS[number]['out
             color: '#606373',
             lineHeight: 1.55,
             marginBottom: '8px',
-            maxWidth: '520px',
+            maxWidth: '100%',
+            overflowWrap: 'break-word',
+            wordBreak: 'break-word',
           }}
         >
           {alert.advisory_en}
