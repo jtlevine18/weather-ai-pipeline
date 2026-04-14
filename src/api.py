@@ -15,6 +15,7 @@ from typing import Any, Dict, List
 
 from fastapi import FastAPI, Depends, Form, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import HTMLResponse
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
@@ -102,13 +103,110 @@ if not WEBHOOK_SECRET:
 
 
 # ---------------------------------------------------------------------------
-# Health (public)
+# Pipeline tracker state (used by root page, /api/pipeline/status, and
+# the /api/pipeline/trigger endpoint defined further down)
 # ---------------------------------------------------------------------------
 
-@app.get("/")
+_PIPELINE_STEPS = [
+    ("step_ingest", "Collecting station data"),
+    ("step_heal", "Fixing data issues"),
+    ("step_forecast", "Generating forecasts"),
+    ("step_downscale", "Localizing to farmer GPS"),
+    ("step_translate", "Writing advisories"),
+    ("step_deliver", "Sending SMS"),
+]
+
+_pipeline_status: Dict[str, Any] = {
+    "running": False,
+    "current_step": None,
+    "current_step_index": 0,
+    "total_steps": len(_PIPELINE_STEPS),
+    "last_result": None,
+    "last_run": None,
+}
+
+
+# ---------------------------------------------------------------------------
+# Health + root tracker page (public)
+# ---------------------------------------------------------------------------
+
+@app.get("/", response_class=HTMLResponse)
 def root():
-    """Root — redirect to health or show status."""
-    return {"name": "Weather Pipeline API", "docs": "/docs", "health": "/health"}
+    """Pipeline tracker for the HF Space. Shows current run state and a Run button."""
+    ps = _pipeline_status
+    running = ps["running"]
+    current_idx = ps.get("current_step_index", 0)
+    last = ps.get("last_result")
+
+    rows = ""
+    for idx, (_method, label) in enumerate(_PIPELINE_STEPS, start=1):
+        if running:
+            if idx < current_idx:
+                cls = "done"
+            elif idx == current_idx:
+                cls = "active"
+            else:
+                cls = "pending"
+        elif last and last.get("status") in ("ok", "partial"):
+            cls = "done"
+        else:
+            cls = "pending"
+        rows += f'<div class="step-row"><div class="step-dot {cls}"></div><span class="step-name">{label}</span></div>\n'
+
+    last_html = ""
+    if last and not running:
+        status = last.get("status", "unknown")
+        dur = last.get("duration_s", 0) or 0
+        cls = "ok" if status in ("ok", "partial") else "failed"
+        last_html = f'<div class="last-run"><span class="{cls}">{status.upper()}</span> — {dur:.0f}s</div>'
+
+    btn_disabled = "disabled" if running else ""
+    btn_text = "Running..." if running else "Run Pipeline"
+
+    return f"""<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="refresh" content="5">
+<title>Weather AI</title>
+<style>
+  * {{ margin: 0; padding: 0; box-sizing: border-box; }}
+  body {{ font-family: system-ui, -apple-system, sans-serif; background: #faf8f5; color: #1a1a1a; padding: 32px; max-width: 480px; margin: 0 auto; }}
+  h1 {{ font-size: 1.4rem; font-weight: 700; margin-bottom: 4px; }}
+  .subtitle {{ color: #888; font-size: 0.85rem; margin-bottom: 24px; }}
+  .link {{ color: #2d5b7d; text-decoration: none; font-weight: 600; }}
+  .link:hover {{ text-decoration: underline; }}
+  .pipeline-tracker {{ background: #fff; border: 1px solid #e0dcd5; border-radius: 8px; padding: 16px; margin-bottom: 24px; }}
+  .pipeline-tracker h3 {{ font-size: 0.8rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; color: #2d5b7d; margin-bottom: 12px; }}
+  .step-row {{ display: flex; align-items: center; gap: 10px; padding: 6px 0; font-size: 0.82rem; }}
+  .step-dot {{ width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }}
+  .step-dot.done {{ background: #2a9d8f; }}
+  .step-dot.active {{ background: #2d5b7d; animation: pulse 1.2s infinite; }}
+  .step-dot.pending {{ background: #e0dcd5; }}
+  .step-dot.failed {{ background: #e63946; }}
+  .step-name {{ font-weight: 600; }}
+  .trigger-btn {{ display: inline-block; margin-top: 12px; padding: 8px 20px; background: #2d5b7d; color: #fff; border: none; border-radius: 6px; font-size: 0.8rem; font-weight: 600; letter-spacing: 0.5px; text-transform: uppercase; cursor: pointer; }}
+  .trigger-btn:hover {{ background: #244862; }}
+  .trigger-btn:disabled {{ opacity: 0.5; cursor: not-allowed; }}
+  .last-run {{ font-size: 0.78rem; color: #888; margin-top: 8px; }}
+  .last-run .ok {{ color: #2a9d8f; font-weight: 600; }}
+  .last-run .failed {{ color: #e63946; font-weight: 600; }}
+  @keyframes pulse {{ 0%, 100% {{ opacity: 1; }} 50% {{ opacity: 0.4; }} }}
+</style>
+</head>
+<body>
+  <h1>Weather AI</h1>
+  <p class="subtitle"><a class="link" href="https://weather-forecast.jeff-levine.com" target="_blank">Open Dashboard</a></p>
+
+  <div class="pipeline-tracker">
+    <h3>Pipeline</h3>
+    {rows}
+    <button class="trigger-btn" {btn_disabled} onclick="fetch('/api/pipeline/trigger',{{method:'POST'}}).then(()=>location.reload())">{btn_text}</button>
+    {last_html}
+  </div>
+</body>
+</html>"""
 
 
 @app.get("/health")
@@ -577,31 +675,74 @@ async def receive_webhook(request: Request, payload: dict):
     return {"status": "received"}
 
 
+def _install_progress_tracking(pipeline):
+    """Wrap pipeline step methods so _pipeline_status updates as each step starts."""
+    for idx, (method_name, _label) in enumerate(_PIPELINE_STEPS, start=1):
+        original = getattr(pipeline, method_name, None)
+        if original is None:
+            continue
+
+        def make_wrapper(orig, num, name):
+            async def wrapper(*args, **kwargs):
+                _pipeline_status["current_step"] = name
+                _pipeline_status["current_step_index"] = num
+                return await orig(*args, **kwargs)
+            return wrapper
+
+        setattr(pipeline, method_name, make_wrapper(original, idx, method_name))
+
+
 @app.post("/api/pipeline/trigger")
-@limiter.limit("2/minute")
+@limiter.limit("6/minute")
 async def trigger_pipeline(request: Request):
-    """Trigger a full pipeline run in a background thread. Webhook-secret protected."""
-    if WEBHOOK_SECRET:
-        token = request.headers.get("X-Webhook-Secret", "")
-        if token != WEBHOOK_SECRET:
-            raise HTTPException(status_code=403, detail="Invalid webhook secret")
+    """Trigger a full pipeline run in a background thread. Idempotent while running."""
+    if _pipeline_status["running"]:
+        return {"status": "already_running", "message": "A pipeline run is already in progress"}
+
     import threading
-    run_id = str(uuid.uuid4())
+    import time as _time
+    from datetime import datetime as _dt
 
     def _run():
         import asyncio
-        from config import get_config
-        from src.pipeline import WeatherPipeline
+        _pipeline_status["running"] = True
+        _pipeline_status["current_step"] = None
+        _pipeline_status["current_step_index"] = 0
+        _pipeline_status["last_result"] = None
+        start = _time.time()
         try:
-            config = get_config()
-            pipeline = WeatherPipeline(config)
+            from config import get_config
+            from src.pipeline import WeatherPipeline
+            cfg = get_config()
+            pipeline = WeatherPipeline(cfg)
+            _install_progress_tracking(pipeline)
             asyncio.run(pipeline.run())
-        except Exception:
+            _pipeline_status["last_result"] = {
+                "status": "ok",
+                "duration_s": round(_time.time() - start, 1),
+            }
+        except Exception as exc:
             logging.getLogger(__name__).exception("Triggered pipeline failed")
+            _pipeline_status["last_result"] = {
+                "status": "failed",
+                "error": str(exc)[:500],
+                "duration_s": round(_time.time() - start, 1),
+            }
+        finally:
+            _pipeline_status["last_run"] = _dt.utcnow().isoformat()
+            _pipeline_status["running"] = False
+            _pipeline_status["current_step"] = None
+            _pipeline_status["current_step_index"] = 0
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()
-    return {"status": "triggered", "run_id": run_id}
+    return {"status": "started"}
+
+
+@app.get("/api/pipeline/status")
+def pipeline_status_endpoint():
+    """Current in-memory pipeline run state. Used by the tracker page and weekly GHA."""
+    return _pipeline_status
 
 
 @app.get("/api/pipeline/mos-status")

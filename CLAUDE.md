@@ -415,7 +415,7 @@ Weather 2 now follows the same pattern as Market Intelligence and Climate Risk E
 - **URL:** `https://jtlevine-ai-weather-pipeline.hf.space`
 - **Git remote:** `origin` → `https://huggingface.co/spaces/jtlevine/ai-weather-pipeline`
 - **Push command:** `git push origin main` (**only when pipeline code or `src/api.py` changes — don't push unnecessarily, it wakes a sleeping space**)
-- Root `Dockerfile` runs `pipeline-runner/entrypoint.py`, which executes the full 6-step pipeline on startup and serves a status page + health endpoint on port 7860
+- Root `Dockerfile` runs `uvicorn src.api:app` on port 7860. The Space serves a pipeline tracker page at `/` with a manual **Run Pipeline** button, a `/health` endpoint, and `/api/pipeline/trigger` + `/api/pipeline/status` that the weekly GitHub Action polls. The pipeline does NOT auto-run on Space wake-up — it's triggered explicitly.
 - Scheduled weekly via GitHub Action; sleeps between runs to save compute
 - Optional L4 GPU for NeuralGCM (falls back to Open-Meteo without GPU)
 - **Env vars (Space secrets — set these before pushing):** `DATABASE_URL`, `ANTHROPIC_API_KEY`, `TOMORROW_IO_API_KEY`, `JWT_SECRET_KEY` (required if `ENV=production`), `WEBHOOK_SECRET` (only if webhook receiver is wired in), optional `ALLOWED_ORIGINS`

@@ -10,15 +10,32 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     steps:
-      - name: Wake Pipeline Space
+      - name: Wake HF Space
         run: |
-          echo "Restarting Pipeline Space..."
+          echo "Waking Space..."
           curl -s -X POST \
             "https://huggingface.co/api/spaces/${{ secrets.HF_PIPELINE_SPACE }}/restart" \
             -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" \
             || true
-          echo "Waiting for Space to boot..."
-          sleep 60
+          echo "Waiting 90s for Space to boot..."
+          sleep 90
+
+      - name: Check Space is healthy
+        run: |
+          for i in 1 2 3 4 5; do
+            if curl -sf "https://${{ secrets.HF_PIPELINE_SPACE_URL }}/health" > /dev/null; then
+              echo "Attempt $i: Space is healthy"
+              break
+            fi
+            echo "Attempt $i: not yet ready"
+            sleep 30
+          done
+
+      - name: Trigger pipeline run
+        run: |
+          echo "Triggering pipeline..."
+          RESPONSE=$(curl -s -X POST "https://${{ secrets.HF_PIPELINE_SPACE_URL }}/api/pipeline/trigger")
+          echo "Response: $RESPONSE"
 
       - name: Wait for pipeline completion
         run: |
@@ -26,15 +43,18 @@ jobs:
           ELAPSED=0
           INTERVAL=30
           while [ $ELAPSED -lt $MAX_WAIT ]; do
-            STATUS=$(curl -s "https://${{ secrets.HF_PIPELINE_SPACE_URL }}/health" 2>/dev/null | python3 -c "import sys,json; print(json.load(sys.stdin).get('state','unknown'))" 2>/dev/null || echo "unreachable")
-            echo "[$ELAPSED s] Pipeline status: $STATUS"
-            if [ "$STATUS" = "complete" ]; then
-              echo "Pipeline completed successfully!"
+            RESULT=$(curl -s "https://${{ secrets.HF_PIPELINE_SPACE_URL }}/api/pipeline/status" 2>/dev/null)
+            RUNNING=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('running',True))" 2>/dev/null || echo "true")
+            echo "[$ELAPSED s] Running: $RUNNING"
+            if [ "$RUNNING" = "False" ]; then
+              echo "Pipeline finished!"
+              echo "$RESULT" | python3 -m json.tool 2>/dev/null || echo "$RESULT"
+              STATUS=$(echo "$RESULT" | python3 -c "import sys,json; r=json.load(sys.stdin).get('last_result') or {}; print(r.get('status','unknown'))" 2>/dev/null || echo "unknown")
+              if [ "$STATUS" = "failed" ]; then
+                echo "Pipeline failed!"
+                exit 1
+              fi
               exit 0
-            fi
-            if [ "$STATUS" = "failed" ]; then
-              echo "Pipeline failed!"
-              exit 1
             fi
             sleep $INTERVAL
             ELAPSED=$((ELAPSED + INTERVAL))
