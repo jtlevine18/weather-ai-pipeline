@@ -13,10 +13,11 @@ from typing import Any, Dict, List
 
 from rich.console import Console
 
-from config import PipelineConfig, STATIONS, STATION_MAP, tz_offset_hours
+from config import PipelineConfig, STATIONS, STATION_MAP, FEATURED_FARMER_IDS, tz_offset_hours
 from src.database import (init_db, insert_clean_telemetry, insert_forecast,
                             insert_alert, insert_delivery_log,
                             insert_delivery_metrics,
+                            insert_personalized_advisory,
                             start_pipeline_run, finish_pipeline_run,
                             get_latest_clean_for_station,
                             get_clean_history_for_station)
@@ -532,9 +533,95 @@ class WeatherPipeline:
             insert_alert(self.conn, alert)
             alerts.append(alert)
 
+        # Personalize for featured farmers only (demo surface). The rest of the
+        # 2,000-farmer registry reuses the station-level advisory; the UI
+        # surfaces the projected cost to personalize the full population.
+        if self.config.anthropic_key and FEATURED_FARMER_IDS:
+            try:
+                await self._personalize_for_featured_farmers(alerts)
+            except Exception as exc:
+                log.warning("Personalized advisory pass failed: %s", exc)
+
         rag_count = sum(1 for a in alerts if a.get("provider") == "rag_claude")
         console.print(f"  [green]✓[/green] {len(alerts)} weekly advisories | {rag_count} RAG | {len(alerts)-rag_count} rule-based")
         return alerts
+
+    async def _personalize_for_featured_farmers(self, alerts: List[Dict[str, Any]]) -> None:
+        """Generate per-farmer Haiku-personalized advisories for FEATURED_FARMER_IDS.
+
+        Looks up each featured farmer in the DPI registry, pulls the relevant
+        station's English advisory, and produces a tailored version that gets
+        stored in the personalized_advisories table. Failures are logged and
+        skipped — this is a demo enhancement, never a blocker for the core
+        pipeline.
+        """
+        from src.translation.personalized_provider import PersonalizedAdvisoryProvider
+        from src.dpi.simulator import get_registry, _seed_rng, _make_phone
+
+        provider = PersonalizedAdvisoryProvider(api_key=self.config.anthropic_key)
+        registry = get_registry()
+        alert_by_station: Dict[str, Dict[str, Any]] = {a["station_id"]: a for a in alerts}
+
+        total_in = 0
+        total_out = 0
+        successes = 0
+
+        for station_id, farmer_idx in FEATURED_FARMER_IDS:
+            alert = alert_by_station.get(station_id)
+            station = STATION_MAP.get(station_id)
+            if not alert or not station:
+                continue
+
+            phone = _make_phone(station_id, farmer_idx)
+            profile = registry.lookup_by_phone(phone)
+            if profile is None:
+                log.info("Featured farmer %s:%d not in registry — skipping", station_id, farmer_idx)
+                continue
+
+            try:
+                result = await provider.personalize(
+                    station_advisory_en=alert.get("advisory_en") or "",
+                    station=station,
+                    farmer_profile=profile,
+                    language=station.language,
+                )
+            except Exception as exc:
+                log.warning("Personalize failed for %s:%d (%s): %s",
+                             station_id, farmer_idx, phone, exc)
+                continue
+
+            land = profile.land_records[0] if profile.land_records else None
+            record = {
+                "id":              str(uuid.uuid4()),
+                "alert_id":        alert["id"],
+                "station_id":      station_id,
+                "farmer_phone":    phone,
+                "farmer_name":     profile.aadhaar.name,
+                "crops":           ", ".join(land.crops_registered) if land else "",
+                "soil_type":       land.soil_type if land else "",
+                "irrigation_type": land.irrigation_type if land else "",
+                "area_hectares":   land.area_hectares if land else 0.0,
+                "advisory_en":     result.advisory_en,
+                "advisory_local":  result.advisory_local,
+                "language":        station.language,
+                "model":           result.model,
+                "tokens_in":       result.tokens_in,
+                "tokens_out":      result.tokens_out,
+                "cache_read":      result.cache_read_tokens,
+            }
+            try:
+                insert_personalized_advisory(self.conn, record)
+                successes += 1
+                total_in += result.tokens_in
+                total_out += result.tokens_out
+            except Exception as exc:
+                log.warning("Insert personalized advisory failed for %s: %s", phone, exc)
+
+        if successes:
+            console.print(
+                f"  [cyan]→[/cyan] {successes} featured farmers personalized "
+                f"(Haiku, {total_in + total_out} tokens)"
+            )
 
     # ------------------------------------------------------------------
     # Step 6: Deliver

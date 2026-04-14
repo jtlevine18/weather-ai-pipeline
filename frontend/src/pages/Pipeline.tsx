@@ -761,7 +761,92 @@ function HealingStatsTab() {
 // ---------------------------------------------------------------------------
 
 function ArchitectureTab() {
-  return <ArchitectureDiagram />
+  return (
+    <div className="space-y-6">
+      <ArchitectureDiagram />
+      <ScalingCostPanel />
+    </div>
+  )
+}
+
+// ---------------------------------------------------------------------------
+// Scaling cost panel — shows what the pipeline costs at three tiers of
+// personalization, making the "per-user cost is decoupled from LLM cost"
+// design point concrete. Plain cards, no animations.
+// ---------------------------------------------------------------------------
+
+function ScalingCostPanel() {
+  const TIERS = [
+    {
+      label: 'Current (live)',
+      scale: '2,000 farmers · broadcast advisory',
+      cost: '~$0.30 / week',
+      note: 'One advisory per station, delivered to every farmer in that station\u2019s radius. 10 featured farmers also get a personalized version.',
+      color: '#2a9d8f',
+    },
+    {
+      label: 'Full personalization',
+      scale: '2,000 farmers · Haiku per farmer',
+      cost: '~$6 / week',
+      note: 'Every farmer gets an advisory tailored to their crops, soil, irrigation, and land size. Weekly run, prompt caching on.',
+      color: '#1565C0',
+    },
+    {
+      label: 'State-wide',
+      scale: '10,000 farmers · Haiku per farmer',
+      cost: '~$30 / week',
+      note: 'Full state extension network. The LLM cost still scales linearly — the pipeline, not the bill, is what has to keep up.',
+      color: '#d4a019',
+    },
+  ]
+
+  return (
+    <div>
+      <div style={{
+        fontSize: '0.72rem', fontWeight: 600, color: '#888',
+        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px',
+      }}>
+        What it costs to run at pilot scale
+      </div>
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+        gap: '12px',
+      }}>
+        {TIERS.map(tier => (
+          <div key={tier.label} style={{
+            background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
+            padding: '16px 18px', borderLeft: `3px solid ${tier.color}`,
+          }}>
+            <div style={{
+              fontSize: '0.72rem', fontWeight: 600, color: tier.color,
+              textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px',
+            }}>
+              {tier.label}
+            </div>
+            <div style={{
+              fontSize: '1.35rem', fontWeight: 700, color: '#1a1a1a',
+              fontFamily: 'Source Serif 4, serif', marginBottom: '4px',
+            }}>
+              {tier.cost}
+            </div>
+            <div style={{ fontSize: '0.78rem', color: '#666', marginBottom: '8px' }}>
+              {tier.scale}
+            </div>
+            <div style={{ fontSize: '0.72rem', color: '#888', lineHeight: 1.5 }}>
+              {tier.note}
+            </div>
+          </div>
+        ))}
+      </div>
+      <p style={{
+        fontSize: '0.72rem', color: '#888', marginTop: '12px', fontStyle: 'italic',
+      }}>
+        2,000 farmers live in the registry right now, distributed 100 per station across Kerala + Tamil Nadu.
+        Broadcast delivery goes to all of them every run; per-farmer personalization runs for 10 featured farmers so the capability is visible without the bill scaling.
+      </p>
+    </div>
+  )
 }
 
 // ---------------------------------------------------------------------------

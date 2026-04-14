@@ -1,4 +1,4 @@
-"""CRUD helpers for the agricultural_alerts table."""
+"""CRUD helpers for the agricultural_alerts and personalized_advisories tables."""
 
 from __future__ import annotations
 from typing import Any, Dict, List
@@ -29,4 +29,42 @@ def get_recent_alerts(conn: Any,
     rows = conn.execute(
         "SELECT * FROM agricultural_alerts ORDER BY issued_at DESC LIMIT ?", [limit]
     ).fetchall()
+    return _rows_to_dicts(conn, rows)
+
+
+def insert_personalized_advisory(conn: Any, record: Dict[str, Any]) -> None:
+    """Insert a per-farmer personalized advisory generated from a station draft."""
+    conn.execute(
+        """INSERT INTO personalized_advisories
+           (id, alert_id, station_id, farmer_phone, farmer_name,
+            crops, soil_type, irrigation_type, area_hectares,
+            advisory_en, advisory_local, language, model,
+            tokens_in, tokens_out, cache_read)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+           ON CONFLICT (id) DO NOTHING""",
+        [record["id"], record["alert_id"], record["station_id"],
+         record["farmer_phone"], record.get("farmer_name"),
+         record.get("crops"), record.get("soil_type"),
+         record.get("irrigation_type"), record.get("area_hectares"),
+         record.get("advisory_en"), record.get("advisory_local"),
+         record.get("language", "en"), record.get("model", ""),
+         record.get("tokens_in", 0), record.get("tokens_out", 0),
+         record.get("cache_read", 0)],
+    )
+
+
+def get_personalized_advisories(conn: Any, station_id: str | None = None,
+                                  limit: int = 50) -> List[Dict[str, Any]]:
+    if station_id:
+        rows = conn.execute(
+            """SELECT * FROM personalized_advisories
+               WHERE station_id = ?
+               ORDER BY generated_at DESC LIMIT ?""",
+            [station_id, limit],
+        ).fetchall()
+    else:
+        rows = conn.execute(
+            "SELECT * FROM personalized_advisories ORDER BY generated_at DESC LIMIT ?",
+            [limit],
+        ).fetchall()
     return _rows_to_dicts(conn, rows)

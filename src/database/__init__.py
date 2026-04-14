@@ -98,6 +98,26 @@ CREATE TABLE IF NOT EXISTS agricultural_alerts (
     created_at     TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+CREATE TABLE IF NOT EXISTS personalized_advisories (
+    id              VARCHAR PRIMARY KEY,
+    alert_id        VARCHAR NOT NULL,
+    station_id      VARCHAR NOT NULL,
+    farmer_phone    VARCHAR NOT NULL,
+    farmer_name     VARCHAR,
+    crops           VARCHAR,
+    soil_type       VARCHAR,
+    irrigation_type VARCHAR,
+    area_hectares   DOUBLE PRECISION,
+    advisory_en     VARCHAR,
+    advisory_local  VARCHAR,
+    language        VARCHAR,
+    model           VARCHAR,
+    tokens_in       INTEGER DEFAULT 0,
+    tokens_out      INTEGER DEFAULT 0,
+    cache_read      INTEGER DEFAULT 0,
+    generated_at    TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 CREATE TABLE IF NOT EXISTS delivery_log (
     id          VARCHAR PRIMARY KEY,
     alert_id    VARCHAR,
@@ -288,6 +308,8 @@ from src.database.forecasts import (  # noqa: E402, F401
 )
 from src.database.alerts import (  # noqa: E402, F401
     insert_alert,
+    insert_personalized_advisory,
+    get_personalized_advisories,
     get_recent_alerts,
 )
 from src.database.delivery import (  # noqa: E402, F401

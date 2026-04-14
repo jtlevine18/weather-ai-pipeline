@@ -44,6 +44,14 @@ _FARMERS_JSON = os.path.join(
     os.path.dirname(os.path.abspath(__file__)), "..", "..", "farmers.json"
 )
 
+# Pilot-scale override: how many farmers to generate per station at import time.
+# 20 stations * 100 = 2,000 farmers — a realistic year-1 cooperative / block
+# extension rollout for Kerala + Tamil Nadu. Deterministic generation is
+# unchanged (still seeded by station_id + index), so the same 2,000 farmers
+# appear on every restart. Set PILOT_FARMERS_PER_STATION=2 to fall back to
+# the demo-sized registry.
+_PILOT_FARMERS_PER_STATION = int(os.environ.get("PILOT_FARMERS_PER_STATION", "100"))
+
 _HARDCODED_TEMPLATES: Dict[str, Dict[str, Any]] = {
     # Kerala — coastal
     "KL_TVM": dict(district="Thiruvananthapuram", state="Kerala", lang="ml",
@@ -155,7 +163,12 @@ _TA_NAMES = [
 
 
 def _load_farmer_templates() -> Dict[str, Dict[str, Any]]:
-    """Load farmer templates from farmers.json if it exists, else use hardcoded."""
+    """Load farmer templates from farmers.json if it exists, else use hardcoded.
+
+    Applies the PILOT_FARMERS_PER_STATION scale-up override to every template,
+    so a weekly pipeline run works with a realistic pilot population without
+    touching the template definitions themselves.
+    """
     if os.path.exists(_FARMERS_JSON):
         try:
             with open(_FARMERS_JSON) as f:
@@ -166,10 +179,21 @@ def _load_farmer_templates() -> Dict[str, Dict[str, Any]]:
                     tpl["area"] = tuple(tpl["area"])
                 if isinstance(tpl.get("pH"), list):
                     tpl["pH"] = tuple(tpl["pH"])
-            return data
+            templates = data
         except Exception:
-            pass
-    return dict(_HARDCODED_TEMPLATES)
+            templates = dict(_HARDCODED_TEMPLATES)
+    else:
+        templates = dict(_HARDCODED_TEMPLATES)
+
+    # Apply pilot-scale override unless the template explicitly uses a custom
+    # `names` list (in which case we respect whatever count the author set —
+    # you can't procedurally generate names from a fixed pool beyond its size
+    # without losing determinism).
+    for tpl in templates.values():
+        if "names" not in tpl or not tpl.get("names"):
+            tpl["count"] = _PILOT_FARMERS_PER_STATION
+
+    return templates
 
 
 STATION_FARMER_TEMPLATES = _load_farmer_templates()

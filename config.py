@@ -171,6 +171,36 @@ STATIONS: List[StationConfig] = _load_stations()
 STATION_MAP = {s.station_id: s for s in STATIONS}
 
 
+# ---------------------------------------------------------------------------
+# Featured farmers for per-farmer personalized advisory demo
+# ---------------------------------------------------------------------------
+#
+# Each entry is (station_id, farmer_index_within_station). The pipeline's
+# step_translate precomputes a Haiku-personalized advisory for each of these
+# farmers during the weekly run and stores it in the `personalized_advisories`
+# table. The rest of the 2,000-farmer pilot population shows the broadcast
+# (station-level) advisory in the UI with a "Personalize at scale" affordance
+# that explains the cost math.
+#
+# Ten farmers chosen for diversity of crop context, state, and agro-ecology:
+# Kerala coastal (coconut/rubber), Kerala highland (rubber/cardamom), Kerala
+# rice bowl (paddy/groundnut), Kerala backwaters (rice/coconut), TN Cauvery
+# delta (rice/pulses), TN turmeric belt, TN cotton zone, TN dry zone, TN
+# coastal (rice/vegetables), TN mango belt.
+FEATURED_FARMER_IDS: List[tuple[str, int]] = [
+    ("KL_TVM", 0),  # Thiruvananthapuram — coconut, rubber, banana
+    ("KL_KTM", 0),  # Kottayam — rubber, cardamom, pepper
+    ("KL_PKD", 0),  # Palakkad — rice, groundnut (Kerala rice bowl)
+    ("KL_ALP", 0),  # Alappuzha — rice, coconut (backwaters)
+    ("TN_TNJ", 0),  # Thanjavur — rice, pulses (Cauvery delta)
+    ("TN_ERD", 0),  # Erode — turmeric, sugarcane
+    ("TN_CBE", 0),  # Coimbatore — cotton, millets
+    ("TN_MDU", 0),  # Madurai — cotton, groundnut (dry zone)
+    ("TN_CHN", 0),  # Chennai — rice, vegetables (coastal)
+    ("TN_VLR", 0),  # Vellore — paddy, mango
+]
+
+
 _TZ_OFFSETS = {
     "Asia/Kolkata": 5.5, "Asia/Colombo": 5.5, "Asia/Kathmandu": 5.75,
     "Asia/Dhaka": 6.0, "Asia/Bangkok": 7.0, "Asia/Jakarta": 7.0,
