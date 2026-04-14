@@ -1,7 +1,10 @@
 """
 Step 1: Ingestion — station-level weather data from configurable sources.
 
-Default (India): IMD scraper → imdlib gridded → synthetic fallback.
+Default (India): IMD scraper → imdlib gridded. If both upstream sources
+fail for a station, the reading is marked source="error" with NULL values
+— no synthetic fallback. The explicit ingestion_source="synthetic" mode
+is still available for testing.
 Custom: set ingestion_source="custom" and provide a custom_ingest_fn in
 WeatherDataConfig, or register a module that implements fetch_reading().
 
@@ -182,15 +185,9 @@ async def _fetch_real_reading(
         reading["source"]      = "imdlib"
         return reading
 
-    # Tier 3: Synthetic fallback (zero faults — clean synthetic data)
-    synth = _baseline(station)
-    reading["temperature"] = synth["temperature"]
-    reading["humidity"]    = synth["humidity"]
-    reading["wind_speed"]  = synth["wind_speed"]
-    reading["wind_dir"]    = synth["wind_dir"]
-    reading["pressure"]    = synth["pressure"]
-    reading["rainfall"]    = synth["rainfall"]
-    reading["source"]      = "synthetic_fallback"
+    # No synthetic fill: surface the gap so quality checks can flag it instead of masking with noise.
+    reading["source"]     = "error"
+    reading["fault_type"] = "upstream_fetch_failed"
     return reading
 
 
