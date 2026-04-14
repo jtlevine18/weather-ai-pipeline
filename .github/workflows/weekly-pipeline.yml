@@ -14,7 +14,7 @@ jobs:
         run: |
           echo "Waking Space..."
           curl -s -X POST \
-            "https://huggingface.co/api/spaces/${{ secrets.HF_PIPELINE_SPACE }}/restart" \
+            "https://huggingface.co/api/spaces/jtlevine/ai-weather-pipeline-runner/restart" \
             -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" \
             || true
           echo "Waiting 90s for Space to boot..."
@@ -23,7 +23,7 @@ jobs:
       - name: Check Space is healthy
         run: |
           for i in 1 2 3 4 5; do
-            if curl -sf "https://${{ secrets.HF_PIPELINE_SPACE_URL }}/health" > /dev/null; then
+            if curl -sf "https://jtlevine-ai-weather-pipeline-runner.hf.space/health" > /dev/null; then
               echo "Attempt $i: Space is healthy"
               break
             fi
@@ -34,7 +34,7 @@ jobs:
       - name: Trigger pipeline run
         run: |
           echo "Triggering pipeline..."
-          RESPONSE=$(curl -s -X POST "https://${{ secrets.HF_PIPELINE_SPACE_URL }}/api/pipeline/trigger")
+          RESPONSE=$(curl -s -X POST "https://jtlevine-ai-weather-pipeline-runner.hf.space/api/pipeline/trigger")
           echo "Response: $RESPONSE"
 
       - name: Wait for pipeline completion
@@ -43,7 +43,7 @@ jobs:
           ELAPSED=0
           INTERVAL=30
           while [ $ELAPSED -lt $MAX_WAIT ]; do
-            RESULT=$(curl -s "https://${{ secrets.HF_PIPELINE_SPACE_URL }}/api/pipeline/status" 2>/dev/null)
+            RESULT=$(curl -s "https://jtlevine-ai-weather-pipeline-runner.hf.space/api/pipeline/status" 2>/dev/null)
             RUNNING=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('running',True))" 2>/dev/null || echo "true")
             echo "[$ELAPSED s] Running: $RUNNING"
             if [ "$RUNNING" = "False" ]; then
@@ -67,7 +67,7 @@ jobs:
         run: |
           echo "Pausing Pipeline Space to stop billing..."
           curl -s -X POST \
-            "https://huggingface.co/api/spaces/${{ secrets.HF_PIPELINE_SPACE }}/pause" \
+            "https://huggingface.co/api/spaces/jtlevine/ai-weather-pipeline-runner/pause" \
             -H "Authorization: Bearer ${{ secrets.HF_TOKEN }}" \
             || true
           echo "Space paused."
