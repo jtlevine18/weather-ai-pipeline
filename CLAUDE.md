@@ -328,6 +328,25 @@ Alternative to `run_pipeline.py` — same 6 steps as Dagster assets with:
 
 ---
 
+## Portfolio UI (React + Vercel)
+
+The portfolio-facing dashboard is a React 18 + TypeScript + Vite SPA in `frontend/` served from Vercel. Serverless functions in `frontend/api/*.ts` read from Neon directly so the UI works even when the pipeline Space is asleep.
+
+**Design language:**
+- Typography: Source Serif 4 (headings, `.page-title` 28px) + Space Grotesk (body)
+- Palette: cream `#fcfaf7`, ink `#1b1e2d`, slate `#606373`, hairline `#e8e5e1`
+- Accent: steel blue `#2d5b7d`
+- Sidebar brand: **Weather AI**
+- No eyebrow labels above `<h1>` page titles; all pages use the shared `.page-title` class
+- Output cards have `max-height: 240px` + `overflow: hidden` so live data can't push past page height
+- Grid columns use `minmax(0, Nfr)` for truncation
+
+**How It Works page** (`frontend/src/pages/Pipeline.tsx`): h1 only (no caption), 4-category stack (Data / Models / Delivery / Infrastructure), then 3 tabs — **Run history**, **Cost & scale**, **Build your own**.
+
+The `streamlit_app/` section below describes the legacy local-only dev dashboard and is not the portfolio UI.
+
+---
+
 ## Dashboard (Streamlit)
 
 Pages map to pipeline stages. Chat is a floating sidebar toggle, System is hidden from the sidebar nav.
