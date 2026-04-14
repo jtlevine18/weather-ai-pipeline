@@ -32,7 +32,7 @@ python run_chat.py
 # Station health monitor
 python run_monitor.py
 
-# Unified REST API (health, auth, stations, forecasts, alerts, webhook)
+# Unified FastAPI (health, auth, pipeline tracker, webhook) — local dev only
 python run_api.py                # FastAPI on port 8000
 
 # Dagster orchestration UI
@@ -377,53 +377,55 @@ Set in `.env` for local development. On Streamlit Cloud, add to App Settings →
 
 ---
 
-## Deployment (3 services)
+## Deployment (2 services + Neon)
 
-The project deploys across three services. **They have different push targets — don't mix them up.**
+Weather 2 now follows the same pattern as Market Intelligence and Climate Risk Engine: **one HF Space for the pipeline runner, Vercel for the frontend + serverless API functions that read Neon directly.** There is no separate always-on API Space anymore.
 
-### 1. Vercel — React frontend (always on)
-- **Source:** `frontend/` directory, auto-deploys from GitHub `main` branch
-- **URL:** `https://weather-ai-pipeline.vercel.app`
+### 1. Vercel — React frontend + serverless API (always on)
+- **Source:** `frontend/` directory
+- **Live URL:** `https://weather-forecast.jeff-levine.com`
 - **Git remote:** `github` → `https://github.com/jtlevine18/weather-ai-pipeline.git`
 - **Push command:** `git push github main`
-- Static React app. Calls the API Space for all data (stations, forecasts, alerts, MOS status, pipeline runs)
-- API base URL configured in `frontend/src/api/client.ts` → defaults to the API Space URL
-- Rebuilds automatically on every push to `github main`
+- Static React SPA from `frontend/dist/` + 11 Vercel serverless functions in `frontend/api/*.ts` (alerts, conversation, delivery, farmers, forecasts, healing, metrics, pipeline, sources, stations, telemetry)
+- Serverless functions read from Neon via `@neondatabase/serverless`. No dependency on any HF Space being awake.
+- Auto-deploys on every push to `github main`
+- **Env vars (Vercel production):** `DATABASE_URL` (Neon connection string)
 
-### 2. HF Spaces — API server (always on)
-- **Space:** `jtlevine/weather-pipeline-api`
-- **URL:** `https://jtlevine-weather-pipeline-api.hf.space`
-- **Git remote:** `hf-api` → `https://huggingface.co/spaces/jtlevine/weather-pipeline-api`
-- **Push command:** `git push hf-api main`
-- Runs FastAPI on port 7860 via Dockerfile
-- Serves all `/api/*` endpoints: stations, forecasts, alerts, pipeline runs, MOS status, evals, trigger pipeline, retrain MOS, run evals
-- CORS allows Vercel origin (configured in `src/api.py`)
-- Must stay awake for the dashboard to show live data
-
-### 3. HF Spaces — Pipeline runner (sleeps, wakes weekly)
+### 2. HF Spaces — Pipeline runner (sleeps, wakes weekly)
 - **Space:** `jtlevine/ai-weather-pipeline`
 - **URL:** `https://jtlevine-ai-weather-pipeline.hf.space`
 - **Git remote:** `origin` → `https://huggingface.co/spaces/jtlevine/ai-weather-pipeline`
-- **Push command:** `git push origin main` (**only when pipeline code changes — don't push unnecessarily, it wakes a sleeping space**)
-- Runs the full 6-step pipeline (ingest → heal → forecast → downscale → translate → deliver)
-- Scheduled weekly via GitHub Actions or manual trigger from dashboard
-- Sleeps between runs to save compute costs
+- **Push command:** `git push origin main` (**only when pipeline code or `src/api.py` changes — don't push unnecessarily, it wakes a sleeping space**)
+- Root `Dockerfile` runs `pipeline-runner/entrypoint.py`, which executes the full 6-step pipeline on startup and serves a status page + health endpoint on port 7860
+- Scheduled weekly via GitHub Action; sleeps between runs to save compute
 - Optional L4 GPU for NeuralGCM (falls back to Open-Meteo without GPU)
+- **Env vars (Space secrets — set these before pushing):** `DATABASE_URL`, `ANTHROPIC_API_KEY`, `TOMORROW_IO_API_KEY`, `JWT_SECRET_KEY` (required if `ENV=production`), `WEBHOOK_SECRET` (only if webhook receiver is wired in), optional `ALLOWED_ORIGINS`
+- **Hardware:** set explicitly in *Settings → Variables and secrets → Hardware* — it does not persist across Space rebuilds automatically
+
+### Stale: `hf-api` git remote
+There is a leftover `hf-api` git remote pointing at the retired `jtlevine/weather-pipeline-api` Space. Don't push to it. Safe to remove:
+```bash
+git remote remove hf-api
+```
 
 ### Data flow
 ```
-Pipeline Space (weekly) → writes to → Neon PostgreSQL
-API Space (always on)   → reads from → Neon PostgreSQL → serves JSON
-Vercel (always on)      → fetches from → API Space → renders dashboard
+Pipeline Space (weekly)  → writes to → Neon PostgreSQL
+Vercel (always on)       → serverless API reads from → Neon → serves frontend
 ```
 
 ### Push checklist
 | What changed | Push to |
 |---|---|
-| Frontend only (`frontend/`) | `git push github main` |
-| API code (`src/api.py`, `src/database/`, etc.) | `git push github main` + `git push hf-api main` |
-| Pipeline code (`src/pipeline.py`, `src/ingestion.py`, etc.) | `git push github main` + `git push hf-api main` + `git push origin main` |
-| Docs only (`README.md`, `CLAUDE.md`, etc.) | `git push github main` |
+| Frontend React code (`frontend/src/`) | `git push github main` |
+| Vercel serverless API (`frontend/api/*.ts`) | `git push github main` |
+| Pipeline code (`src/pipeline.py`, `src/ingestion.py`, `src/healing.py`, etc.) | `git push github main` + `git push origin main` |
+| `src/api.py` changes (runs on the Space as the status/health page) | `git push github main` + `git push origin main` |
+| Database schema (`src/database/`) | `git push github main` + `git push origin main` |
+| Docs only (`README.md`, `CLAUDE.md`) | `git push github main` |
+
+### Legacy
+- `streamlit_app/` still exists in the repo as a local-only dashboard for dev work. It is **not** deployed to any Space and does not serve the portfolio UI — Vercel + serverless functions do.
 
 ---
 
