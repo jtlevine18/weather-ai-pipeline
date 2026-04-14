@@ -254,7 +254,7 @@ function StepOutput({ outputType }: { outputType: typeof HERO_STEPS[number]['out
 
   if (outputType === 'advisory') {
     const alert = (alerts.data ?? []).find(
-      (a) => a.advisory_local && a.advisory_en,
+      (a) => a.advisory_local || a.advisory_en,
     )
     if (!alert) return <div style={panelStyle}>Loading…</div>
     return (
@@ -263,33 +263,37 @@ function StepOutput({ outputType }: { outputType: typeof HERO_STEPS[number]['out
           Advisory · {alert.station_name ?? alert.station_id ?? 'Farmer'} ·{' '}
           {alert.language === 'ml' ? 'Malayalam' : alert.language === 'ta' ? 'Tamil' : alert.language}
         </div>
-        <p
-          style={{
-            fontFamily: '"Source Serif 4", Georgia, serif',
-            fontSize: '14px',
-            lineHeight: 1.55,
-            color: '#1b1e2d',
-            marginBottom: '6px',
-            maxWidth: '100%',
-            overflowWrap: 'break-word',
-            wordBreak: 'break-word',
-          }}
-        >
-          {alert.advisory_local}
-        </p>
-        <p
-          style={{
-            fontSize: '12px',
-            color: '#606373',
-            lineHeight: 1.55,
-            marginBottom: '8px',
-            maxWidth: '100%',
-            overflowWrap: 'break-word',
-            wordBreak: 'break-word',
-          }}
-        >
-          {alert.advisory_en}
-        </p>
+        {alert.advisory_local && (
+          <p
+            style={{
+              fontFamily: '"Source Serif 4", Georgia, serif',
+              fontSize: '14px',
+              lineHeight: 1.55,
+              color: '#1b1e2d',
+              marginBottom: '6px',
+              maxWidth: '100%',
+              overflowWrap: 'break-word',
+              wordBreak: 'break-word',
+            }}
+          >
+            {alert.advisory_local}
+          </p>
+        )}
+        {alert.advisory_en && (
+          <p
+            style={{
+              fontSize: '12px',
+              color: '#606373',
+              lineHeight: 1.55,
+              marginBottom: '8px',
+              maxWidth: '100%',
+              overflowWrap: 'break-word',
+              wordBreak: 'break-word',
+            }}
+          >
+            {alert.advisory_en}
+          </p>
+        )}
         <div style={{ fontSize: '11px', color: '#8d909e' }}>
           {(alert.advisory_local ?? '').length} characters · sent via SMS
         </div>

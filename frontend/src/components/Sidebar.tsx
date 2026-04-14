@@ -86,6 +86,21 @@ export function Sidebar({ open, onClose }: Props) {
           ))}
         </nav>
 
+        {/* Footer disclaimer */}
+        <div
+          style={{
+            padding: '12px 20px 16px',
+            borderTop: '1px solid rgba(255,255,255,0.06)',
+            fontFamily: '"Space Grotesk", system-ui, sans-serif',
+            fontSize: '10px',
+            lineHeight: 1.5,
+            color: '#8d909e',
+            letterSpacing: '0.02em',
+          }}
+        >
+          Farmer personas are simulated
+        </div>
+
       </aside>
 
       <style>{`

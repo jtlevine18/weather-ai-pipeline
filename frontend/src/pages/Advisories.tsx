@@ -220,6 +220,9 @@ export default function Advisories() {
                           lineHeight: 1.6,
                           color: '#1b1e2d',
                           marginTop: '12px',
+                          maxWidth: '100%',
+                          overflowWrap: 'break-word',
+                          wordBreak: 'break-word',
                         }}
                       >
                         {alert.advisory_local}
@@ -235,6 +238,9 @@ export default function Advisories() {
                           lineHeight: 1.7,
                           color: '#606373',
                           marginTop: alert.advisory_local ? '8px' : '12px',
+                          maxWidth: '100%',
+                          overflowWrap: 'break-word',
+                          wordBreak: 'break-word',
                         }}
                       >
                         {alert.advisory_en}
@@ -300,9 +306,9 @@ export default function Advisories() {
                   <div style={{ fontSize: '0.72rem', color: '#888' }}>
                     {PROVIDER_LABEL[alert.provider || 'rag'] ?? (alert.provider || 'rag')} {'\u00B7'} {LANG_LABEL[alert.language || 'en'] ?? (alert.language || 'en')}
                   </div>
-                  <p style={{ color: '#555', fontSize: '0.82rem', lineHeight: 1.4, marginTop: '4px' }}>
+                  <p style={{ color: '#555', fontSize: '0.82rem', lineHeight: 1.4, marginTop: '4px', maxWidth: '100%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
                     {(alert.advisory_en || alert.advisory_local || '').slice(0, 150)}
-                    {(alert.advisory_en || '').length > 150 ? '...' : ''}
+                    {(alert.advisory_en || alert.advisory_local || '').length > 150 ? '...' : ''}
                   </p>
                 </div>
               </div>
@@ -541,7 +547,7 @@ function FarmersDPITab({ alerts, stationMap }: {
             <span style={{ color: '#888', fontSize: '0.75rem', marginLeft: '8px' }}>
               {PROVIDER_LABEL[stationAlert.provider || 'rag'] ?? (stationAlert.provider || 'rag')} {'\u00B7'} {LANG_LABEL[stationAlert.language || 'en'] ?? (stationAlert.language || 'en')}
             </span>
-            <div style={{ color: '#555', fontSize: '0.85rem', lineHeight: 1.5, marginTop: '8px' }}>
+            <div style={{ color: '#555', fontSize: '0.85rem', lineHeight: 1.5, marginTop: '8px', maxWidth: '100%', overflowWrap: 'break-word', wordBreak: 'break-word' }}>
               {(stationAlert.advisory_local || stationAlert.advisory_en || '').slice(0, 300)}
             </div>
           </div>
