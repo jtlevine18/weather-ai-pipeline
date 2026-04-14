@@ -16,6 +16,7 @@ export function Layout() {
         <header className="flex items-center justify-between h-12 px-4 sm:px-6 bg-cream shrink-0">
           <button
             onClick={() => setSidebarOpen(true)}
+            aria-label="Open navigation menu"
             className="p-2 -ml-2 rounded-md hover:bg-warm-header-bg text-warm-body lg:hidden"
           >
             <Menu size={20} />

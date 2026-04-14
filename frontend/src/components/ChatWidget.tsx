@@ -1,12 +1,24 @@
 import { useState, useRef, useEffect } from 'react'
 import { MessageCircle, X, Send, Search, Trash2 } from 'lucide-react'
-import { apiFetch } from '../api/client'
+import { apiFetch, ApiError } from '../api/client'
 import { useFarmers } from '../api/hooks'
-import type { FarmerSummary } from '../api/hooks'
+import type { FarmerSummary, FarmerDetail } from '../api/hooks'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
   content: string
+}
+
+interface ChatResponse {
+  response?: string
+}
+
+interface FarmerInfo {
+  name: string
+  district: string
+  state: string
+  crops: string[]
+  area: number
 }
 
 const INITIAL_MSG: ChatMessage = {
@@ -70,14 +82,16 @@ export function ChatWidget() {
   const [messages, setMessages] = useState<ChatMessage[]>(() => {
     try {
       const saved = sessionStorage.getItem('weather_chat_messages')
-      if (saved) return JSON.parse(saved)
-    } catch {}
+      if (saved) return JSON.parse(saved) as ChatMessage[]
+    } catch {
+      // ignore
+    }
     return [INITIAL_MSG]
   })
   const [input, setInput] = useState('')
   const [sending, setSending] = useState(false)
   const [farmerPhone, setFarmerPhone] = useState('')
-  const [farmerInfo, setFarmerInfo] = useState<{ name: string; district: string; state: string; crops: string[]; area: number } | null>(null)
+  const [farmerInfo, setFarmerInfo] = useState<FarmerInfo | null>(null)
   const [lookingUp, setLookingUp] = useState(false)
   const [showDemoFarmers, setShowDemoFarmers] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -85,15 +99,17 @@ export function ChatWidget() {
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-    try { sessionStorage.setItem('weather_chat_messages', JSON.stringify(messages)) } catch {}
+    try { sessionStorage.setItem('weather_chat_messages', JSON.stringify(messages)) } catch {
+      // ignore
+    }
   }, [messages])
 
   async function lookupFarmer(phone: string) {
     if (!phone.trim()) return
     setLookingUp(true)
     try {
-      const detail: any = await apiFetch(`/api/farmers/${encodeURIComponent(phone.trim())}`)
-      const info = {
+      const detail = await apiFetch<FarmerDetail>(`/api/farmers/${encodeURIComponent(phone.trim())}`)
+      const info: FarmerInfo = {
         name: detail.aadhaar?.name || 'Unknown',
         district: detail.aadhaar?.district || '',
         state: detail.aadhaar?.state || '',
@@ -106,8 +122,16 @@ export function ChatWidget() {
         role: 'assistant',
         content: `Identified: **${info.name}**\n- District: ${info.district}, ${info.state}\n- Crops: ${info.crops.join(', ')}\n- Area: ${info.area.toFixed(2)} ha`,
       }])
-    } catch {
-      setMessages(prev => [...prev, { role: 'assistant', content: 'No farmer found with that phone number.' }])
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.warn('lookupFarmer failed:', err)
+      }
+      const content =
+        err instanceof ApiError && err.status >= 400 && err.status < 500
+          ? 'No farmer found with that phone number.'
+          : "Couldn't reach the server. Please try again."
+      setMessages(prev => [...prev, { role: 'assistant', content }])
     } finally {
       setLookingUp(false)
     }
@@ -121,7 +145,7 @@ export function ChatWidget() {
     setSending(true)
 
     try {
-      const resp: any = await apiFetch('/api/chat', {
+      const resp = await apiFetch<ChatResponse>('/api/chat', {
         method: 'POST',
         body: JSON.stringify({
           message: userMsg,
@@ -130,8 +154,16 @@ export function ChatWidget() {
         }),
       })
       setMessages(prev => [...prev, { role: 'assistant', content: resp.response || 'No response.' }])
-    } catch (err: any) {
-      setMessages(prev => [...prev, { role: 'assistant', content: `Error: ${err.message || 'Unknown error'}` }])
+    } catch (err) {
+      if (import.meta.env.DEV) {
+        // eslint-disable-next-line no-console
+        console.warn('sendMessage failed:', err)
+      }
+      const content =
+        err instanceof ApiError && err.status >= 400 && err.status < 500
+          ? 'That request was rejected by the server.'
+          : "Couldn't reach the server. Please try again."
+      setMessages(prev => [...prev, { role: 'assistant', content }])
     } finally {
       setSending(false)
     }
@@ -153,17 +185,9 @@ export function ChatWidget() {
     return (
       <button
         onClick={() => setOpen(true)}
-        style={{
-          position: 'fixed', bottom: '24px', right: '24px', zIndex: 1000,
-          width: '52px', height: '52px', borderRadius: '50%',
-          background: '#d4a019', color: '#fff', border: 'none', cursor: 'pointer',
-          boxShadow: '0 4px 16px rgba(212, 160, 25, 0.4)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          transition: 'transform 0.15s, box-shadow 0.15s',
-        }}
-        onMouseEnter={e => { e.currentTarget.style.transform = 'scale(1.08)' }}
-        onMouseLeave={e => { e.currentTarget.style.transform = 'scale(1)' }}
+        aria-label="Open farmer advisor chat"
         title="Open Chat"
+        className="fixed bottom-6 right-6 z-[1000] w-[52px] h-[52px] rounded-full bg-gold text-white border-0 cursor-pointer shadow-[0_4px_16px_rgba(212,160,25,0.4)] flex items-center justify-center transition-transform hover:scale-[1.08]"
       >
         <MessageCircle size={22} />
       </button>
@@ -171,16 +195,7 @@ export function ChatWidget() {
   }
 
   return (
-    <div className="chat-widget-container" style={{
-      position: 'fixed', bottom: '24px', right: '24px', zIndex: 1000,
-      width: '380px', maxWidth: 'calc(100vw - 48px)',
-      height: '600px', maxHeight: 'calc(100vh - 48px)',
-      background: '#faf8f5', borderRadius: '12px',
-      border: '1px solid #e0dcd5',
-      boxShadow: '0 8px 32px rgba(0,0,0,0.15)',
-      display: 'flex', flexDirection: 'column',
-      overflow: 'hidden',
-    }}>
+    <div className="chat-widget-container fixed bottom-6 right-6 z-[1000] w-[380px] max-w-[calc(100vw-48px)] h-[600px] max-h-[calc(100vh-48px)] bg-cream rounded-xl border border-warm-border shadow-[0_8px_32px_rgba(0,0,0,0.15)] flex flex-col overflow-hidden">
       <style>{`
         .chat-widget-container code {
           background: #f5f3ef;
@@ -195,51 +210,38 @@ export function ChatWidget() {
         }
       `}</style>
       {/* Header */}
-      <div style={{
-        background: '#1a1a1a', color: '#fff',
-        padding: '14px 16px', display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        flexShrink: 0,
-      }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+      <div className="bg-sidebar text-white px-4 py-[14px] flex items-center justify-between shrink-0">
+        <div className="flex items-center gap-2">
           <MessageCircle size={16} />
-          <span style={{ fontWeight: 600, fontSize: '0.88rem' }}>Farmer Advisor Chat</span>
+          <span className="font-semibold text-[0.88rem]">Farmer Advisor Chat</span>
         </div>
-        <button onClick={() => setOpen(false)} style={{
-          background: 'none', border: 'none', color: '#aaa', cursor: 'pointer',
-          padding: '2px', display: 'flex',
-        }}>
+        <button
+          onClick={() => setOpen(false)}
+          aria-label="Close chat"
+          className="bg-transparent border-0 text-[#aaa] cursor-pointer p-0.5 flex hover:text-white"
+        >
           <X size={18} />
         </button>
       </div>
 
       {/* Farmer Identity */}
-      <div style={{
-        padding: '10px 14px', borderBottom: '1px solid #e0dcd5',
-        background: '#f5f3ef', flexShrink: 0,
-      }}>
-        <div style={{ fontSize: '0.72rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '1px', marginBottom: '6px' }}>
+      <div className="px-[14px] py-[10px] border-b border-warm-border bg-warm-header-bg shrink-0">
+        <div className="text-[0.72rem] font-semibold text-warm-muted uppercase tracking-label mb-1.5">
           Farmer Identity
         </div>
-        <div style={{ display: 'flex', gap: '6px' }}>
+        <div className="flex gap-1.5">
           <input
             value={farmerPhone}
             onChange={e => setFarmerPhone(e.target.value)}
             placeholder="+919876543210"
             onKeyDown={e => e.key === 'Enter' && lookupFarmer(farmerPhone)}
-            style={{
-              flex: 1, padding: '6px 10px', fontSize: '0.82rem',
-              border: '1px solid #e0dcd5', borderRadius: '6px', background: '#fff',
-              outline: 'none', color: '#1a1a1a',
-            }}
+            aria-label="Farmer phone number"
+            className="flex-1 px-[10px] py-1.5 text-[0.82rem] border border-warm-border rounded-md bg-white outline-none text-[#1a1a1a]"
           />
           <button
             onClick={() => lookupFarmer(farmerPhone)}
             disabled={lookingUp}
-            style={{
-              padding: '6px 10px', fontSize: '0.75rem', fontWeight: 600,
-              background: '#d4a019', color: '#fff', border: 'none',
-              borderRadius: '6px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px',
-            }}
+            className="px-[10px] py-1.5 text-[0.75rem] font-semibold bg-gold text-white border-0 rounded-md cursor-pointer flex items-center gap-1"
           >
             <Search size={12} />
             {lookingUp ? '...' : 'Look up'}
@@ -247,7 +249,7 @@ export function ChatWidget() {
         </div>
 
         {farmerInfo && (
-          <div style={{ marginTop: '6px', fontSize: '0.78rem', color: '#555' }}>
+          <div className="mt-1.5 text-[0.78rem] text-warm-body">
             <strong>{farmerInfo.name}</strong> · {farmerInfo.district}, {farmerInfo.state}<br />
             Crops: {farmerInfo.crops.join(', ')} · {farmerInfo.area.toFixed(1)} ha
           </div>
@@ -255,26 +257,18 @@ export function ChatWidget() {
 
         <button
           onClick={() => setShowDemoFarmers(!showDemoFarmers)}
-          style={{
-            marginTop: '6px', background: 'none', border: 'none',
-            color: '#d4a019', fontSize: '0.72rem', cursor: 'pointer',
-            padding: 0, textDecoration: 'underline',
-          }}
+          className="mt-1.5 bg-transparent border-0 text-gold text-[0.72rem] cursor-pointer p-0 underline"
         >
           {showDemoFarmers ? 'Hide' : 'Demo farmers'}
         </button>
 
         {showDemoFarmers && farmers.data && (
-          <div style={{ marginTop: '4px', display: 'flex', flexWrap: 'wrap', gap: '4px' }}>
+          <div className="mt-1 flex flex-wrap gap-1">
             {farmers.data.slice(0, 6).map(f => (
               <button
                 key={f.phone}
                 onClick={() => selectDemoFarmer(f)}
-                style={{
-                  background: '#fff', border: '1px solid #e0dcd5', borderRadius: '4px',
-                  padding: '3px 8px', fontSize: '0.7rem', cursor: 'pointer',
-                  color: '#555',
-                }}
+                className="bg-white border border-warm-border rounded px-2 py-[3px] text-[0.7rem] cursor-pointer text-warm-body"
               >
                 {f.name} ({f.phone.slice(-4)})
               </button>
@@ -284,31 +278,25 @@ export function ChatWidget() {
       </div>
 
       {/* Messages */}
-      <div style={{
-        flex: 1, overflowY: 'auto', padding: '12px 14px',
-        display: 'flex', flexDirection: 'column', gap: '10px',
-      }}>
+      <div className="flex-1 overflow-y-auto px-[14px] py-3 flex flex-col gap-2.5">
         {messages.map((msg, i) => (
-          <div key={i} style={{
-            display: 'flex', flexDirection: 'column',
-            alignItems: msg.role === 'user' ? 'flex-end' : 'flex-start',
-          }}>
-            <div style={{
-              maxWidth: '85%', padding: '8px 12px', borderRadius: '10px',
-              fontSize: '0.82rem', lineHeight: 1.5,
-              background: msg.role === 'user' ? '#d4a019' : '#fff',
-              color: msg.role === 'user' ? '#fff' : '#1a1a1a',
-              border: msg.role === 'user' ? 'none' : '1px solid #e0dcd5',
-            }}>
+          <div
+            key={i}
+            className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
+          >
+            <div
+              className={`max-w-[85%] px-3 py-2 rounded-[10px] text-[0.82rem] leading-[1.5] ${
+                msg.role === 'user'
+                  ? 'bg-gold text-white border-0'
+                  : 'bg-white text-[#1a1a1a] border border-warm-border'
+              }`}
+            >
               <span dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
             </div>
           </div>
         ))}
         {sending && (
-          <div style={{
-            display: 'flex', alignItems: 'center', gap: '4px',
-            padding: '8px 12px',
-          }}>
+          <div className="flex items-center gap-1 px-3 py-2">
             <span className="typing-dot" />
             <span className="typing-dot" />
             <span className="typing-dot" />
@@ -318,43 +306,31 @@ export function ChatWidget() {
       </div>
 
       {/* Input */}
-      <div style={{
-        padding: '10px 14px', borderTop: '1px solid #e0dcd5',
-        background: '#f5f3ef', display: 'flex', gap: '6px',
-        flexShrink: 0,
-      }}>
+      <div className="px-[14px] py-2.5 border-t border-warm-border bg-warm-header-bg flex gap-1.5 shrink-0">
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
           placeholder="Ask something..."
           disabled={sending}
-          style={{
-            flex: 1, padding: '8px 12px', fontSize: '0.82rem',
-            border: '1px solid #e0dcd5', borderRadius: '8px', background: '#fff',
-            outline: 'none', color: '#1a1a1a',
-          }}
+          aria-label="Chat message input"
+          className="flex-1 px-3 py-2 text-[0.82rem] border border-warm-border rounded-lg bg-white outline-none text-[#1a1a1a]"
         />
         <button
           onClick={sendMessage}
           disabled={sending || !input.trim()}
-          style={{
-            padding: '8px 12px', background: '#d4a019', color: '#fff',
-            border: 'none', borderRadius: '8px', cursor: 'pointer',
-            display: 'flex', alignItems: 'center',
-            opacity: sending || !input.trim() ? 0.5 : 1,
-          }}
+          aria-label="Send message"
+          className={`px-3 py-2 bg-gold text-white border-0 rounded-lg cursor-pointer flex items-center ${
+            sending || !input.trim() ? 'opacity-50' : ''
+          }`}
         >
           <Send size={14} />
         </button>
         <button
           onClick={clearChat}
-          style={{
-            padding: '8px', background: 'none', border: '1px solid #e0dcd5',
-            borderRadius: '8px', cursor: 'pointer', display: 'flex', alignItems: 'center',
-            color: '#888',
-          }}
           title="Clear conversation"
+          aria-label="Clear conversation"
+          className="p-2 bg-transparent border border-warm-border rounded-lg cursor-pointer flex items-center text-warm-muted"
         >
           <Trash2 size={14} />
         </button>

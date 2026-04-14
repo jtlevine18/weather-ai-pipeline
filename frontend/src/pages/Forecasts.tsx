@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react'
-import { useForecasts, useStations, useFarmers, useMosStatus } from '../api/hooks'
+import { useForecasts, useStations, useFarmers, useMosStatus, type Station, type Forecast } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
 import { TabPanel } from '../components/TabPanel'
@@ -174,7 +174,7 @@ export default function Forecasts() {
 
 
       {/* 5 Metrics */}
-      <div data-tour="forecasts-metrics" className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div data-tour="forecasts-metrics" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         <MetricCard label="Stations Reporting" value={uniqueStations} />
         <MetricCard label="Total Forecasts" value={totalForecasts} />
         <MetricCard label="Avg Confidence" value={avgConf > 0 ? `${Math.round(avgConf * 100)}%` : '--'} />
@@ -454,7 +454,7 @@ export default function Forecasts() {
 // ---------------------------------------------------------------------------
 
 function DownscalingTab({ stations, forecasts }: {
-  stations: any[] | undefined; forecasts: any[]
+  stations: Station[] | undefined; forecasts: Forecast[]
 }) {
   const { data: farmers } = useFarmers()
 

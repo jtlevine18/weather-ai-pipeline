@@ -8,6 +8,7 @@ import { TableSkeleton } from '../components/LoadingSpinner'
 import { PageContext } from '../components/PageContext'
 import { TabPanel } from '../components/TabPanel'
 import { REGION, languageName } from '../regionConfig'
+import { formatTimeShort as formatTime } from '../lib/format'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -21,17 +22,6 @@ const STATUS_COLOR: Record<string, string> = {
 
 const DELIVERY_STATUS_COLOR: Record<string, string> = {
   sent: '#2a9d8f', dry_run: '#2a9d8f', failed: '#e63946',
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatTime(dateStr: string | undefined): string {
-  if (!dateStr) return '--'
-  try {
-    return new Date(dateStr).toLocaleString(REGION.locale, { dateStyle: 'short', timeStyle: 'short' })
-  } catch { return dateStr }
 }
 
 // ---------------------------------------------------------------------------
@@ -205,7 +195,7 @@ function EvalMetricsTab() {
         return (
           <div className="space-y-3">
             <div className="section-header">Self-Healing Detection</div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <MetricCard label="Precision" value={bd.precision != null ? `${(bd.precision * 100).toFixed(0)}%` : '--'} />
               <MetricCard label="Recall" value={bd.recall != null ? `${(bd.recall * 100).toFixed(0)}%` : '--'} />
               <MetricCard label="F1" value={bd.f1 != null ? `${(bd.f1 * 100).toFixed(0)}%` : '--'} />
@@ -240,7 +230,7 @@ function EvalMetricsTab() {
         return (
           <div className="space-y-3">
             <div className="section-header">Forecast Accuracy</div>
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <MetricCard label="Temp MAE" value={temp.mae != null ? `${temp.mae.toFixed(2)} C` : '---'} />
               <MetricCard label="Temp RMSE" value={temp.rmse != null ? `${temp.rmse.toFixed(2)} C` : '---'} />
               <MetricCard label="Paired Records" value={f.total_pairs ?? 0} />
@@ -360,7 +350,7 @@ function EvalMetricsTab() {
         return (
           <div className="space-y-3">
             <div className="section-header">DPI Profile Quality</div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <MetricCard label="Farmers" value={d.total_farmers ?? 0} />
               <MetricCard label="Station Coverage" value={d.coverage?.coverage_rate != null ? `${(d.coverage.coverage_rate * 100).toFixed(0)}%` : '--'} />
               <MetricCard label="Completeness" value={d.completeness?.completeness_rate != null ? `${(d.completeness.completeness_rate * 100).toFixed(0)}%` : '--'} />
@@ -376,7 +366,7 @@ function EvalMetricsTab() {
         return (
           <div className="space-y-3">
             <div className="section-header">Conversation Engine</div>
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <MetricCard label="State Machine" value={c.state_machine?.accuracy != null ? `${(c.state_machine.accuracy * 100).toFixed(0)}%` : '--'} />
               <MetricCard label="Language Detection" value={c.language_detection?.accuracy != null ? `${(c.language_detection.accuracy * 100).toFixed(0)}%` : '--'} />
               <MetricCard label="Escalation Detection" value={c.escalation_detection?.accuracy != null ? `${(c.escalation_detection.accuracy * 100).toFixed(0)}%` : '--'} />
@@ -428,7 +418,7 @@ function AgentLogTab() {
 
   return (
     <div className="space-y-6">
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard label="Sessions" value={sessions} />
         <MetricCard label="User Queries" value={userMsgs.length} />
         <MetricCard label="Responses" value={assistantMsgs.length} />
@@ -604,7 +594,7 @@ function SystemDeliveryLogTab() {
 
   return (
     <div className="space-y-4">
-      <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <MetricCard label="Sent / Dry-Run" value={sentCount} />
         <MetricCard label="Failed" value={allDeliveries.filter(d => d.status === 'failed').length} />
         <MetricCard label="Channels Used" value={new Set(allDeliveries.map(d => d.channel)).size || '--'} />
@@ -671,7 +661,7 @@ function HealingStatsTab() {
   return (
     <div className="space-y-6">
       {hStats.latest_run && (
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
           <MetricCard label="Model" value={hStats.latest_run.model || '--'} />
           <MetricCard label="Tokens" value={
             hStats.latest_run.tokens_in != null
@@ -872,7 +862,7 @@ export default function Pipeline() {
 
           {/* Run history table */}
           <div className="space-y-4">
-            <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
               <MetricCard label="Total Runs" value={runList.length} />
               <MetricCard label="Successful" value={okRuns} />
               <MetricCard label="Partial / Failed" value={failedRuns + runList.filter(r => r.status === 'partial').length} />

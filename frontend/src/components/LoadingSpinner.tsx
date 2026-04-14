@@ -57,7 +57,7 @@ export function DashboardSkeleton() {
         ))}
       </div>
       {/* 4 metric cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[0, 1, 2, 3].map(i => (
           <div key={i} className="metric-card space-y-2">
             <SkeletonPulse className="h-3 w-20" />
@@ -76,7 +76,7 @@ export function TableSkeleton({ rows = 6 }: { rows?: number }) {
         <SkeletonPulse className="h-8 w-48" />
         <SkeletonPulse className="h-4 w-96 max-w-full" />
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         {[0, 1, 2, 3].map(i => (
           <div key={i} className="metric-card space-y-2">
             <SkeletonPulse className="h-3 w-20" />
@@ -112,7 +112,7 @@ export function DetailSkeleton() {
         <SkeletonPulse className="h-8 w-48" />
         <SkeletonPulse className="h-4 w-64" />
       </div>
-      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
         {[0, 1, 2, 3, 4].map(i => (
           <div key={i} className="card p-4 space-y-2">
             <SkeletonPulse className="h-3 w-16" />

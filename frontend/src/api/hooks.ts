@@ -40,6 +40,8 @@ export interface Alert {
   advisory_en?: string
   advisory_local?: string
   language?: string
+  provider?: string
+  forecast_days?: number
   issued_at?: string
   created_at?: string
 }
@@ -174,11 +176,26 @@ export interface SourceInfo {
 
 // ── Hooks ──────────────────────────────────────────────────
 
+interface RawStation {
+  station_id?: string
+  id?: string
+  name?: string
+  state?: string
+  latitude?: number
+  longitude?: number
+  lat?: number
+  lon?: number
+  elevation?: number
+  altitude_m?: number
+  source?: string
+  active?: boolean
+}
+
 export function useStations() {
   return useQuery<Station[]>({
     queryKey: ['stations'],
     queryFn: async () => {
-      const raw: any[] = await apiFetch('/api/stations')
+      const raw = await apiFetch<RawStation[]>('/api/stations')
       return raw.map((s) => ({
         station_id: s.station_id ?? s.id ?? '',
         name: s.name ?? '',
@@ -226,7 +243,12 @@ export function usePipelineRuns(limit = 20) {
   })
 }
 
-function normalizeTelemetry(raw: any[]): TelemetryRecord[] {
+interface RawTelemetry extends TelemetryRecord {
+  ts?: string
+  rainfall?: number
+}
+
+function normalizeTelemetry(raw: RawTelemetry[]): TelemetryRecord[] {
   return raw.map((r) => ({
     ...r,
     observed_at: r.observed_at ?? r.ts ?? '',
@@ -240,7 +262,7 @@ export function useTelemetryRaw(limit = 50) {
   return useQuery<TelemetryRecord[]>({
     queryKey: ['telemetry-raw', limit],
     queryFn: async () => {
-      const data: any[] = await apiFetch(`/api/telemetry?type=raw&limit=${limit}`)
+      const data = await apiFetch<RawTelemetry[]>(`/api/telemetry?type=raw&limit=${limit}`)
       return normalizeTelemetry(data)
     },
   })
@@ -250,7 +272,7 @@ export function useTelemetryClean(limit = 50) {
   return useQuery<TelemetryRecord[]>({
     queryKey: ['telemetry-clean', limit],
     queryFn: async () => {
-      const data: any[] = await apiFetch(`/api/telemetry?type=clean&limit=${limit}`)
+      const data = await apiFetch<RawTelemetry[]>(`/api/telemetry?type=clean&limit=${limit}`)
       return normalizeTelemetry(data)
     },
   })
@@ -284,11 +306,20 @@ export function usePipelineStats() {
   })
 }
 
+interface RawSource {
+  source?: string
+  name?: string
+  count?: number
+  type?: string
+  stations?: number
+  status?: string
+}
+
 export function useSources() {
   return useQuery<SourceInfo[]>({
     queryKey: ['sources'],
     queryFn: async () => {
-      const raw: any[] = await apiFetch('/api/sources')
+      const raw = await apiFetch<RawSource[]>('/api/sources')
       // API returns [{source: "imd", count: 210}] — normalize to SourceInfo
       return raw.map((s) => ({
         name: s.source ?? s.name ?? 'Unknown',

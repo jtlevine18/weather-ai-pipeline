@@ -55,6 +55,7 @@ export function Sidebar({ open, onClose }: Props) {
           </Link>
           <button
             onClick={onClose}
+            aria-label="Close navigation menu"
             className="lg:hidden p-1 rounded-md hover:bg-white/10 text-[#e0dcd5]"
           >
             <X size={20} />

@@ -1,10 +1,11 @@
 import { useState, useMemo } from 'react'
-import { useAlerts, useStations, useForecasts, useDeliveryLog, useFarmers, useFarmerDetail } from '../api/hooks'
+import { useAlerts, useStations, useForecasts, useDeliveryLog, useFarmers, useFarmerDetail, type Alert } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
 import { PageContext } from '../components/PageContext'
 import { TabPanel } from '../components/TabPanel'
 import { REGION } from '../regionConfig'
+import { formatTime } from '../lib/format'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -25,17 +26,6 @@ const CONDITION_EMOJI: Record<string, string> = {
 
 const STATUS_COLOR: Record<string, string> = {
   sent: '#2a9d8f', dry_run: '#2a9d8f', failed: '#e63946',
-}
-
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
-function formatTime(dateStr: string | undefined): string {
-  if (!dateStr) return '--'
-  try {
-    return new Date(dateStr).toLocaleString(REGION.locale, { dateStyle: 'medium', timeStyle: 'short' })
-  } catch { return dateStr }
 }
 
 // ---------------------------------------------------------------------------
@@ -65,7 +55,7 @@ export default function Advisories() {
   // Metrics
   const totalAdvisories = allAlerts.length
   const ragCount = allAlerts.filter(a =>
-    (a as any).provider === 'rag' || (a as any).provider === 'rag_claude'
+    a.provider === 'rag' || a.provider === 'rag_claude'
   ).length
   const taCount = allAlerts.filter(a => a.language === 'ta').length
   const mlCount = allAlerts.filter(a => a.language === 'ml').length
@@ -81,7 +71,7 @@ export default function Advisories() {
     return ['All', ...Array.from(set)]
   }, [allAlerts])
   const providers = useMemo(() => {
-    const set = new Set(allAlerts.map(a => (a as any).provider).filter(Boolean))
+    const set = new Set(allAlerts.map(a => a.provider).filter(Boolean))
     return ['All', ...Array.from(set)]
   }, [allAlerts])
 
@@ -90,15 +80,14 @@ export default function Advisories() {
     let items = [...allAlerts]
     if (langFilter !== 'All') items = items.filter(a => a.language === langFilter)
     if (condFilter !== 'All') items = items.filter(a => a.condition === condFilter)
-    if (provFilter !== 'All') items = items.filter(a => (a as any).provider === provFilter)
+    if (provFilter !== 'All') items = items.filter(a => a.provider === provFilter)
     return items
   }, [allAlerts, langFilter, condFilter, provFilter])
 
   if (isLoading) return (
     <div>
-      <div data-tour="advisories-title" className="pt-2 pb-6"><h1 className="page-title" style={{ fontFamily: '"Source Serif 4", serif' }}>Advisories</h1></div>
-      <div data-tour="advisories-metrics"><TableSkeleton /></div>
-      <div data-tour="advisories-tabs" />
+      <div className="pt-2 pb-6"><h1 className="page-title" style={{ fontFamily: '"Source Serif 4", serif' }}>Advisories</h1></div>
+      <TableSkeleton />
     </div>
   )
   if (error) return <div className="text-center py-12"><p className="text-error text-sm">Failed to load advisories</p></div>
@@ -119,7 +108,7 @@ export default function Advisories() {
       </PageContext>
 
       {/* 4 Metrics */}
-      <div data-tour="advisories-metrics" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div data-tour="advisories-metrics" className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <MetricCard label="Total Advisories" value={totalAdvisories} />
         <MetricCard label="AI Generated" value={ragCount} />
         <MetricCard label={REGION.languageMetric} value={`${taCount} / ${mlCount}`} />
@@ -162,9 +151,9 @@ export default function Advisories() {
                 const condColor = CONDITION_COLOR[cond] || '#888'
                 const condEmoji = CONDITION_EMOJI[cond] || ''
                 const name = alert.station_name || stationMap[alert.station_id] || alert.station_id
-                const provider = (alert as any).provider || 'rag'
+                const provider = alert.provider || 'rag'
                 const lang = alert.language || 'en'
-                const forecastDays = (alert as any).forecast_days
+                const forecastDays = alert.forecast_days
                 return (
                   <div
                     key={alert.id ?? i}
@@ -275,7 +264,7 @@ export default function Advisories() {
                   borderRadius: '8px', padding: '12px',
                 }}>
                   <div style={{ fontSize: '0.72rem', color: '#888' }}>
-                    {(alert as any).provider || 'rag'} {'\u00B7'} {alert.language || 'en'}
+                    {alert.provider || 'rag'} {'\u00B7'} {alert.language || 'en'}
                   </div>
                   <p style={{ color: '#555', fontSize: '0.82rem', lineHeight: 1.4, marginTop: '4px' }}>
                     {(alert.advisory_en || alert.advisory_local || '').slice(0, 150)}
@@ -297,7 +286,7 @@ export default function Advisories() {
       <TabPanel active={activeTab === 3}>
         <div className="space-y-4">
           <div className="section-header">Delivery Status</div>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
             <MetricCard label="Sent / Dry-Run" value={sentCount} />
             <MetricCard label="Failed" value={allDeliveries.filter(d => d.status === 'failed').length} />
             <MetricCard label="Channels" value={new Set(allDeliveries.map(d => d.channel)).size || '--'} />
@@ -379,7 +368,7 @@ function DPICard({ title, children }: { title: string; children: React.ReactNode
 }
 
 function FarmersDPITab({ alerts, stationMap }: {
-  alerts: any[]; stationMap: Record<string, string>
+  alerts: Alert[]; stationMap: Record<string, string>
 }) {
   const { data: farmers, isLoading } = useFarmers()
   const [selectedPhone, setSelectedPhone] = useState('')
@@ -520,7 +509,7 @@ function FarmersDPITab({ alerts, stationMap }: {
               </span>
             )}
             <span style={{ color: '#888', fontSize: '0.75rem', marginLeft: '8px' }}>
-              {(stationAlert as any).provider || 'rag'} {'\u00B7'} {stationAlert.language || 'en'}
+              {stationAlert.provider || 'rag'} {'\u00B7'} {stationAlert.language || 'en'}
             </span>
             <div style={{ color: '#555', fontSize: '0.85rem', lineHeight: 1.5, marginTop: '8px' }}>
               {(stationAlert.advisory_local || stationAlert.advisory_en || '').slice(0, 300)}

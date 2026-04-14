@@ -210,7 +210,7 @@ export default function Dashboard() {
       </div>
 
       {/* 4 Metric Cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 animate-stagger">
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 animate-stagger">
         <MetricCard label="Weekly Updates" value={`${okRuns}/${runList.length}`} />
         <MetricCard label="Data Accuracy" value={avgQuality > 0 ? `${Math.round(avgQuality * 100)}%` : '0%'} />
         <MetricCard label="Advisories Generated" value={alertCount} />

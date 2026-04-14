@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { Routes, Route, Navigate, useNavigate, useSearchParams, useLocation } from 'react-router-dom'
 import Joyride, { type CallBackProps, STATUS, EVENTS, ACTIONS } from 'react-joyride'
 import { Layout } from './components/Layout'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import Dashboard from './pages/Dashboard'
 import Stations from './pages/Stations'
 import StationDetail from './pages/StationDetail'
@@ -28,8 +29,8 @@ export default function App() {
           setStepIndex(0)
           setRunTour(true)
           localStorage.setItem('weather_tour_v2', '1')
-        }, 300)
-      }, 1500)
+        }, 150)
+      }, 700)
       return () => clearTimeout(timer)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
@@ -71,12 +72,12 @@ export default function App() {
           setTimeout(() => {
             setStepIndex(nextIndex)
             setRunTour(true)
-          }, 800)
+          }, 350)
         } else {
           setTimeout(() => {
             setStepIndex(nextIndex)
             setRunTour(true)
-          }, 150)
+          }, 80)
         }
       }
     },
@@ -85,17 +86,19 @@ export default function App() {
 
   return (
     <>
-      <Routes>
-        <Route element={<Layout />}>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/stations" element={<Stations />} />
-          <Route path="/stations/:id" element={<StationDetail />} />
-          <Route path="/forecasts" element={<Forecasts />} />
-          <Route path="/advisories" element={<Advisories />} />
-          <Route path="/pipeline" element={<Pipeline />} />
-        </Route>
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+      <ErrorBoundary>
+        <Routes>
+          <Route element={<Layout />}>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/stations" element={<Stations />} />
+            <Route path="/stations/:id" element={<StationDetail />} />
+            <Route path="/forecasts" element={<Forecasts />} />
+            <Route path="/advisories" element={<Advisories />} />
+            <Route path="/pipeline" element={<Pipeline />} />
+          </Route>
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </ErrorBoundary>
 
       <Joyride
         steps={tourSteps}
