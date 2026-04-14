@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
+import { apiFetch } from './client'
 import {
   STATIONS_VIEW,
   TELEMETRY_RAW,
@@ -250,28 +251,24 @@ function mock<T>(value: T, delayMs = 260): Promise<T> {
 export function useStations() {
   return useQuery<Station[]>({
     queryKey: ['stations'],
-    queryFn: () => mock(STATIONS_VIEW),
+    queryFn: () => apiFetch<Station[]>('/api/stations'),
     staleTime: 5 * 60 * 1000,
   })
 }
 
 export function useForecasts(limit = 50, forecastDay?: number) {
+  const params = new URLSearchParams({ limit: String(limit) })
+  if (forecastDay !== undefined) params.set('forecast_day', String(forecastDay))
   return useQuery<Forecast[]>({
     queryKey: ['forecasts', limit, forecastDay],
-    queryFn: () => {
-      let rows = FORECASTS
-      if (forecastDay !== undefined) {
-        rows = rows.filter((f) => f.forecast_day === forecastDay)
-      }
-      return mock(rows.slice(0, limit))
-    },
+    queryFn: () => apiFetch<Forecast[]>(`/api/forecasts?${params}`),
   })
 }
 
 export function useAlerts(limit = 50) {
   return useQuery<Alert[]>({
     queryKey: ['alerts', limit],
-    queryFn: () => mock(ALERTS.slice(0, limit)),
+    queryFn: () => apiFetch<Alert[]>(`/api/alerts?limit=${limit}`),
   })
 }
 
@@ -292,56 +289,66 @@ export function useStationLatest(stationId: string) {
 export function usePipelineRuns(limit = 20) {
   return useQuery<PipelineRun[]>({
     queryKey: ['pipeline-runs', limit],
-    queryFn: () => mock(PIPELINE_RUNS.slice(0, limit)),
+    queryFn: () => apiFetch<PipelineRun[]>(`/api/pipeline?mode=runs&limit=${limit}`),
   })
 }
 
 export function useTelemetryRaw(limit = 50) {
   return useQuery<TelemetryRecord[]>({
     queryKey: ['telemetry-raw', limit],
-    queryFn: () => mock(TELEMETRY_RAW.slice(0, limit)),
+    queryFn: () => apiFetch<TelemetryRecord[]>(`/api/telemetry?type=raw&limit=${limit}`),
   })
 }
 
 export function useTelemetryClean(limit = 50) {
   return useQuery<TelemetryRecord[]>({
     queryKey: ['telemetry-clean', limit],
-    queryFn: () => mock(TELEMETRY_CLEAN.slice(0, limit)),
+    queryFn: () => apiFetch<TelemetryRecord[]>(`/api/telemetry?type=clean&limit=${limit}`),
   })
 }
 
 export function useDeliveryLog(limit = 50) {
   return useQuery<DeliveryRecord[]>({
     queryKey: ['delivery-log', limit],
-    queryFn: () => mock(DELIVERIES.slice(0, limit)),
+    queryFn: () => apiFetch<DeliveryRecord[]>(`/api/delivery?mode=log&limit=${limit}`),
   })
 }
 
 export function useHealingLog(limit = 50) {
   return useQuery<HealingRecord[]>({
     queryKey: ['healing-log', limit],
-    queryFn: () => mock(HEALING_RECORDS.slice(0, limit)),
+    queryFn: () => apiFetch<HealingRecord[]>(`/api/healing?mode=log&limit=${limit}`),
   })
 }
 
 export function useHealingStats() {
   return useQuery<HealingStats>({
     queryKey: ['healing-stats'],
-    queryFn: () => mock(HEALING_STATS),
+    queryFn: () => apiFetch<HealingStats>('/api/healing?mode=stats'),
   })
 }
 
 export function usePipelineStats() {
   return useQuery<PipelineStats>({
     queryKey: ['pipeline-stats'],
-    queryFn: () => mock(PIPELINE_STATS),
+    queryFn: () => apiFetch<PipelineStats>('/api/pipeline?mode=stats'),
   })
 }
 
 export function useSources() {
   return useQuery<SourceInfo[]>({
     queryKey: ['sources'],
-    queryFn: () => mock(SOURCES),
+    queryFn: async () => {
+      const raw = await apiFetch<Array<{ source?: string; name?: string; count?: number; type?: string; stations?: number; status?: string }>>('/api/sources')
+      return raw.map((s) => ({
+        name: s.source ?? s.name ?? 'Unknown',
+        source: s.source,
+        count: s.count,
+        type: s.type,
+        stations: s.stations ?? s.count,
+        status: s.status,
+      }))
+    },
     staleTime: 5 * 60 * 1000,
   })
 }
@@ -349,7 +356,7 @@ export function useSources() {
 export function useEvals() {
   return useQuery<Record<string, any>>({
     queryKey: ['evals'],
-    queryFn: () => mock(EVAL_METRICS),
+    queryFn: () => apiFetch<Record<string, any>>('/api/metrics'),
     staleTime: 5 * 60 * 1000,
   })
 }
@@ -357,14 +364,14 @@ export function useEvals() {
 export function useConversationLog(limit = 50) {
   return useQuery<any[]>({
     queryKey: ['conversation-log', limit],
-    queryFn: () => mock(CONVERSATION_LOG.slice(0, limit)),
+    queryFn: () => apiFetch<any[]>(`/api/conversation?limit=${limit}`),
   })
 }
 
 export function useDeliveryMetricsAgg(limit = 200) {
   return useQuery<any[]>({
     queryKey: ['delivery-metrics', limit],
-    queryFn: () => mock(DELIVERY_METRICS_AGG.slice(0, limit)),
+    queryFn: () => apiFetch<any[]>(`/api/delivery?mode=metrics&limit=${limit}`),
   })
 }
 
@@ -397,7 +404,7 @@ export interface FarmerDetail {
 export function useFarmers(opts?: { enabled?: boolean }) {
   return useQuery<FarmerSummary[]>({
     queryKey: ['farmers'],
-    queryFn: () => mock(FARMERS_SUMMARY),
+    queryFn: () => apiFetch<FarmerSummary[]>('/api/farmers'),
     staleTime: 5 * 60 * 1000,
     enabled: opts?.enabled ?? true,
   })
@@ -436,7 +443,7 @@ export interface MosStatus {
 export function useMosStatus() {
   return useQuery<MosStatus>({
     queryKey: ['mos-status'],
-    queryFn: () => mock(MOS_STATUS),
+    queryFn: () => apiFetch<MosStatus>('/api/pipeline?mode=mos-status'),
     staleTime: 30_000,
   })
 }
