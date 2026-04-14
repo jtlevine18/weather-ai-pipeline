@@ -411,15 +411,15 @@ Weather 2 now follows the same pattern as Market Intelligence and Climate Risk E
 - **Env vars (Vercel production):** `DATABASE_URL` (Neon connection string)
 
 ### 2. HF Spaces — Pipeline runner (sleeps, wakes weekly)
-- **Space:** `jtlevine/ai-weather-pipeline`
-- **URL:** `https://jtlevine-ai-weather-pipeline.hf.space`
-- **Git remote:** `origin` → `https://huggingface.co/spaces/jtlevine/ai-weather-pipeline`
-- **Push command:** `git push origin main` (**only when pipeline code or `src/api.py` changes — don't push unnecessarily, it wakes a sleeping space**)
-- Root `Dockerfile` runs `uvicorn src.api:app` on port 7860. The Space serves a pipeline tracker page at `/` with a manual **Run Pipeline** button, a `/health` endpoint, and `/api/pipeline/trigger` + `/api/pipeline/status` that the weekly GitHub Action polls. The pipeline does NOT auto-run on Space wake-up — it's triggered explicitly.
+- **Space:** `jtlevine/ai-weather-pipeline-runner`
+- **URL:** `https://jtlevine-ai-weather-pipeline-runner.hf.space`
+- **How to push:** the runner Space has its OWN independent git history — it is NOT a remote on the main repo. To update it, clone it separately (`GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/spaces/jtlevine/ai-weather-pipeline-runner`), make changes there, and `git push origin main` from inside that clone. Its `src/` directory is a snapshot of the main repo's `src/` at the time it was last updated.
+- The Space's `Dockerfile` runs `uvicorn src.api:app` on port 7860. It serves a pipeline tracker page at `/` with a manual **Run Pipeline** button, a `/health` endpoint, and `/api/pipeline/trigger` + `/api/pipeline/status` that the weekly GitHub Action polls. The pipeline does NOT auto-run on Space wake-up — it's triggered explicitly.
 - Scheduled weekly via GitHub Action; sleeps between runs to save compute
 - Optional L4 GPU for NeuralGCM (falls back to Open-Meteo without GPU)
 - **Env vars (Space secrets — set these before pushing):** `DATABASE_URL`, `ANTHROPIC_API_KEY`, `TOMORROW_IO_API_KEY`, `JWT_SECRET_KEY` (required if `ENV=production`), `WEBHOOK_SECRET` (only if webhook receiver is wired in), optional `ALLOWED_ORIGINS`
 - **Hardware:** set explicitly in *Settings → Variables and secrets → Hardware* — it does not persist across Space rebuilds automatically
+- **Retired:** `jtlevine/ai-weather-pipeline` was the original pipeline-runner Space and has been deleted. Do not reference it in code, docs, or git remotes.
 
 ### Stale: `hf-api` git remote
 There is a leftover `hf-api` git remote pointing at the retired `jtlevine/weather-pipeline-api` Space. Don't push to it. Safe to remove:

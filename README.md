@@ -13,7 +13,7 @@ license: mit
 
 > ML-powered weather forecasting and crop advisory system for smallholder farmers. Works for any region — ships with a Southern India (Kerala & Tamil Nadu) reference implementation.
 
-**[Live Demo →](https://jtlevine-ai-weather-pipeline.hf.space)** | **[Adapt for Your Region →](REBUILD.md)**
+**[Live Demo →](https://weather-forecast.jeff-levine.com)** | **[Adapt for Your Region →](REBUILD.md)**
 
 ## What This Does
 
