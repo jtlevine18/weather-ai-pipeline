@@ -4,7 +4,6 @@ import {
   STATIONS_VIEW,
   TELEMETRY_RAW,
   TELEMETRY_CLEAN,
-  STATION_LATEST_BY_ID,
   FORECASTS,
   ALERTS,
   DELIVERIES,
@@ -18,7 +17,6 @@ import {
   CONVERSATION_LOG,
   DELIVERY_METRICS_AGG,
   FARMERS_SUMMARY,
-  FARMERS_DETAIL_BY_PHONE,
 } from './mockData'
 
 // ── Types ──────────────────────────────────────────────────
@@ -275,13 +273,7 @@ export function useAlerts(limit = 50) {
 export function useStationLatest(stationId: string) {
   return useQuery<StationLatest>({
     queryKey: ['station-latest', stationId],
-    queryFn: () => {
-      const row = STATION_LATEST_BY_ID[stationId]
-      if (!row) {
-        return Promise.reject(new Error(`Station ${stationId} not found`))
-      }
-      return mock(row)
-    },
+    queryFn: () => apiFetch<StationLatest>(`/api/station/${encodeURIComponent(stationId)}/latest`),
     enabled: !!stationId,
   })
 }
@@ -413,13 +405,7 @@ export function useFarmers(opts?: { enabled?: boolean }) {
 export function useFarmerDetail(phone: string) {
   return useQuery<FarmerDetail>({
     queryKey: ['farmer-detail', phone],
-    queryFn: () => {
-      const detail = FARMERS_DETAIL_BY_PHONE[phone]
-      if (!detail) {
-        return Promise.reject(new Error(`Farmer ${phone} not found`))
-      }
-      return mock(detail)
-    },
+    queryFn: () => apiFetch<FarmerDetail>(`/api/farmers/${encodeURIComponent(phone)}`),
     enabled: !!phone,
   })
 }
