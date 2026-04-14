@@ -6,9 +6,11 @@ Run with: python run_api.py (or: uvicorn src.api:app --reload)
 
 from __future__ import annotations
 import json
+import logging
 import os
 import uuid
 from collections import deque
+from contextlib import asynccontextmanager
 from typing import Any, Dict, List
 
 from fastapi import FastAPI, Depends, Form, HTTPException, Query
@@ -22,9 +24,21 @@ from prometheus_fastapi_instrumentator import Instrumentator
 from src.auth import get_current_user, require_operator, User, create_token, verify_password, hash_password
 from src.health import get_health_status
 
-# Initialize schema once at import time (not per-request)
+log = logging.getLogger(__name__)
+
+# Schema is initialized on startup via the FastAPI lifespan hook, not at
+# import time. This keeps `import src.api` working even if DATABASE_URL is
+# not configured (e.g. during test collection).
 from src.database import init_db as _init_db
-_init_db()
+
+
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    try:
+        _init_db()
+    except Exception as exc:
+        log.exception("Database initialization failed on startup: %s", exc)
+    yield
 
 def _get_conn():
     """Get a pooled DB connection without running DDL."""
@@ -35,6 +49,7 @@ app = FastAPI(
     title="Weather Pipeline API",
     version="1.0.0",
     description="REST API for the Kerala/Tamil Nadu agricultural weather pipeline",
+    lifespan=_lifespan,
 )
 
 # ---------------------------------------------------------------------------
@@ -46,16 +61,23 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ---------------------------------------------------------------------------
-# CORS — locked to known origins
+# CORS — configurable via ALLOWED_ORIGINS env var (comma-separated)
 # ---------------------------------------------------------------------------
+
+_DEFAULT_ALLOWED_ORIGINS = [
+    "https://jtlevine-ai-weather-pipeline.hf.space",
+    "https://jtlevine-weather-pipeline-api.hf.space",
+    "https://weather-ai-pipeline.vercel.app",
+]
+_allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
+if _allowed_origins_env:
+    _allowed_origins = [o.strip() for o in _allowed_origins_env.split(",") if o.strip()]
+else:
+    _allowed_origins = _DEFAULT_ALLOWED_ORIGINS
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://jtlevine-ai-weather-pipeline.hf.space",
-        "https://jtlevine-weather-pipeline-api.hf.space",
-        "https://weather-ai-pipeline.vercel.app",
-    ],
+    allow_origins=_allowed_origins,
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Authorization", "X-Webhook-Secret"],
@@ -72,6 +94,11 @@ Instrumentator().instrument(app).expose(app)
 # ---------------------------------------------------------------------------
 
 WEBHOOK_SECRET = os.getenv("WEBHOOK_SECRET", "")
+if not WEBHOOK_SECRET:
+    log.warning(
+        "WEBHOOK_SECRET not set — webhook endpoints will accept unauthenticated requests. "
+        "Set WEBHOOK_SECRET in production."
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -569,8 +596,8 @@ async def trigger_pipeline(request: Request):
             config = get_config()
             pipeline = WeatherPipeline(config)
             asyncio.run(pipeline.run())
-        except Exception as exc:
-            logging.getLogger(__name__).error("Triggered pipeline failed: %s", exc)
+        except Exception:
+            logging.getLogger(__name__).exception("Triggered pipeline failed")
 
     thread = threading.Thread(target=_run, daemon=True)
     thread.start()

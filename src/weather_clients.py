@@ -61,6 +61,10 @@ class IMDClient:
                 return cached_data
 
         try:
+            # TODO: re-enable SSL verification once IMD fixes their cert chain.
+            # city.imd.gov.in historically serves an incomplete intermediate
+            # chain that fails verification on many hosts; disabling here is
+            # intentional and scoped to this read-only public data endpoint.
             async with httpx.AsyncClient(timeout=_TIMEOUT, verify=False) as client:
                 resp = await client.post(
                     IMD_API_BASE,

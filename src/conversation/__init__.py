@@ -8,6 +8,7 @@ import json
 import logging
 import time
 import uuid
+from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from src.conversation.state_machine import ConversationState, next_state
@@ -194,7 +195,7 @@ class ConversationalAgent:
                      self._state.value,
                      self._language,
                      json.dumps({"has_profile": self._farmer_profile is not None}),
-                     time.strftime("%Y-%m-%dT%H:%M:%S")],
+                     datetime.now(timezone.utc).isoformat()],
                 )
             finally:
                 conn.close()

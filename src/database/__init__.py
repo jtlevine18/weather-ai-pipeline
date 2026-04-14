@@ -233,6 +233,17 @@ CREATE TABLE IF NOT EXISTS users (
     role            VARCHAR DEFAULT 'viewer',
     created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Performance indexes. We deliberately do NOT add a UNIQUE constraint on
+-- raw_telemetry(station_id, ts): existing data may contain duplicates and
+-- adding the constraint here could break init_db() against a live DB.
+-- Dedup should happen upstream in ingestion.
+CREATE INDEX IF NOT EXISTS idx_raw_telemetry_station_ts
+    ON raw_telemetry (station_id, ts);
+CREATE INDEX IF NOT EXISTS idx_forecasts_station_valid_for
+    ON forecasts (station_id, valid_for_ts);
+CREATE INDEX IF NOT EXISTS idx_delivery_log_delivered_at
+    ON delivery_log (delivered_at);
 """
 
 

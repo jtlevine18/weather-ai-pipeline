@@ -600,33 +600,33 @@ class WeatherPipeline:
 
         try:
             raw       = await self.step_ingest();    steps_ok += 1
-        except Exception as e:
-            log.error("Step 1 failed: %s", e); steps_fail += 1; raw = []
+        except Exception:
+            log.exception("Step 1 failed"); steps_fail += 1; raw = []
 
         try:
             clean     = await self.step_heal(raw);   steps_ok += 1
-        except Exception as e:
-            log.error("Step 2 failed: %s", e); steps_fail += 1; clean = raw
+        except Exception:
+            log.exception("Step 2 failed"); steps_fail += 1; clean = raw
 
         try:
             forecasts = await self.step_forecast();  steps_ok += 1
-        except Exception as e:
-            log.error("Step 3 failed: %s", e); steps_fail += 1; forecasts = []
+        except Exception:
+            log.exception("Step 3 failed"); steps_fail += 1; forecasts = []
 
         try:
             downscaled = await self.step_downscale(forecasts); steps_ok += 1
-        except Exception as e:
-            log.error("Step 4 failed: %s", e); steps_fail += 1; downscaled = forecasts
+        except Exception:
+            log.exception("Step 4 failed"); steps_fail += 1; downscaled = forecasts
 
         try:
             alerts    = await self.step_translate(downscaled); steps_ok += 1
-        except Exception as e:
-            log.error("Step 5 failed: %s", e); steps_fail += 1; alerts = []
+        except Exception:
+            log.exception("Step 5 failed"); steps_fail += 1; alerts = []
 
         try:
             deliveries = await self.step_deliver(alerts); steps_ok += 1
-        except Exception as e:
-            log.error("Step 6 failed: %s", e); steps_fail += 1; deliveries = 0
+        except Exception:
+            log.exception("Step 6 failed"); steps_fail += 1; deliveries = 0
 
         # Aggregate delivery metrics per station
         forecast_sids = {f["station_id"] for f in forecasts}

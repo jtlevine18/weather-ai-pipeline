@@ -19,14 +19,32 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from pydantic import BaseModel
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
-if not SECRET_KEY:
+
+def _resolve_secret_key() -> str:
+    """Resolve JWT secret, refusing to start in production without one.
+
+    Production is detected via ENV=production (case-insensitive). In any
+    non-production environment an explicit dev fallback is used and a
+    warning is emitted, so local development still works without setup.
+    """
+    secret = os.getenv("JWT_SECRET_KEY", "")
+    env = os.getenv("ENV", "").lower()
+    if secret:
+        return secret
+    if env == "production":
+        raise RuntimeError(
+            "JWT_SECRET_KEY must be set when ENV=production. "
+            "Refusing to start with an insecure default."
+        )
     warnings.warn(
         "JWT_SECRET_KEY not set — using insecure default. "
         "Set JWT_SECRET_KEY in .env for production.",
         stacklevel=2,
     )
-    SECRET_KEY = "dev-secret-DO-NOT-USE-IN-PRODUCTION"
+    return "dev-secret-DO-NOT-USE-IN-PRODUCTION"
+
+
+SECRET_KEY = _resolve_secret_key()
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
