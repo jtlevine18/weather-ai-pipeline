@@ -59,7 +59,8 @@ jobs:
       - name: Scan for hardcoded secrets
         run: |
           ! grep -rn "sk-ant-api\|hf_[A-Za-z0-9]\{20\}\|gho_[A-Za-z0-9]\{20\}" \
-            --include="*.py" --include="*.toml" --include="*.yml" --include="*.yaml" . || \
+            --include="*.py" --include="*.toml" --include="*.yml" --include="*.yaml" \
+            --exclude-dir=.github . || \
             (echo "ERROR: Possible hardcoded secrets found" && exit 1)
 
       - name: Audit dependencies
