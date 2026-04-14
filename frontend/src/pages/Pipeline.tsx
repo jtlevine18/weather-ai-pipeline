@@ -108,199 +108,139 @@ function EvalMetricsTab() {
     )
   }
 
+  const h = evals.healing as any
+  const f = evals.forecast as any
+  const fp = evals.farmer_profiles as any
+  const del = evals.delivery as any
+  const adv = evals.advisories as any
+
   return (
     <div className="space-y-6">
-      {/* Healing */}
-      {evals.healing && (() => {
-        const h = evals.healing
-        const bd = h.binary_detection || {}
-        const pft = h.per_fault_type || {}
-        return (
-          <div className="space-y-3">
-            <div className="section-header">Cleaning detection</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <MetricCard label="Precision" value={bd.precision != null ? `${(bd.precision * 100).toFixed(0)}%` : '--'} />
-              <MetricCard label="Recall" value={bd.recall != null ? `${(bd.recall * 100).toFixed(0)}%` : '--'} />
-              <MetricCard label="F1" value={bd.f1 != null ? `${(bd.f1 * 100).toFixed(0)}%` : '--'} />
-              <MetricCard label="Total Readings" value={h.total_readings ?? '--'} />
+      {h && (
+        <div className="space-y-3">
+          <div className="section-header">Healing activity</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <MetricCard label="Total readings" value={h.total_readings ?? '—'} />
+            <MetricCard
+              label="Assessments"
+              value={Object.keys(h.assessment_distribution ?? {}).length || '—'}
+            />
+            <MetricCard
+              label="Tools used"
+              value={Object.keys(h.tool_usage ?? {}).length || '—'}
+            />
+          </div>
+          {h.assessment_distribution && Object.keys(h.assessment_distribution).length > 0 && (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Assessment</th>
+                    <th>Count</th>
+                    <th>Avg quality</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(h.assessment_distribution).map(([assessment, m]: [string, any]) => (
+                    <tr key={assessment}>
+                      <td style={{ fontWeight: 500 }}>{assessment}</td>
+                      <td>{m.count ?? 0}</td>
+                      <td>{m.avg_quality != null ? m.avg_quality.toFixed(2) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            {Object.keys(pft).length > 0 && (
-              <div className="table-container">
-                <table>
-                  <thead><tr><th>Fault Type</th><th>Count</th><th>Detection Rate</th><th>Imputation MAE</th></tr></thead>
-                  <tbody>
-                    {Object.entries(pft).map(([ft, m]: [string, any]) => (
-                      <tr key={ft}>
-                        <td style={{ fontWeight: 500 }}>{ft}</td>
-                        <td>{m.count ?? 0}</td>
-                        <td>{m.accuracy != null ? `${(m.accuracy * 100).toFixed(0)}%` : 'N/A'}</td>
-                        <td>{m.imputation_mae != null ? m.imputation_mae.toFixed(2) : '---'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )
-      })()}
+          )}
+        </div>
+      )}
 
-      {/* Forecast */}
-      {evals.forecast && (() => {
-        const f = evals.forecast
-        const temp = f.overall?.temperature || {}
-        const byModel = f.by_model || {}
-        return (
-          <div className="space-y-3">
-            <div className="section-header">Forecast Accuracy</div>
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <MetricCard label="Temp MAE" value={temp.mae != null ? `${temp.mae.toFixed(2)} C` : '---'} />
-              <MetricCard label="Temp RMSE" value={temp.rmse != null ? `${temp.rmse.toFixed(2)} C` : '---'} />
-              <MetricCard label="Paired Records" value={f.total_pairs ?? 0} />
+      {f && (
+        <div className="space-y-3">
+          <div className="section-header">Forecast accuracy</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <MetricCard
+              label="Temp MAE"
+              value={f.temperature_mae != null ? `${f.temperature_mae.toFixed(2)} °C` : '—'}
+            />
+            <MetricCard
+              label="Temp RMSE"
+              value={f.temperature_rmse != null ? `${f.temperature_rmse.toFixed(2)} °C` : '—'}
+            />
+            <MetricCard label="Paired records" value={f.total_pairs ?? '—'} />
+          </div>
+          {f.by_model && Object.keys(f.by_model).length > 0 && (
+            <div className="table-container">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Model</th>
+                    <th>N</th>
+                    <th>MAE (°C)</th>
+                    <th>RMSE (°C)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Object.entries(f.by_model).map(([mt, m]: [string, any]) => (
+                    <tr key={mt}>
+                      <td style={{ fontWeight: 500 }}>{mt}</td>
+                      <td>{m.count ?? 0}</td>
+                      <td>{m.mae != null ? m.mae.toFixed(2) : '—'}</td>
+                      <td>{m.rmse != null ? m.rmse.toFixed(2) : '—'}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
-            {Object.keys(byModel).length > 0 && (
-              <div className="table-container">
-                <table>
-                  <thead><tr><th>Model</th><th>N</th><th>MAE (C)</th><th>RMSE (C)</th><th>Bias (C)</th></tr></thead>
-                  <tbody>
-                    {Object.entries(byModel).map(([mt, m]: [string, any]) => (
-                      <tr key={mt}>
-                        <td style={{ fontWeight: 500 }}>{mt}</td>
-                        <td>{m.n ?? 0}</td>
-                        <td>{m.mae != null ? m.mae.toFixed(2) : '---'}</td>
-                        <td>{m.rmse != null ? m.rmse.toFixed(2) : '---'}</td>
-                        <td>{m.bias != null ? (m.bias >= 0 ? '+' : '') + m.bias.toFixed(2) : '---'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        )
-      })()}
+          )}
+        </div>
+      )}
 
-      {/* RAG */}
-      {evals.rag && (() => {
-        const byMode = evals.rag.by_mode || {}
-        return (
-          <div className="space-y-3">
-            <div className="section-header">RAG Retrieval Quality</div>
-            {Object.keys(byMode).length > 0 && (
-              <div className="table-container">
-                <table>
-                  <thead><tr><th>Mode</th><th>Avg Precision@5</th><th>Avg Recall</th><th>Cases</th></tr></thead>
-                  <tbody>
-                    {Object.entries(byMode).map(([mode, m]: [string, any]) => (
-                      <tr key={mode}>
-                        <td style={{ fontWeight: 500 }}>{mode}</td>
-                        <td>{(m.avg_precision ?? 0).toFixed(2)}</td>
-                        <td>{(m.avg_recall ?? 0).toFixed(2)}</td>
-                        <td>{m.n_cases ?? 0}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+      {fp && (
+        <div className="space-y-3">
+          <div className="section-header">Farmer profile coverage</div>
+          <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+            <MetricCard label="Stations covered" value={fp.stations_covered ?? '—'} />
+            <MetricCard label="Total stations" value={fp.total_stations ?? '—'} />
+            <MetricCard
+              label="Coverage"
+              value={
+                fp.stations_covered != null && fp.total_stations
+                  ? `${Math.round((fp.stations_covered / fp.total_stations) * 100)}%`
+                  : '—'
+              }
+            />
           </div>
-        )
-      })()}
+        </div>
+      )}
 
-      {/* Advisory */}
-      {evals.advisory && (() => {
-        const byProv = evals.advisory.by_provider || {}
-        return (
-          <div className="space-y-3">
-            <div className="section-header">Advisory Quality</div>
-            {Object.keys(byProv).length > 0 && (
-              <div className="table-container">
-                <table>
-                  <thead><tr><th>Provider</th><th>Accuracy</th><th>Actionability</th><th>Safety</th><th>Cultural</th></tr></thead>
-                  <tbody>
-                    {Object.entries(byProv).map(([prov, m]: [string, any]) => (
-                      <tr key={prov}>
-                        <td style={{ fontWeight: 500 }}>{prov}</td>
-                        <td>{(m.avg_accuracy ?? 0).toFixed(1)}/5</td>
-                        <td>{(m.avg_actionability ?? 0).toFixed(1)}/5</td>
-                        <td>{m.avg_safety != null ? (m.avg_safety >= 0 ? '+' : '') + m.avg_safety.toFixed(1) : '--'}</td>
-                        <td>{(m.avg_cultural ?? 0).toFixed(1)}/5</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+      {del && (
+        <div className="space-y-3">
+          <div className="section-header">Delivery</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <MetricCard label="Total" value={del.total ?? '—'} />
+            {Object.entries(del.by_status ?? {}).map(([status, count]) => (
+              <MetricCard key={status} label={status} value={count as number} />
+            ))}
           </div>
-        )
-      })()}
+        </div>
+      )}
 
-      {/* Translation */}
-      {evals.translation && (() => {
-        const t = evals.translation
-        const byLang = t.by_language || {}
-        return (
-          <div className="space-y-3">
-            <div className="section-header">Translation Quality</div>
-            <div className="grid grid-cols-2 gap-4">
-              <MetricCard label="Semantic Similarity" value={t.avg_similarity != null ? `${t.avg_similarity.toFixed(1)}/5` : '--'} />
-              <MetricCard label="Ag Term Preservation" value={t.avg_ag_preservation != null ? `${(t.avg_ag_preservation * 100).toFixed(0)}%` : '--'} />
-            </div>
-            {Object.keys(byLang).length > 0 && (
-              <div className="table-container">
-                <table>
-                  <thead><tr><th>Language</th><th>N</th><th>Similarity</th><th>Ag Preservation</th></tr></thead>
-                  <tbody>
-                    {Object.entries(byLang).map(([lang, m]: [string, any]) => (
-                      <tr key={lang}>
-                                <td style={{ fontWeight: 500 }}>{languageName(lang)}</td>
-                        <td>{m.n ?? 0}</td>
-                        <td>{(m.avg_similarity ?? 0).toFixed(1)}/5</td>
-                        <td>{m.avg_ag_preservation != null ? `${(m.avg_ag_preservation * 100).toFixed(0)}%` : '--'}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
+      {adv && (
+        <div className="space-y-3">
+          <div className="section-header">Advisories</div>
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <MetricCard label="Total" value={adv.total ?? '—'} />
+            {Object.entries(adv.by_language ?? {}).map(([lang, count]) => (
+              <MetricCard key={lang} label={languageName(lang)} value={count as number} />
+            ))}
           </div>
-        )
-      })()}
-
-      {/* DPI */}
-      {evals.dpi && (() => {
-        const d = evals.dpi
-        return (
-          <div className="space-y-3">
-            <div className="section-header">DPI Profile Quality</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <MetricCard label="Farmers" value={d.total_farmers ?? 0} />
-              <MetricCard label="Station Coverage" value={d.coverage?.coverage_rate != null ? `${(d.coverage.coverage_rate * 100).toFixed(0)}%` : '--'} />
-              <MetricCard label="Completeness" value={d.completeness?.completeness_rate != null ? `${(d.completeness.completeness_rate * 100).toFixed(0)}%` : '--'} />
-              <MetricCard label="Consistency" value={d.consistency?.rate != null ? `${(d.consistency.rate * 100).toFixed(0)}%` : '--'} />
-            </div>
-          </div>
-        )
-      })()}
-
-      {/* Conversation */}
-      {evals.conversation && (() => {
-        const c = evals.conversation
-        return (
-          <div className="space-y-3">
-            <div className="section-header">Conversation Engine</div>
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              <MetricCard label="State Machine" value={c.state_machine?.accuracy != null ? `${(c.state_machine.accuracy * 100).toFixed(0)}%` : '--'} />
-              <MetricCard label="Language Detection" value={c.language_detection?.accuracy != null ? `${(c.language_detection.accuracy * 100).toFixed(0)}%` : '--'} />
-              <MetricCard label="Escalation Detection" value={c.escalation_detection?.accuracy != null ? `${(c.escalation_detection.accuracy * 100).toFixed(0)}%` : '--'} />
-              <MetricCard label="Overall" value={c.overall?.overall_rate != null ? `${(c.overall.overall_rate * 100).toFixed(0)}%` : '--'} />
-            </div>
-          </div>
-        )
-      })()}
+        </div>
+      )}
 
       <p style={{ fontSize: '0.78rem', color: '#888', fontStyle: 'italic' }}>
-        Run eval scripts from the project root to update these metrics.
+        Metrics reflect what the pipeline has written so far. Run the eval scripts for
+        deeper model-level analysis (precision/recall, RAG retrieval, translation quality).
       </p>
     </div>
   )
@@ -913,6 +853,31 @@ export default function Pipeline() {
                     {runList.map((r, i) => {
                       const s = r.status || '?'
                       const color = STATUS_COLOR[s] || '#888'
+                      const duration =
+                        r.duration_seconds ??
+                        (r.started_at && r.ended_at
+                          ? (new Date(r.ended_at).getTime() -
+                              new Date(r.started_at).getTime()) /
+                            1000
+                          : null)
+                      let summaryData: Record<string, any> = {}
+                      if (typeof r.summary === 'string') {
+                        try {
+                          summaryData = JSON.parse(r.summary)
+                        } catch {
+                          // summary may be free-text; leave empty
+                        }
+                      }
+                      const stationsProcessed =
+                        r.stations_processed ??
+                        summaryData.stations_processed ??
+                        summaryData.stations
+                      const recordsIngested =
+                        r.records_ingested ??
+                        summaryData.records_ingested ??
+                        summaryData.clean_rows ??
+                        summaryData.raw_rows ??
+                        summaryData.records
                       return (
                         <tr key={r.id ?? i}>
                           <td>
@@ -925,10 +890,10 @@ export default function Pipeline() {
                           </td>
                           <td>{formatTime(r.started_at)}</td>
                           <td className="num">
-                            {r.duration_seconds != null ? `${r.duration_seconds.toFixed(1)}s` : '—'}
+                            {duration != null ? `${duration.toFixed(1)}s` : '—'}
                           </td>
-                          <td className="num">{r.stations_processed ?? '—'}</td>
-                          <td className="num">{r.records_ingested ?? '—'}</td>
+                          <td className="num">{stationsProcessed ?? '—'}</td>
+                          <td className="num">{recordsIngested ?? '—'}</td>
                           <td style={{ color: '#606373', maxWidth: '200px' }} className="truncate">
                             {(r.error_detail || '').slice(0, 80) || '—'}
                           </td>

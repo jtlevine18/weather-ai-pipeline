@@ -1,4 +1,5 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node'
+import { neon } from '@neondatabase/serverless'
 
 const STATIONS = [
   { id: "KL_TVM", name: "Thiruvananthapuram", lat: 8.4833, lon: 76.95, state: "Kerala", altitude_m: 60 },
@@ -23,6 +24,54 @@ const STATIONS = [
   { id: "TN_NGP", name: "Nagappattinam", lat: 10.7667, lon: 79.85, state: "Tamil Nadu", altitude_m: 2 },
 ]
 
-export default function handler(_req: VercelRequest, res: VercelResponse) {
-  return res.json(STATIONS)
+const STATION_MAP: Record<string, (typeof STATIONS)[number]> = Object.fromEntries(
+  STATIONS.map((s) => [s.id, s])
+)
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  const id = typeof req.query.id === 'string' ? req.query.id : undefined
+
+  if (!id) {
+    return res.json(STATIONS)
+  }
+
+  const station = STATION_MAP[id]
+  if (!station) {
+    return res.status(404).json({ error: `Station ${id} not found` })
+  }
+
+  const base = {
+    station_id: id,
+    station_name: station.name,
+    state: station.state,
+    latitude: station.lat,
+    longitude: station.lon,
+  }
+
+  try {
+    const sql = neon(process.env.DATABASE_URL!)
+    const rows = (await sql`
+      SELECT temperature, humidity, wind_speed, rainfall, quality_score, source, ts
+      FROM clean_telemetry
+      WHERE station_id = ${id}
+      ORDER BY ts DESC
+      LIMIT 1
+    `) as Array<Record<string, any>>
+
+    const latest = rows[0]
+    if (!latest) return res.json(base)
+
+    return res.json({
+      ...base,
+      temperature: latest.temperature ?? undefined,
+      humidity: latest.humidity ?? undefined,
+      rainfall_mm: latest.rainfall ?? undefined,
+      wind_speed: latest.wind_speed ?? undefined,
+      quality_score: latest.quality_score ?? undefined,
+      observed_at: latest.ts ?? undefined,
+      source: latest.source ?? undefined,
+    })
+  } catch {
+    return res.json(base)
+  }
 }

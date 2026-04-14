@@ -273,7 +273,7 @@ export function useAlerts(limit = 50) {
 export function useStationLatest(stationId: string) {
   return useQuery<StationLatest>({
     queryKey: ['station-latest', stationId],
-    queryFn: () => apiFetch<StationLatest>(`/api/station/${encodeURIComponent(stationId)}/latest`),
+    queryFn: () => apiFetch<StationLatest>(`/api/stations?id=${encodeURIComponent(stationId)}`),
     enabled: !!stationId,
   })
 }
@@ -405,7 +405,7 @@ export function useFarmers(opts?: { enabled?: boolean }) {
 export function useFarmerDetail(phone: string) {
   return useQuery<FarmerDetail>({
     queryKey: ['farmer-detail', phone],
-    queryFn: () => apiFetch<FarmerDetail>(`/api/farmers/${encodeURIComponent(phone)}`),
+    queryFn: () => apiFetch<FarmerDetail>(`/api/farmers?phone=${encodeURIComponent(phone)}`),
     enabled: !!phone,
   })
 }
