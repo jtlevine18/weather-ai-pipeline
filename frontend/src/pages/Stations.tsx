@@ -15,7 +15,6 @@ import type {
 } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
-import { PageContext } from '../components/PageContext'
 import { TabPanel } from '../components/TabPanel'
 import { REGION } from '../regionConfig'
 
@@ -28,24 +27,24 @@ const STATES = ['All States', ...REGION.states]
 const SOURCE_STYLE: Record<string, [string, string]> = REGION.sourceLabels
 
 const HEAL_STYLE: Record<string, [string, string]> = {
-  cross_validated: ['Validated', '#2a9d8f'],
-  null_filled: ['Filled', '#d4a019'],
-  ai_validated: ['AI OK', '#2a9d8f'],
-  ai_corrected: ['AI Fixed', '#4361ee'],
-  ai_filled: ['AI Filled', '#d4a019'],
-  ai_flagged: ['Needs Review', '#e76f51'],
-  anomaly_flagged: ['Unusual Reading', '#e63946'],
-  typo_corrected: ['Typo Fix', '#4361ee'],
-  imputed_from_reference: ['Filled from Satellite', '#e76f51'],
-  none: ['Original', '#888'],
+  cross_validated: ['Validated', '#606373'],
+  null_filled: ['Filled', '#606373'],
+  ai_validated: ['AI OK', '#606373'],
+  ai_corrected: ['AI fixed', '#2d5b7d'],
+  ai_filled: ['AI filled', '#2d5b7d'],
+  ai_flagged: ['Needs review', '#c71f48'],
+  anomaly_flagged: ['Anomaly', '#c71f48'],
+  typo_corrected: ['Typo fix', '#2d5b7d'],
+  imputed_from_reference: ['From satellite', '#2d5b7d'],
+  none: ['Original', '#8d909e'],
 }
 
 const ASSESSMENT_COLOR: Record<string, string> = {
-  good: '#2a9d8f',
-  corrected: '#4361ee',
-  filled: '#d4a019',
-  flagged: '#e76f51',
-  dropped: '#e63946',
+  good: '#606373',
+  corrected: '#2d5b7d',
+  filled: '#2d5b7d',
+  flagged: '#c71f48',
+  dropped: '#c71f48',
 }
 
 // ---------------------------------------------------------------------------
@@ -58,31 +57,29 @@ function fmtVal(v: number | undefined | null, unit = '', decimals = 1): string {
 }
 
 function tempColor(t: number | undefined | null): string {
-  if (t === undefined || t === null) return '#1a1a1a'
-  if (t >= 40) return '#C62828'
-  if (t >= 36) return '#E65100'
-  if (t <= 15) return '#0277BD'
-  return '#1a1a1a'
+  if (t === undefined || t === null) return '#1b1e2d'
+  if (t >= 36) return '#2d5b7d'
+  if (t <= 15) return '#606373'
+  return '#1b1e2d'
 }
 
 function rainColor(r: number | undefined | null): string {
-  if (r === undefined || r === null) return '#1a1a1a'
-  if (r >= 20) return '#1565C0'
-  if (r >= 5) return '#1976D2'
-  return '#1a1a1a'
+  if (r === undefined || r === null) return '#1b1e2d'
+  if (r >= 5) return '#2d5b7d'
+  return '#1b1e2d'
 }
 
 function qualityColor(pct: number): string {
-  if (pct >= 85) return '#2a9d8f'
-  if (pct >= 70) return '#d4a019'
-  return '#e63946'
+  if (pct >= 85) return '#606373'
+  if (pct >= 70) return '#2d5b7d'
+  return '#c71f48'
 }
 
 function healBarColor(action: string): string {
-  if (action.includes('validated')) return '#2a9d8f'
-  if (action.includes('filled')) return '#d4a019'
-  if (action.includes('flagged') || action.includes('anomaly')) return '#e63946'
-  return '#888'
+  if (action.includes('validated')) return '#606373'
+  if (action.includes('filled')) return '#2d5b7d'
+  if (action.includes('flagged') || action.includes('anomaly')) return '#c71f48'
+  return '#8d909e'
 }
 
 // ---------------------------------------------------------------------------
@@ -90,14 +87,13 @@ function healBarColor(action: string): string {
 // ---------------------------------------------------------------------------
 
 function SourceBadge({ source }: { source: string }) {
-  const [label, color] = SOURCE_STYLE[source] ?? [source || '--', '#888']
+  const [label, color] = SOURCE_STYLE[source] ?? [source || '--', '#606373']
   return (
     <span
-      className="inline-block rounded px-2 py-0.5 text-xs font-semibold"
       style={{
-        background: `${color}18`,
+        fontSize: '13px',
         color,
-        border: `1px solid ${color}44`,
+        fontFamily: '"Space Grotesk", system-ui, sans-serif',
       }}
     >
       {label}
@@ -108,25 +104,16 @@ function SourceBadge({ source }: { source: string }) {
 function HealBadges({ action }: { action: string }) {
   if (!action || action === 'none') {
     return (
-      <span
-        className="inline-block rounded px-1.5 py-0.5 text-[0.72rem] font-semibold"
-        style={{ background: '#88818', color: '#888', border: '1px solid #88844' }}
-      >
-        Original
-      </span>
+      <span style={{ fontSize: '13px', color: '#8d909e' }}>Original</span>
     )
   }
   const parts = action.split(',').map((a) => a.trim()).filter(Boolean)
   return (
-    <span className="inline-flex flex-wrap gap-1">
+    <span style={{ display: 'inline-flex', flexWrap: 'wrap', gap: '10px' }}>
       {parts.map((p) => {
-        const [l, c] = HEAL_STYLE[p] ?? [p, '#888']
+        const [l, c] = HEAL_STYLE[p] ?? [p, '#606373']
         return (
-          <span
-            key={p}
-            className="inline-block rounded px-1.5 py-0.5 text-[0.72rem] font-semibold"
-            style={{ background: `${c}18`, color: c, border: `1px solid ${c}44` }}
-          >
+          <span key={p} style={{ fontSize: '13px', color: c }}>
             {l}
           </span>
         )
@@ -137,38 +124,69 @@ function HealBadges({ action }: { action: string }) {
 
 function QualityBar({ score }: { score: number | undefined | null }) {
   if (score === undefined || score === null || Number.isNaN(score)) {
-    return <span className="text-warm-muted">--</span>
+    return <span style={{ color: '#8d909e' }}>—</span>
   }
   const pct = Math.round(score * 100)
   const color = qualityColor(pct)
   return (
-    <span className="inline-flex items-center gap-1.5">
-      <span className="inline-block w-[60px] h-2 rounded bg-warm-border overflow-hidden">
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '10px',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      <span
+        style={{
+          display: 'inline-block',
+          width: '60px',
+          height: '2px',
+          background: '#e8e5e1',
+          overflow: 'hidden',
+        }}
+      >
         <span
-          className="block h-full rounded"
-          style={{ width: `${pct}%`, background: color }}
+          style={{
+            display: 'block',
+            height: '100%',
+            width: `${pct}%`,
+            background: color,
+          }}
         />
       </span>
-      <span className="text-[0.82rem] font-semibold" style={{ color }}>
-        {pct}%
-      </span>
+      <span style={{ fontSize: '13px', color }}>{pct}%</span>
     </span>
   )
 }
 
 function AssessmentBadge({ type, count }: { type: string; count: number }) {
-  const color = ASSESSMENT_COLOR[type] ?? '#888'
+  const color = ASSESSMENT_COLOR[type] ?? '#606373'
   return (
     <div
-      className="rounded-md px-3.5 py-2 text-center min-w-[90px]"
-      style={{ background: `${color}15`, border: `1px solid ${color}40` }}
+      style={{
+        minWidth: '110px',
+        padding: '16px 0',
+        borderTop: '1px solid #e8e5e1',
+      }}
     >
-      <div className="text-2xl font-bold" style={{ color }}>
+      <div
+        style={{
+          fontFamily: '"Source Serif 4", Georgia, serif',
+          fontSize: '28px',
+          color: '#1b1e2d',
+          fontVariantNumeric: 'tabular-nums',
+        }}
+      >
         {count}
       </div>
       <div
-        className="text-[0.72rem] uppercase tracking-[1px]"
-        style={{ color: `${color}99` }}
+        style={{
+          fontSize: '12px',
+          color,
+          marginTop: '4px',
+          textTransform: 'lowercase',
+        }}
       >
         {type}
       </div>
@@ -194,7 +212,7 @@ function StationReadingsTab({ stations, rawData, cleanData }: ReadingsTabProps) 
   const stationNameMap = useMemo(() => {
     const m: Record<string, string> = {}
     stations.forEach((s) => {
-      m[s.station_id] = s.name
+      m[s.id] = s.name
     })
     return m
   }, [stations])
@@ -202,7 +220,7 @@ function StationReadingsTab({ stations, rawData, cleanData }: ReadingsTabProps) 
   const stationStateMap = useMemo(() => {
     const m: Record<string, string> = {}
     stations.forEach((s) => {
-      m[s.station_id] = s.state
+      m[s.id] = s.state
     })
     return m
   }, [stations])
@@ -256,7 +274,7 @@ function StationReadingsTab({ stations, rawData, cleanData }: ReadingsTabProps) 
   if (df.length === 0) {
     return (
       <div className="card card-body text-center py-12">
-        <p className="text-warm-muted text-sm">
+        <p className="text-mute text-sm">
           No telemetry data yet. Run the pipeline first.
         </p>
       </div>
@@ -265,53 +283,39 @@ function StationReadingsTab({ stations, rawData, cleanData }: ReadingsTabProps) 
 
   const cols = isRaw
     ? ['Station', 'Temp', 'Humidity', 'Rainfall', 'Wind', 'Source', 'Time']
-    : ['Station', 'Temp', 'Humidity', 'Rainfall', 'Wind', 'Quality', 'Healing', 'Time']
+    : ['Station', 'Temp', 'Humidity', 'Rainfall', 'Wind', 'Quality', 'Cleaning', 'Time']
 
   return (
     <div className="space-y-4">
       {/* Controls */}
-      <div className="flex flex-wrap items-center gap-4">
-        {/* View toggle */}
-        <div className="flex rounded-lg border border-warm-border overflow-hidden">
-          <button
-            onClick={() => setIsRaw(false)}
-            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-              !isRaw
-                ? 'bg-gold text-white'
-                : 'bg-white text-warm-body hover:bg-warm-header-bg'
-            }`}
-          >
-            Clean (healed)
-          </button>
-          <button
-            onClick={() => setIsRaw(true)}
-            className={`px-3 py-1.5 text-sm font-medium transition-colors ${
-              isRaw
-                ? 'bg-gold text-white'
-                : 'bg-white text-warm-body hover:bg-warm-header-bg'
-            }`}
-          >
-            Raw (original)
-          </button>
-        </div>
-
-        {/* State filter */}
-        <select
-          value={stateFilter}
-          onChange={(e) => setStateFilter(e.target.value)}
-          className="input w-auto min-w-[160px]"
+      <div className="flex flex-wrap items-center gap-3">
+        <button
+          onClick={() => setIsRaw(false)}
+          className={`chip ${!isRaw ? 'active' : ''}`}
         >
-          {STATES.map((s) => (
-            <option key={s} value={s}>
-              {s}
-            </option>
-          ))}
-        </select>
+          Clean (healed)
+        </button>
+        <button
+          onClick={() => setIsRaw(true)}
+          className={`chip ${isRaw ? 'active' : ''}`}
+        >
+          Raw (original)
+        </button>
+        <span style={{ width: '1px', height: '20px', background: '#e8e5e1', margin: '0 8px' }} />
+        {STATES.map((s) => (
+          <button
+            key={s}
+            className={`chip ${stateFilter === s ? 'active' : ''}`}
+            onClick={() => setStateFilter(s)}
+          >
+            {s}
+          </button>
+        ))}
       </div>
 
       {filtered.length === 0 ? (
         <div className="card card-body text-center py-8">
-          <p className="text-warm-muted text-sm">No readings match the current filters.</p>
+          <p className="text-mute text-sm">No readings match the current filters.</p>
         </div>
       ) : (
         <>
@@ -331,14 +335,14 @@ function StationReadingsTab({ stations, rawData, cleanData }: ReadingsTabProps) 
                   </thead>
                   <tbody>
                     {rows.map((row) => {
-                      const ts = (row.observed_at || '').slice(0, 16)
+                      const ts = (row.ts || '').slice(0, 16)
                       return (
                         <tr key={row.station_id}>
                           <td>
-                            <div className="font-semibold text-[#1a1a1a]">
+                            <div className="font-semibold text-[#1b1e2d]">
                               {row.station_name}
                             </div>
-                            <div className="text-[0.72rem] text-warm-muted-light font-normal">
+                            <div className="text-[0.72rem] text-mute font-normal">
                               {row.station_id}
                             </div>
                           </td>
@@ -353,9 +357,9 @@ function StationReadingsTab({ stations, rawData, cleanData }: ReadingsTabProps) 
                           </td>
                           <td
                             className="font-semibold tabular-nums"
-                            style={{ color: rainColor(row.rainfall_mm) }}
+                            style={{ color: rainColor(row.rainfall) }}
                           >
-                            {fmtVal(row.rainfall_mm, ' mm')}
+                            {fmtVal(row.rainfall, ' mm')}
                           </td>
                           <td className="tabular-nums">
                             {fmtVal(row.wind_speed, ' m/s')}
@@ -374,7 +378,7 @@ function StationReadingsTab({ stations, rawData, cleanData }: ReadingsTabProps) 
                               </td>
                             </>
                           )}
-                          <td className="text-warm-muted text-[0.82rem]">{ts}</td>
+                          <td className="text-mute text-[0.82rem]">{ts}</td>
                         </tr>
                       )
                     })}
@@ -388,45 +392,45 @@ function StationReadingsTab({ stations, rawData, cleanData }: ReadingsTabProps) 
           <div className="card overflow-hidden mt-4">
             <button
               onClick={() => setShowAll(!showAll)}
-              className="w-full flex items-center gap-2 px-5 py-3 text-sm font-medium text-warm-body hover:bg-warm-header-bg transition-colors"
+              className="w-full flex items-center gap-2 px-5 py-3 text-sm font-medium text-slate hover:bg-cream transition-colors"
             >
               {showAll ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
               View all readings ({filtered.length})
             </button>
             {showAll && (
-              <div className="max-h-[400px] overflow-auto border-t border-warm-border">
+              <div className="max-h-[400px] overflow-auto border-t border-hairline">
                 <table className="w-full text-sm text-left font-sans">
-                  <thead className="bg-warm-header-bg border-b border-warm-border sticky top-0">
+                  <thead className="bg-cream border-b border-hairline sticky top-0">
                     <tr>
-                      <th className="px-3 py-2 text-xs uppercase text-warm-muted tracking-label font-semibold">
+                      <th className="px-3 py-2 text-xs uppercase text-mute tracking-wide font-semibold">
                         Station
                       </th>
-                      <th className="px-3 py-2 text-xs uppercase text-warm-muted tracking-label font-semibold">
+                      <th className="px-3 py-2 text-xs uppercase text-mute tracking-wide font-semibold">
                         Time
                       </th>
-                      <th className="px-3 py-2 text-xs uppercase text-warm-muted tracking-label font-semibold">
+                      <th className="px-3 py-2 text-xs uppercase text-mute tracking-wide font-semibold">
                         Temp
                       </th>
-                      <th className="px-3 py-2 text-xs uppercase text-warm-muted tracking-label font-semibold">
+                      <th className="px-3 py-2 text-xs uppercase text-mute tracking-wide font-semibold">
                         Humidity
                       </th>
-                      <th className="px-3 py-2 text-xs uppercase text-warm-muted tracking-label font-semibold">
+                      <th className="px-3 py-2 text-xs uppercase text-mute tracking-wide font-semibold">
                         Wind
                       </th>
-                      <th className="px-3 py-2 text-xs uppercase text-warm-muted tracking-label font-semibold">
+                      <th className="px-3 py-2 text-xs uppercase text-mute tracking-wide font-semibold">
                         Rainfall
                       </th>
                       {isRaw ? (
-                        <th className="px-3 py-2 text-xs uppercase text-warm-muted tracking-label font-semibold">
+                        <th className="px-3 py-2 text-xs uppercase text-mute tracking-wide font-semibold">
                           Source
                         </th>
                       ) : (
                         <>
-                          <th className="px-3 py-2 text-xs uppercase text-warm-muted tracking-label font-semibold">
+                          <th className="px-3 py-2 text-xs uppercase text-mute tracking-wide font-semibold">
                             Quality
                           </th>
-                          <th className="px-3 py-2 text-xs uppercase text-warm-muted tracking-label font-semibold">
-                            Healing
+                          <th className="px-3 py-2 text-xs uppercase text-mute tracking-wide font-semibold">
+                            Cleaning
                           </th>
                         </>
                       )}
@@ -434,15 +438,15 @@ function StationReadingsTab({ stations, rawData, cleanData }: ReadingsTabProps) 
                   </thead>
                   <tbody>
                     {filtered.map((r, i) => (
-                      <tr key={i} className="border-b border-warm-border/50 hover:bg-cream/60">
-                        <td className="px-3 py-2 text-[#1a1a1a]">{r.station_id}</td>
-                        <td className="px-3 py-2 text-warm-muted text-xs">
-                          {(r.observed_at || '').slice(0, 16)}
+                      <tr key={i} className="border-b border-hairline/60 hover:bg-cream/60">
+                        <td className="px-3 py-2 text-[#1b1e2d]">{r.station_id}</td>
+                        <td className="px-3 py-2 text-mute text-xs">
+                          {(r.ts || '').slice(0, 16)}
                         </td>
                         <td className="px-3 py-2 tabular-nums">{fmtVal(r.temperature)}</td>
                         <td className="px-3 py-2 tabular-nums">{fmtVal(r.humidity)}</td>
                         <td className="px-3 py-2 tabular-nums">{fmtVal(r.wind_speed)}</td>
-                        <td className="px-3 py-2 tabular-nums">{fmtVal(r.rainfall_mm)}</td>
+                        <td className="px-3 py-2 tabular-nums">{fmtVal(r.rainfall)}</td>
                         {isRaw ? (
                           <td className="px-3 py-2">
                             <SourceBadge source={r.source || ''} />
@@ -469,22 +473,21 @@ function StationReadingsTab({ stations, rawData, cleanData }: ReadingsTabProps) 
 
       {/* Data Sources info card */}
       <div className="card card-body mt-4">
-        <div className="font-semibold text-[#1a1a1a] mb-2">Data Sources</div>
-        <div className="text-[0.85rem] text-warm-body leading-relaxed space-y-1">
+        <div className="font-semibold text-[#1b1e2d] mb-2">Data Sources</div>
+        <div className="text-[0.85rem] text-slate leading-relaxed space-y-1">
           <p>
-            <strong className="text-[#1a1a1a]">India Meteorological Department</strong> --
-            Real-time station data scraped from city.imd.gov.in (today's max/min temp,
-            humidity, rainfall)
+            <strong className="text-[#1b1e2d]">India Meteorological Department</strong> —
+            Real-time station readings (today's max and min temperature, humidity, rainfall)
           </p>
           <p>
-            <strong className="text-[#1a1a1a]">IMD Gridded Archive</strong> -- Historical
-            gridded data at 0.25 deg resolution via imdlib (T-1 day lag, temperature + rainfall
-            only)
+            <strong className="text-[#1b1e2d]">IMD historical archive</strong> — Historical
+            data from imdlib, used as backup when the live feed is down (temperature and
+            rainfall, one day behind)
           </p>
           <p>
-            <strong className="text-[#1a1a1a]">Tomorrow.io</strong> -- Used for
-            cross-validation and to fill fields IMD doesn't provide (wind speed, pressure,
-            humidity)
+            <strong className="text-[#1b1e2d]">Tomorrow.io</strong> — Second-opinion data for
+            cross-checking station readings and for fields IMD doesn't report (wind speed,
+            pressure, humidity)
           </p>
         </div>
       </div>
@@ -522,7 +525,7 @@ function HealingTab({ cleanData, healingLog, healingStats, stationNames }: Heali
   if (cleanData.length === 0) {
     return (
       <div className="card card-body text-center py-12">
-        <p className="text-warm-muted text-sm">
+        <p className="text-mute text-sm">
           No telemetry data yet. Run the pipeline first.
         </p>
       </div>
@@ -556,12 +559,11 @@ function HealingTab({ cleanData, healingLog, healingStats, stationNames }: Heali
           className="rounded-lg p-3 text-[0.85rem]"
           style={{
             background: '#fff8e6',
-            border: '1px solid #e0dcd5',
+            border: '1px solid #e8e5e1',
             color: '#8a6d00',
           }}
         >
-          No AI healing data yet. Run the pipeline with an Anthropic API key to enable the
-          Claude healing agent.
+          No AI cleaning results yet. The AI cleaning step runs when the pipeline has an API key configured.
         </div>
       ) : null}
 
@@ -570,11 +572,11 @@ function HealingTab({ cleanData, healingLog, healingStats, stationNames }: Heali
           className="rounded-lg p-3 text-[0.85rem]"
           style={{
             background: '#fff8e6',
-            border: '1px solid #e0dcd5',
+            border: '1px solid #e8e5e1',
             color: '#8a6d00',
           }}
         >
-          Rule-based fallback was used (AI agent unavailable)
+          AI was unavailable — used rule-based cleaning instead.
         </div>
       )}
 
@@ -600,7 +602,7 @@ function HealingTab({ cleanData, healingLog, healingStats, stationNames }: Heali
       {/* Healing actions breakdown */}
       {actionCounts.length > 0 && (
         <>
-          <p className="section-header inline-block mt-4">Healing Actions</p>
+          <p className="section-header inline-block mt-4">Cleaning Actions</p>
           <div className="table-container">
             <table>
               <thead>
@@ -621,7 +623,7 @@ function HealingTab({ cleanData, healingLog, healingStats, stationNames }: Heali
                       <td className="font-semibold tabular-nums">{count}</td>
                       <td>
                         <span className="inline-flex items-center gap-2">
-                          <span className="inline-block w-[120px] h-2 rounded bg-warm-border overflow-hidden">
+                          <span className="inline-block w-[120px] h-2 rounded bg-hairline overflow-hidden">
                             <span
                               className="block h-full rounded"
                               style={{
@@ -630,7 +632,7 @@ function HealingTab({ cleanData, healingLog, healingStats, stationNames }: Heali
                               }}
                             />
                           </span>
-                          <span className="text-[0.82rem] text-warm-body-light">
+                          <span className="text-[0.82rem] text-slate">
                             {pct.toFixed(0)}%
                           </span>
                         </span>
@@ -648,8 +650,8 @@ function HealingTab({ cleanData, healingLog, healingStats, stationNames }: Heali
       {hasAiData && (
         <>
           <p className="section-header inline-block mt-6">Per-Reading Assessments</p>
-          <p className="text-sm text-warm-muted -mt-3">
-            Claude's reasoning for each station reading -- click to expand
+          <p className="text-sm text-mute -mt-3">
+            Reasoning behind each cleaning decision — click to expand.
           </p>
           <div className="space-y-2">
             {healingLog.map((row, idx) => (
@@ -699,34 +701,34 @@ function HealingLogCard({
   }
 
   const assessmentDot: Record<string, string> = {
-    good: 'bg-success',
-    corrected: 'bg-info',
-    filled: 'bg-warning',
+    good: 'bg-slate',
+    corrected: 'bg-slate',
+    filled: 'bg-sienna',
     flagged: 'bg-[#e76f51]',
-    dropped: 'bg-error',
+    dropped: 'bg-crit',
   }
 
   return (
     <div className="card overflow-hidden">
       <button
         onClick={() => setExpanded(!expanded)}
-        className="w-full flex items-center gap-2 px-5 py-3 text-sm font-medium text-left hover:bg-warm-header-bg transition-colors"
+        className="w-full flex items-center gap-2 px-5 py-3 text-sm font-medium text-left hover:bg-cream transition-colors"
       >
         {expanded ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
         <span
-          className={`w-2.5 h-2.5 rounded-full shrink-0 ${assessmentDot[assessment] || 'bg-warm-muted'}`}
+          className={`w-2.5 h-2.5 rounded-full shrink-0 ${assessmentDot[assessment] || 'bg-mute'}`}
         />
-        <span className="text-[#1a1a1a] font-semibold">{sname}</span>
-        <span className="text-warm-muted mx-1">--</span>
+        <span className="text-[#1b1e2d] font-semibold">{sname}</span>
+        <span className="text-mute mx-1">—</span>
         <span style={{ color }} className="font-semibold">
           {assessment}
         </span>
-        <span className="text-warm-muted ml-1">(Q: {quality.toFixed(2)})</span>
+        <span className="text-mute ml-1">(Q: {quality.toFixed(2)})</span>
       </button>
       {expanded && (
-        <div className="px-5 pb-4 border-t border-warm-border space-y-3 pt-3">
+        <div className="px-5 pb-4 border-t border-hairline space-y-3 pt-3">
           {reasoning && (
-            <p className="text-[0.9rem] text-warm-body leading-relaxed">{reasoning}</p>
+            <p className="text-[0.9rem] text-slate leading-relaxed">{reasoning}</p>
           )}
           {Object.keys(corrections).length > 0 && (
             <div className="flex flex-wrap gap-4">
@@ -741,12 +743,12 @@ function HealingLogCard({
                     key={field}
                     className="card card-body !p-2 !px-3"
                   >
-                    <div className="text-[0.72rem] uppercase text-warm-muted tracking-[1px]">
+                    <div className="text-[0.72rem] uppercase text-mute tracking-[1px]">
                       {field}
                     </div>
-                    <span className="text-error line-through">{oldDisp}</span>
-                    <span className="mx-1 text-warm-muted">&rarr;</span>
-                    <span className="text-success font-semibold">{newDisp}</span>
+                    <span className="text-crit line-through">{oldDisp}</span>
+                    <span className="mx-1 text-mute">&rarr;</span>
+                    <span className="text-slate font-semibold">{newDisp}</span>
                   </div>
                 )
               })}
@@ -761,9 +763,9 @@ function HealingLogCard({
                 .map((t) => (
                   <span
                     key={t}
-                    className="inline-block rounded-full px-2.5 py-0.5 text-[0.72rem] text-warm-body-light"
+                    className="inline-block rounded-full px-2.5 py-0.5 text-[0.72rem] text-slate"
                     style={{
-                      background: '#f0ede8',
+                      background: '#f0ece6',
                       border: '1px solid #d0ccc5',
                     }}
                   >
@@ -779,35 +781,35 @@ function HealingLogCard({
 }
 
 const HEAL_LEGEND: [string, string][] = [
-  ['cross_validated', 'Reading matches Tomorrow.io reference within thresholds'],
+  ['cross_validated', 'Reading matched the reference data within expected tolerances'],
   [
     'null_filled',
-    "Missing fields filled from Tomorrow.io (expected -- IMD doesn't provide wind/pressure/humidity)",
+    "Missing fields filled from Tomorrow.io (expected — IMD doesn't provide wind/pressure/humidity)",
   ],
   [
     'ai_validated',
-    'AI agent confirmed reading quality against reference and seasonal norms',
+    'AI confirmed the reading looked right against reference data and seasonal norms',
   ],
   [
     'ai_corrected',
-    'AI agent corrected a value (e.g. decimal typo) with contextual reasoning',
+    'AI corrected a bad value (e.g. a misplaced decimal) with a written explanation',
   ],
-  ['ai_filled', 'AI agent filled missing fields from reference data'],
+  ['ai_filled', 'AI filled missing fields from reference data'],
   [
     'ai_flagged',
-    "AI agent flagged a suspicious reading it couldn't confidently correct",
+    "AI flagged a suspicious reading it couldn't confidently correct",
   ],
   [
     'anomaly_flagged',
-    'Reading diverges beyond acceptable threshold from reference',
+    'Reading diverged too far from reference data to be trusted',
   ],
   [
     'typo_corrected',
-    'Decimal-place error corrected (e.g. 320 deg C to 32.0 deg C)',
+    'Decimal-place error corrected (e.g. 320°C to 32.0°C)',
   ],
   [
     'imputed_from_reference',
-    'Station offline -- entire reading sourced from reference',
+    'Station was offline — the full reading came from reference data',
   ],
 ]
 
@@ -817,24 +819,24 @@ function HealingLegend() {
     <div className="card overflow-hidden">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center gap-2 px-5 py-3 text-sm font-medium text-warm-body hover:bg-warm-header-bg transition-colors"
+        className="w-full flex items-center gap-2 px-5 py-3 text-sm font-medium text-slate hover:bg-cream transition-colors"
       >
         {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
-        Healing Actions Reference
+        What each cleaning action means
       </button>
       {open && (
-        <div className="px-5 pb-4 border-t border-warm-border pt-3 space-y-1.5">
+        <div className="px-5 pb-4 border-t border-hairline pt-3 space-y-1.5">
           {HEAL_LEGEND.map(([action, desc]) => {
             const isAi = action.startsWith('ai_')
             return (
               <div key={action} className="text-[0.85rem]">
                 <code
                   className="px-1.5 py-0.5 rounded text-[0.82rem]"
-                  style={{ background: isAi ? '#e8f4fd' : '#f0ede8' }}
+                  style={{ background: isAi ? '#e8f4fd' : '#f0ece6' }}
                 >
                   {action}
                 </code>{' '}
-                <span className="text-warm-body">-- {desc}</span>
+                <span className="text-slate">— {desc}</span>
               </div>
             )
           })}
@@ -863,7 +865,7 @@ function MapTab({ stations, cleanData }: MapTabProps) {
       }
       m[r.station_id].count++
       m[r.station_id].totalQ += r.quality_score ?? 0
-      const ts = r.observed_at || ''
+      const ts = r.ts || ''
       if (ts > m[r.station_id].lastSeen) {
         m[r.station_id].lastSeen = ts
       }
@@ -890,7 +892,7 @@ function MapTab({ stations, cleanData }: MapTabProps) {
   return (
     <div className="space-y-4">
       {/* Legend */}
-      <div className="flex gap-4 text-[0.8rem] text-warm-body-light">
+      <div className="flex gap-4 text-[0.8rem] text-slate">
         <span className="flex items-center gap-1.5">
           <span
             className="inline-block w-2.5 h-2.5 rounded-full"
@@ -934,11 +936,11 @@ function MapTab({ stations, cleanData }: MapTabProps) {
               .slice()
               .sort((a, b) => a.state.localeCompare(b.state) || a.name.localeCompare(b.name))
               .map((s) => {
-                const h = healthMap[s.station_id]
-                const health = getHealth(s.station_id)
+                const h = healthMap[s.id]
+                const health = getHealth(s.id)
                 const avgQ = h && h.count > 0 ? h.totalQ / h.count : 0
                 return (
-                  <tr key={s.station_id}>
+                  <tr key={s.id}>
                     <td>
                       <span
                         className="inline-block w-3 h-3 rounded-full"
@@ -946,23 +948,23 @@ function MapTab({ stations, cleanData }: MapTabProps) {
                       />
                     </td>
                     <td>
-                      <div className="font-semibold text-[#1a1a1a]">{s.name}</div>
-                      <div className="text-[0.72rem] text-warm-muted-light">
-                        {s.station_id}
+                      <div className="font-semibold text-[#1b1e2d]">{s.name}</div>
+                      <div className="text-[0.72rem] text-mute">
+                        {s.id}
                       </div>
                     </td>
                     <td>{s.state}</td>
-                    <td className="tabular-nums">{s.latitude.toFixed(4)}</td>
-                    <td className="tabular-nums">{s.longitude.toFixed(4)}</td>
+                    <td className="tabular-nums">{s.lat.toFixed(4)}</td>
+                    <td className="tabular-nums">{s.lon.toFixed(4)}</td>
                     <td className="tabular-nums font-semibold">{h?.count || 0}</td>
                     <td>
                       {h && h.count > 0 ? (
                         <QualityBar score={avgQ} />
                       ) : (
-                        <span className="text-warm-muted">--</span>
+                        <span className="text-mute">--</span>
                       )}
                     </td>
-                    <td className="text-warm-muted text-[0.82rem]">
+                    <td className="text-mute text-[0.82rem]">
                       {h?.lastSeen ? h.lastSeen.slice(0, 16) : '--'}
                     </td>
                   </tr>
@@ -1002,7 +1004,7 @@ export default function Stations() {
   const stationNameMap = useMemo(() => {
     const m: Record<string, string> = {}
     stations.forEach((s) => {
-      m[s.station_id] = s.name
+      m[s.id] = s.name
     })
     return m
   }, [stations])
@@ -1026,40 +1028,46 @@ export default function Stations() {
 
   const tabs: { key: TabKey; label: string }[] = [
     { key: 'readings', label: 'Station Readings' },
-    { key: 'healing', label: 'Healing' },
+    { key: 'healing', label: 'Cleaning' },
     { key: 'health', label: 'Station Health' },
   ]
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Page header */}
       <div>
-        <h1 className="page-title" data-tour="stations-title">Stations</h1>
-        <p className="page-caption">
-          Weather readings from stations across {REGION.states.join(' and ')}, with AI-powered quality checks
+        <h1 className="page-title" data-tour="stations-title">
+          Stations
+        </h1>
+        <p className="page-caption" style={{ maxWidth: '680px' }}>
+          Twenty stations across {REGION.states.join(' and ')}. An AI agent
+          validates every reading against historical normals, neighbouring
+          stations, and a satellite reference.
         </p>
       </div>
 
-      <PageContext id="stations">
-        Weather data from {REGION.dataSource} stations, cleaned by an AI agent that detects anomalies, fills gaps, and cross-validates against satellite data.
-      </PageContext>
-
-      {/* Metric cards */}
-      <div data-tour="stations-metrics" className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+      {/* Metric row */}
+      <div
+        data-tour="stations-metrics"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '32px',
+          borderTop: '1px solid #e8e5e1',
+          paddingTop: '28px',
+        }}
+      >
         <MetricCard
-          label="Active Stations"
+          label="Active stations"
           value={`${activeStations}/${totalStations}`}
         />
         <MetricCard
-          label="Avg Quality"
+          label="Avg quality"
           value={`${Math.round(avgQuality * 100)}%`}
         />
-        <MetricCard label="Raw Readings" value={rawData.length} />
-        <MetricCard label="Healed Readings" value={cleanData.length} />
+        <MetricCard label="Raw readings" value={rawData.length} />
+        <MetricCard label="Cleaned readings" value={cleanData.length} />
       </div>
-
-      {/* Divider */}
-      <hr className="border-warm-border" />
 
       {/* Tabs */}
       <div data-tour="stations-tabs" className="tab-list">

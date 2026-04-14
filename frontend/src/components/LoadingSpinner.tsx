@@ -9,8 +9,8 @@ interface Props {
 export function LoadingSpinner({ size = 24, className = '', label }: Props) {
   return (
     <div className={`flex flex-col items-center justify-center gap-3 py-12 ${className}`}>
-      <Loader2 size={size} className="animate-spin text-warm-muted" />
-      {label && <p className="text-sm text-warm-body">{label}</p>}
+      <Loader2 size={size} className="animate-spin text-mute" />
+      {label && <p className="text-sm text-slate">{label}</p>}
     </div>
   )
 }
@@ -24,13 +24,18 @@ export function PageLoader({ label = 'Loading...' }: { label?: string }) {
 }
 
 export function InlineLoader() {
-  return <Loader2 size={16} className="animate-spin text-warm-muted inline-block" />
+  return <Loader2 size={16} className="animate-spin text-mute inline-block" />
 }
 
 /* ── Skeleton Loaders ── */
 
 function SkeletonPulse({ className = '' }: { className?: string }) {
-  return <div className={`animate-pulse bg-warm-header-bg rounded ${className}`} />
+  return (
+    <div
+      className={`bg-cream ${className}`}
+      style={{ opacity: 0.7 }}
+    />
+  )
 }
 
 export function DashboardSkeleton() {
@@ -49,7 +54,7 @@ export function DashboardSkeleton() {
             <SkeletonPulse className="h-5 w-24" />
             <SkeletonPulse className="h-3 w-full" />
             <SkeletonPulse className="h-3 w-3/4" />
-            <div className="border-t border-warm-border pt-3 space-y-2">
+            <div className="border-t border-hairline pt-3 space-y-2">
               <SkeletonPulse className="h-3 w-full" />
               <SkeletonPulse className="h-3 w-full" />
             </div>

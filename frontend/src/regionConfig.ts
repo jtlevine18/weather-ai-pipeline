@@ -40,7 +40,7 @@ export const REGION = {
    * into the raw_telemetry table. Values = [display label, color hex].
    */
   sourceLabels: {
-    imd_api: ['India Met Dept', '#2E7D32'],
+    imd_api: ['IMD', '#2E7D32'],
     imdlib: ['Satellite Backup', '#1565C0'],
     synthetic: ['Demo Data', '#888'],
     custom: ['Custom', '#6B5B95'],

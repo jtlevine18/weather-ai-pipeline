@@ -1,75 +1,21 @@
-import {
-  Sun,
-  Cloud,
-  CloudRain,
-  CloudDrizzle,
-  CloudLightning,
-  CloudSnow,
-  CloudFog,
-  type LucideIcon,
-} from 'lucide-react'
 import { REGION } from '../regionConfig'
 import type { Forecast } from '../api/hooks'
-
-const CONDITION_ICONS: Record<string, LucideIcon> = {
-  clear: Sun,
-  sunny: Sun,
-  'partly cloudy': Cloud,
-  cloudy: Cloud,
-  overcast: Cloud,
-  rain: CloudRain,
-  'heavy rain': CloudRain,
-  drizzle: CloudDrizzle,
-  'light rain': CloudDrizzle,
-  thunderstorm: CloudLightning,
-  storm: CloudLightning,
-  snow: CloudSnow,
-  fog: CloudFog,
-  mist: CloudFog,
-  haze: CloudFog,
-}
-
-const CONDITION_COLORS: Record<string, string> = {
-  clear: 'text-amber-400',
-  sunny: 'text-amber-400',
-  'partly cloudy': 'text-slate-400',
-  cloudy: 'text-slate-500',
-  overcast: 'text-slate-500',
-  rain: 'text-blue-500',
-  'heavy rain': 'text-blue-600',
-  drizzle: 'text-blue-400',
-  'light rain': 'text-blue-400',
-  thunderstorm: 'text-purple-500',
-  storm: 'text-purple-500',
-  snow: 'text-cyan-400',
-  fog: 'text-slate-400',
-  mist: 'text-slate-400',
-  haze: 'text-slate-400',
-}
-
-function getIcon(condition: string | undefined): LucideIcon {
-  if (!condition) return Cloud
-  const key = condition.toLowerCase()
-  return CONDITION_ICONS[key] || Cloud
-}
-
-function getColor(condition: string | undefined): string {
-  if (!condition) return 'text-slate-400'
-  const key = condition.toLowerCase()
-  return CONDITION_COLORS[key] || 'text-slate-400'
-}
 
 function formatDay(dateStr: string | undefined, day: number | undefined): string {
   if (dateStr) {
     try {
       const d = new Date(dateStr)
-      return d.toLocaleDateString(REGION.locale, { weekday: 'short', month: 'short', day: 'numeric' })
+      return d.toLocaleDateString(REGION.locale, {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      })
     } catch {
       // fall through
     }
   }
   if (day !== undefined) return `Day ${day}`
-  return '--'
+  return '—'
 }
 
 interface Props {
@@ -79,52 +25,91 @@ interface Props {
 export function ForecastStrip({ forecasts }: Props) {
   if (!forecasts.length) {
     return (
-      <div className="text-sm text-slate-500 py-6 text-center">
+      <p style={{ fontSize: '13px', color: '#8d909e', padding: '16px 0' }}>
         No forecast data available
-      </div>
+      </p>
     )
   }
 
   return (
-    <div className="flex gap-2 overflow-x-auto pb-2 -mx-1 px-1">
-      {forecasts.map((f, i) => {
-        const Icon = getIcon(f.condition)
-        const color = getColor(f.condition)
-
-        return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: `repeat(${forecasts.length}, 1fr)`,
+        gap: '0',
+        borderTop: '1px solid #e8e5e1',
+        borderBottom: '1px solid #e8e5e1',
+      }}
+    >
+      {forecasts.map((f, i) => (
+        <div
+          key={f.id ?? i}
+          style={{
+            padding: '20px 12px',
+            borderRight:
+              i < forecasts.length - 1 ? '1px solid #f2efeb' : 'none',
+            textAlign: 'left',
+          }}
+        >
           <div
-            key={f.id ?? i}
-            className="flex flex-col items-center gap-1.5 min-w-[5.5rem] rounded-xl bg-slate-50 border border-slate-100 px-3 py-3 shrink-0"
+            className="eyebrow"
+            style={{ fontSize: '11px', textTransform: 'none' }}
           >
-            <span className="text-xs font-medium text-slate-500">
-              {formatDay(f.forecast_date, f.forecast_day)}
-            </span>
-            <Icon size={24} className={color} />
-            <div className="flex items-baseline gap-1">
-              {f.temp_max !== undefined && f.temp_max !== null && (
-                <span className="text-sm font-semibold text-slate-800">
-                  {Math.round(f.temp_max)}&deg;
-                </span>
-              )}
-              {f.temp_min !== undefined && f.temp_min !== null && (
-                <span className="text-xs text-slate-400">
-                  {Math.round(f.temp_min)}&deg;
-                </span>
-              )}
-            </div>
-            {f.rainfall_mm !== undefined && f.rainfall_mm !== null && f.rainfall_mm > 0 && (
-              <span className="text-xs text-blue-500 font-medium">
-                {f.rainfall_mm.toFixed(1)}mm
-              </span>
-            )}
-            {f.condition && (
-              <span className="text-[10px] text-slate-400 capitalize text-center leading-tight">
-                {f.condition}
+            {formatDay(f.valid_for_ts, f.forecast_day)}
+          </div>
+          <div
+            style={{
+              fontFamily: '"Source Serif 4", Georgia, serif',
+              fontSize: '24px',
+              lineHeight: '30px',
+              color: '#1b1e2d',
+              marginTop: '10px',
+              fontVariantNumeric: 'tabular-nums',
+            }}
+          >
+            {f.temp_max !== undefined && f.temp_max !== null
+              ? `${Math.round(f.temp_max)}°`
+              : '—'}
+            {f.temp_min !== undefined && f.temp_min !== null && (
+              <span
+                style={{
+                  fontSize: '14px',
+                  color: '#8d909e',
+                  marginLeft: '6px',
+                }}
+              >
+                {Math.round(f.temp_min)}°
               </span>
             )}
           </div>
-        )
-      })}
+          {f.rainfall !== undefined &&
+            f.rainfall !== null &&
+            f.rainfall > 0 && (
+              <div
+                style={{
+                  fontSize: '12px',
+                  color: '#2d5b7d',
+                  marginTop: '4px',
+                  fontVariantNumeric: 'tabular-nums',
+                }}
+              >
+                {f.rainfall.toFixed(1)} mm
+              </div>
+            )}
+          {f.condition && (
+            <div
+              style={{
+                fontSize: '12px',
+                color: '#606373',
+                marginTop: '4px',
+                textTransform: 'capitalize',
+              }}
+            >
+              {f.condition}
+            </div>
+          )}
+        </div>
+      ))}
     </div>
   )
 }

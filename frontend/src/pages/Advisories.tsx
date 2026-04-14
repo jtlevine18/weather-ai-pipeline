@@ -2,7 +2,6 @@ import { useState, useMemo } from 'react'
 import { useAlerts, useStations, useForecasts, useDeliveryLog, useFarmers, useFarmerDetail, type Alert } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
-import { PageContext } from '../components/PageContext'
 import { TabPanel } from '../components/TabPanel'
 import { REGION } from '../regionConfig'
 import { formatTime } from '../lib/format'
@@ -12,20 +11,37 @@ import { formatTime } from '../lib/format'
 // ---------------------------------------------------------------------------
 
 const CONDITION_COLOR: Record<string, string> = {
-  heavy_rain: '#1565C0', moderate_rain: '#1976D2', heat_stress: '#C62828',
-  drought_risk: '#E65100', frost_risk: '#0277BD', high_wind: '#455A64',
-  foggy: '#546E7A', clear: '#2E7D32',
-}
-
-const CONDITION_EMOJI: Record<string, string> = {
-  heavy_rain: '\u{1F327}\uFE0F', moderate_rain: '\u{1F326}\uFE0F',
-  heat_stress: '\u{1F321}\uFE0F', drought_risk: '\u{1F335}',
-  frost_risk: '\u2744\uFE0F', high_wind: '\u{1F4A8}',
-  foggy: '\u{1F32B}\uFE0F', clear: '\u2600\uFE0F',
+  heavy_rain: '#2d5b7d', moderate_rain: '#2d5b7d', heat_stress: '#c71f48',
+  drought_risk: '#2d5b7d', frost_risk: '#606373', high_wind: '#606373',
+  foggy: '#606373', clear: '#606373',
 }
 
 const STATUS_COLOR: Record<string, string> = {
-  sent: '#2a9d8f', dry_run: '#2a9d8f', failed: '#e63946',
+  sent: '#606373', dry_run: '#606373', failed: '#c71f48',
+}
+
+const PROVIDER_LABEL: Record<string, string> = {
+  rag: 'AI + knowledge base',
+  rag_claude: 'AI + knowledge base',
+  claude: 'AI',
+  local: 'Rule-based',
+}
+
+const LANG_LABEL: Record<string, string> = {
+  ta: 'Tamil',
+  ml: 'Malayalam',
+  en: 'English',
+}
+
+const CONDITION_LABEL: Record<string, string> = {
+  heavy_rain: 'Heavy rain',
+  moderate_rain: 'Moderate rain',
+  heat_stress: 'Heat stress',
+  drought_risk: 'Drought risk',
+  frost_risk: 'Frost risk',
+  high_wind: 'High wind',
+  foggy: 'Fog',
+  clear: 'Clear',
 }
 
 // ---------------------------------------------------------------------------
@@ -45,7 +61,7 @@ export default function Advisories() {
 
   const stationMap = useMemo(() => {
     const map: Record<string, string> = {}
-    stations?.forEach(s => { map[s.station_id] = s.name })
+    stations?.forEach(s => { map[s.id] = s.name })
     return map
   }, [stations])
 
@@ -63,15 +79,15 @@ export default function Advisories() {
 
   // Filter options
   const languages = useMemo(() => {
-    const set = new Set(allAlerts.map(a => a.language).filter(Boolean))
+    const set = new Set(allAlerts.map(a => a.language).filter((x): x is string => !!x))
     return ['All', ...Array.from(set)]
   }, [allAlerts])
   const conditions = useMemo(() => {
-    const set = new Set(allAlerts.map(a => a.condition).filter(Boolean))
+    const set = new Set(allAlerts.map(a => a.condition).filter((x): x is string => !!x))
     return ['All', ...Array.from(set)]
   }, [allAlerts])
   const providers = useMemo(() => {
-    const set = new Set(allAlerts.map(a => a.provider).filter(Boolean))
+    const set = new Set(allAlerts.map(a => a.provider).filter((x): x is string => !!x))
     return ['All', ...Array.from(set)]
   }, [allAlerts])
 
@@ -90,27 +106,34 @@ export default function Advisories() {
       <TableSkeleton />
     </div>
   )
-  if (error) return <div className="text-center py-12"><p className="text-error text-sm">Failed to load advisories</p></div>
+  if (error) return <div className="text-center py-12"><p className="text-crit text-sm">Failed to load advisories</p></div>
 
   const TABS = ['Advisory Feed', 'Lineage', 'Farmer Profiles', 'Delivery']
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       <div>
-        <h1 className="page-title" data-tour="advisories-title">Advisories</h1>
-        <p className="page-caption">
-          Bilingual farming advice, delivery status, and farmer profiles
+        <h1 className="page-title" data-tour="advisories-title">
+          Advisories
+        </h1>
+        <p className="page-caption" style={{ maxWidth: '680px' }}>
+          Farming advice generated weekly and translated into Tamil and Malayalam.
         </p>
       </div>
 
-      <PageContext id="advisories">
-        Farming advice generated weekly by Claude AI, translated into {REGION.languageList}. View individual farmer profiles and their linked government records in the Farmer Profiles tab.
-      </PageContext>
-
       {/* 4 Metrics */}
-      <div data-tour="advisories-metrics" className="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div
+        data-tour="advisories-metrics"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, 1fr)',
+          gap: '32px',
+          borderTop: '1px solid #e8e5e1',
+          paddingTop: '28px',
+        }}
+      >
         <MetricCard label="Total Advisories" value={totalAdvisories} />
-        <MetricCard label="AI Generated" value={ragCount} />
+        <MetricCard label="AI-generated" value={ragCount} />
         <MetricCard label={REGION.languageMetric} value={`${taCount} / ${mlCount}`} />
         <MetricCard label="Deliveries" value={sentCount} />
       </div>
@@ -130,85 +153,93 @@ export default function Advisories() {
           {/* Filters */}
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
             <select className="input" value={langFilter} onChange={e => setLangFilter(e.target.value)}>
-              {languages.map(l => <option key={l}>{l}</option>)}
+              {languages.map(l => <option key={l} value={l}>{l === 'All' ? 'All' : (LANG_LABEL[l] ?? l)}</option>)}
             </select>
             <select className="input" value={condFilter} onChange={e => setCondFilter(e.target.value)}>
-              {conditions.map(c => <option key={c}>{c}</option>)}
+              {conditions.map(c => <option key={c} value={c}>{c === 'All' ? 'All' : (CONDITION_LABEL[c] ?? c)}</option>)}
             </select>
             <select className="input" value={provFilter} onChange={e => setProvFilter(e.target.value)}>
-              {providers.map(p => <option key={p}>{p}</option>)}
+              {providers.map(p => <option key={p} value={p}>{p === 'All' ? 'All' : (PROVIDER_LABEL[p] ?? p)}</option>)}
             </select>
           </div>
 
           {filtered.length === 0 ? (
-            <div className="card card-body text-center py-12">
-              <p style={{ color: '#888', fontSize: '0.85rem' }}>No advisories match your filters</p>
-            </div>
+            <p style={{ color: '#8d909e', fontSize: '13px', padding: '32px 0' }}>
+              No advisories match your filters
+            </p>
           ) : (
-            <div className="space-y-2">
+            <div style={{ borderTop: '1px solid #e8e5e1' }}>
               {filtered.map((alert, i) => {
                 const cond = alert.condition || ''
-                const condColor = CONDITION_COLOR[cond] || '#888'
-                const condEmoji = CONDITION_EMOJI[cond] || ''
+                const condColor = CONDITION_COLOR[cond] || '#606373'
                 const name = alert.station_name || stationMap[alert.station_id] || alert.station_id
                 const provider = alert.provider || 'rag'
                 const lang = alert.language || 'en'
-                const forecastDays = alert.forecast_days
                 return (
                   <div
                     key={alert.id ?? i}
                     style={{
-                      border: '1px solid #e0dcd5', borderLeft: `3px solid ${condColor}`,
-                      borderRadius: '8px', padding: '10px 14px', marginBottom: '8px',
-                      background: '#fff',
+                      borderBottom: '1px solid #e8e5e1',
+                      padding: '20px 0',
                     }}
                   >
-                    {/* Header */}
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span style={{ fontSize: '1.1rem' }}>{condEmoji}</span>
-                      <strong style={{ color: '#1a1a1a' }}>{name}</strong>
-                      <span style={{ color: '#aaa', fontSize: '0.75rem' }}>{alert.station_id}</span>
-                      {forecastDays >= 7 && (
-                        <span style={{
-                          background: '#4361ee', color: '#fff', padding: '2px 8px',
-                          borderRadius: '10px', fontSize: '0.7rem',
-                        }}>WEEKLY</span>
-                      )}
+                    {/* Meta row */}
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'baseline',
+                        gap: '12px',
+                        flexWrap: 'wrap',
+                        fontFamily: '"Space Grotesk", system-ui, sans-serif',
+                        fontSize: '13px',
+                        color: '#606373',
+                      }}
+                    >
+                      <span style={{ color: '#1b1e2d', fontWeight: 500 }}>{name}</span>
+                      <span>·</span>
+                      <span>{LANG_LABEL[lang] ?? lang}</span>
                       {cond && (
-                        <span style={{
-                          background: condColor, color: '#fff', padding: '2px 8px',
-                          borderRadius: '10px', fontSize: '0.7rem',
-                        }}>{cond.replace(/_/g, ' ')}</span>
+                        <>
+                          <span>·</span>
+                          <span style={{ color: condColor }}>{CONDITION_LABEL[cond] ?? cond.replace(/_/g, ' ')}</span>
+                        </>
                       )}
-                      <span style={{ marginLeft: 'auto', color: '#888', fontSize: '0.7rem' }}>
-                        {provider} {'\u00B7'} {lang}
+                      <span>·</span>
+                      <span>{PROVIDER_LABEL[provider] ?? provider}</span>
+                      <span style={{ marginLeft: 'auto', color: '#8d909e' }}>
+                        {formatTime(alert.issued_at || alert.created_at)}
                       </span>
                     </div>
 
-                    {/* Advisory text (local language) */}
+                    {/* Local-language advisory */}
                     {alert.advisory_local && (
-                      <p style={{ color: '#555', fontSize: '0.85rem', lineHeight: 1.5, margin: '4px 0' }}>
+                      <p
+                        style={{
+                          fontFamily: '"Source Serif 4", "Noto Serif Malayalam", "Noto Serif Tamil", Georgia, serif',
+                          fontSize: '18px',
+                          lineHeight: 1.6,
+                          color: '#1b1e2d',
+                          marginTop: '12px',
+                        }}
+                      >
                         {alert.advisory_local}
                       </p>
                     )}
 
-                    {/* English (shown below if no local, or as secondary) */}
+                    {/* English translation */}
                     {alert.advisory_en && (
-                      <p style={{
-                        color: alert.advisory_local ? '#888' : '#555',
-                        fontSize: '0.85rem', lineHeight: 1.5, margin: '4px 0',
-                        fontStyle: alert.advisory_local ? 'italic' : 'normal',
-                        paddingLeft: alert.advisory_local ? '12px' : '0',
-                        borderLeft: alert.advisory_local ? '2px solid #e0dcd5' : 'none',
-                      }}>
+                      <p
+                        style={{
+                          fontFamily: '"Space Grotesk", system-ui, sans-serif',
+                          fontSize: '13px',
+                          lineHeight: 1.7,
+                          color: '#606373',
+                          marginTop: alert.advisory_local ? '8px' : '12px',
+                        }}
+                      >
                         {alert.advisory_en}
                       </p>
                     )}
-
-                    {/* Timestamp */}
-                    <div style={{ color: '#aaa', fontSize: '0.72rem', marginTop: '2px' }}>
-                      {formatTime(alert.issued_at || alert.created_at)}
-                    </div>
                   </div>
                 )
               })}
@@ -232,14 +263,17 @@ export default function Advisories() {
               <div key={alert.id ?? i} className="grid grid-cols-[1fr_auto_1fr] gap-4 items-start">
                 {/* Forecast card */}
                 <div style={{
-                  background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '12px',
+                  background: '#fff', border: '1px solid #e8e5e1', borderRadius: '8px', padding: '12px',
                 }}>
-                  <div style={{ fontWeight: 600, color: '#1a1a1a' }}>{name}</div>
+                  <div style={{ fontWeight: 600, color: '#1b1e2d' }}>{name}</div>
                   {matchingFc ? (
                     <div style={{ fontSize: '0.82rem', color: '#555', marginTop: '4px' }}>
-                      {matchingFc.temp_max !== undefined ? `${matchingFc.temp_max.toFixed(1)}\u00B0C` : '--'}
+                      {(() => {
+                        const t = matchingFc.temp_max ?? matchingFc.temperature
+                        return t !== undefined ? `${t.toFixed(1)}\u00B0C` : '--'
+                      })()}
                       {' \u00B7 '}
-                      {matchingFc.rainfall_mm !== undefined ? `${matchingFc.rainfall_mm.toFixed(1)}mm` : '--'}
+                      {matchingFc.rainfall !== undefined ? `${matchingFc.rainfall.toFixed(1)}mm` : '--'}
                     </div>
                   ) : (
                     <div style={{ fontSize: '0.82rem', color: '#999' }}>No forecast data</div>
@@ -249,22 +283,22 @@ export default function Advisories() {
                       display: 'inline-block', marginTop: '6px',
                       background: condColor, color: '#fff', padding: '2px 8px',
                       borderRadius: '10px', fontSize: '0.7rem',
-                    }}>{cond.replace(/_/g, ' ')}</span>
+                    }}>{CONDITION_LABEL[cond] ?? cond.replace(/_/g, ' ')}</span>
                   )}
                 </div>
 
                 {/* Arrow */}
                 <div style={{ textAlign: 'center', paddingTop: '20px' }}>
-                  <span style={{ color: '#d4a019', fontSize: '1.3rem' }}>{'\u2192'}</span>
+                  <span style={{ color: '#2d5b7d', fontSize: '1.3rem' }}>{'\u2192'}</span>
                 </div>
 
                 {/* Advisory card */}
                 <div style={{
-                  background: '#fff', border: '1px solid #e0dcd5', borderLeft: '3px solid #d4a019',
+                  background: '#fff', border: '1px solid #e8e5e1', borderLeft: '3px solid #2d5b7d',
                   borderRadius: '8px', padding: '12px',
                 }}>
                   <div style={{ fontSize: '0.72rem', color: '#888' }}>
-                    {alert.provider || 'rag'} {'\u00B7'} {alert.language || 'en'}
+                    {PROVIDER_LABEL[alert.provider || 'rag'] ?? (alert.provider || 'rag')} {'\u00B7'} {LANG_LABEL[alert.language || 'en'] ?? (alert.language || 'en')}
                   </div>
                   <p style={{ color: '#555', fontSize: '0.82rem', lineHeight: 1.4, marginTop: '4px' }}>
                     {(alert.advisory_en || alert.advisory_local || '').slice(0, 150)}
@@ -319,16 +353,12 @@ export default function Advisories() {
                         <td>{d.channel || '--'}</td>
                         <td style={{ fontSize: '0.82rem' }}>{d.recipient || '--'}</td>
                         <td>
-                          <span style={{
-                            background: `${sColor}26`, color: sColor,
-                            padding: '2px 8px', borderRadius: '4px',
-                            fontSize: '0.78rem', fontWeight: 600,
-                          }}>
-                            {d.status || '--'}
+                          <span style={{ color: sColor, fontSize: '13px' }}>
+                            {d.status || '—'}
                           </span>
                         </td>
                         <td style={{ fontSize: '0.82rem', color: '#555', maxWidth: '200px' }} className="truncate">
-                          {(d.message_preview || '').slice(0, 80)}
+                          {(d.message || '').slice(0, 80)}
                         </td>
                         <td style={{ fontSize: '0.78rem', color: '#888' }}>
                           {formatTime(d.delivered_at || d.created_at)}
@@ -353,7 +383,7 @@ export default function Advisories() {
 function DPICard({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <div style={{
-      background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
+      background: '#fff', border: '1px solid #e8e5e1', borderRadius: '8px',
       padding: '16px', marginTop: '10px',
     }}>
       <div style={{
@@ -384,7 +414,7 @@ function FarmersDPITab({ alerts, stationMap }: {
   }
 
   const farmerLabels = farmers.map(f => ({
-    label: `${f.name} \u2014 ${f.district}, ${f.station}`,
+    label: `${f.name} \u2014 ${f.district}, ${f.station_id}`,
     phone: f.phone,
   }))
 
@@ -392,7 +422,7 @@ function FarmersDPITab({ alerts, stationMap }: {
 
   // Find latest advisory for this farmer's station
   const stationAlert = selectedFarmer
-    ? alerts.find(a => a.station_id === selectedFarmer.station)
+    ? alerts.find(a => a.station_id === selectedFarmer.station_id)
     : null
 
   return (
@@ -420,9 +450,9 @@ function FarmersDPITab({ alerts, stationMap }: {
           <div>
             {/* Identity card */}
             <div style={{
-              background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
+              background: '#fff', border: '1px solid #e8e5e1', borderRadius: '8px', padding: '16px',
             }}>
-              <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#1a1a1a' }}>
+              <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#1b1e2d' }}>
                 {detail.aadhaar.name}
               </div>
               <div style={{ color: '#888', fontSize: '0.9rem' }}>
@@ -495,7 +525,7 @@ function FarmersDPITab({ alerts, stationMap }: {
             Latest Advisory for This Farmer
           </div>
           <div style={{
-            background: '#fff', border: '1px solid #e0dcd5',
+            background: '#fff', border: '1px solid #e8e5e1',
             borderLeft: `3px solid ${CONDITION_COLOR[stationAlert.condition || ''] || '#888'}`,
             borderRadius: '8px', padding: '14px',
           }}>
@@ -505,11 +535,11 @@ function FarmersDPITab({ alerts, stationMap }: {
                 color: '#fff', padding: '2px 8px', borderRadius: '10px',
                 fontSize: '0.7rem', fontWeight: 600,
               }}>
-                {stationAlert.condition.replace(/_/g, ' ')}
+                {CONDITION_LABEL[stationAlert.condition] ?? stationAlert.condition.replace(/_/g, ' ')}
               </span>
             )}
             <span style={{ color: '#888', fontSize: '0.75rem', marginLeft: '8px' }}>
-              {stationAlert.provider || 'rag'} {'\u00B7'} {stationAlert.language || 'en'}
+              {PROVIDER_LABEL[stationAlert.provider || 'rag'] ?? (stationAlert.provider || 'rag')} {'\u00B7'} {LANG_LABEL[stationAlert.language || 'en'] ?? (stationAlert.language || 'en')}
             </span>
             <div style={{ color: '#555', fontSize: '0.85rem', lineHeight: 1.5, marginTop: '8px' }}>
               {(stationAlert.advisory_local || stationAlert.advisory_en || '').slice(0, 300)}

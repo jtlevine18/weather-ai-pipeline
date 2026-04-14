@@ -5,7 +5,6 @@ import {
 } from '../api/hooks'
 import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
-import { PageContext } from '../components/PageContext'
 import { TabPanel } from '../components/TabPanel'
 import { REGION, languageName } from '../regionConfig'
 import { formatTimeShort as formatTime } from '../lib/format'
@@ -14,130 +13,70 @@ import { formatTimeShort as formatTime } from '../lib/format'
 // Constants
 // ---------------------------------------------------------------------------
 
-const STATUS_COLOR: Record<string, string> = {
-  ok: '#2a9d8f', success: '#2a9d8f', completed: '#2a9d8f',
-  partial: '#f4a261', running: '#1976D2',
-  failed: '#e63946', error: '#e63946',
-}
-
-const DELIVERY_STATUS_COLOR: Record<string, string> = {
-  sent: '#2a9d8f', dry_run: '#2a9d8f', failed: '#e63946',
-}
-
-// ---------------------------------------------------------------------------
-// Visual Architecture Diagram
-// ---------------------------------------------------------------------------
-
-const PIPELINE_STEPS = [
+const STACK = [
   {
-    num: 1, name: 'Collect', table: 'raw_telemetry', color: '#2E7D32',
-    desc: 'Gather weather readings from 20 stations',
-    options: [
-      { label: 'India Met Department', note: 'Real-time station data', active: true },
-      { label: 'Custom Data Source', note: 'Your own API or CSV files' },
-      { label: 'Open-Meteo', note: 'Global, free, no key needed' },
-      { label: 'Demo Data', note: 'Generated data for testing' },
-    ],
+    label: 'Data',
+    items: ['IMD station API (data.gov.in)', '20 ground stations', 'Kerala + Tamil Nadu'],
   },
   {
-    num: 2, name: 'Clean', table: 'clean_telemetry', color: '#1565C0',
-    desc: 'Fix broken or missing data automatically',
-    options: [
-      { label: 'AI Agent (Claude)', note: 'Checks against satellites and neighbors', active: true },
-      { label: 'Rule-Based', note: 'Zero-cost fallback' },
-    ],
+    label: 'Models',
+    items: ['NeuralGCM (Google DeepMind)', 'Claude Sonnet for advisories', 'Claude Haiku for Tamil / Malayalam'],
   },
   {
-    num: 3, name: 'Forecast', table: 'forecasts', color: '#7B1FA2',
-    desc: 'Generate 7-day weather predictions',
-    options: [
-      { label: 'AI Weather Model + Local Correction', note: 'Google DeepMind model', active: true },
-      { label: 'Standard Models + Local Correction', note: 'No GPU needed' },
-      { label: 'Last Known Reading', note: 'Emergency fallback' },
-    ],
+    label: 'Delivery',
+    items: ['Twilio SMS', 'Weekly broadcast', 'Bilingual per farmer'],
   },
   {
-    num: 4, name: 'Localize', table: 'forecasts', color: '#E65100',
-    desc: 'Adjust forecast to each farmer\'s exact location',
-    options: [
-      { label: 'NASA Satellite Data', note: 'Adjusted for altitude and terrain', active: true },
-      { label: 'Station-Level', note: 'Uses nearest station only' },
-    ],
-  },
-  {
-    num: 5, name: 'Advise', table: 'agricultural_alerts', color: '#C62828',
-    desc: 'Write crop-specific farming advice in local languages',
-    options: [
-      { label: 'AI + Advisory Knowledge Base', note: 'Personalized, bilingual', active: true },
-      { label: 'Template-Based', note: 'Pre-written, zero cost' },
-    ],
-  },
-  {
-    num: 6, name: 'Deliver', table: 'delivery_log', color: '#d4a019',
-    desc: 'Send advisories to farmers by SMS',
-    options: [
-      { label: 'Console', note: 'Dry-run, always works', active: true },
-      { label: 'SMS', note: 'Live delivery via Twilio' },
-      { label: 'WhatsApp', note: 'Via Twilio' },
-    ],
+    label: 'Infrastructure',
+    items: ['Postgres on Neon', 'Hugging Face Spaces', 'GitHub Actions cron', 'Vercel frontend'],
   },
 ]
 
-function ArchitectureDiagram() {
+function HowItWorksSection() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: '0', paddingLeft: '20px' }}>
-      {PIPELINE_STEPS.map((s, i) => (
-        <div key={s.num}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: '14px' }}>
-            {/* Step number circle */}
-            <div style={{
-              width: '36px', height: '36px', borderRadius: '50%', background: s.color,
-              color: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
-              fontWeight: 700, fontSize: '0.85rem', flexShrink: 0, marginTop: '2px',
-            }}>
-              {s.num}
-            </div>
-            {/* Card */}
-            <div style={{
-              flex: 1, background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-              padding: '14px 16px',
-            }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', marginBottom: '4px' }}>
-                <span style={{ fontWeight: 700, fontSize: '0.9rem', color: s.color }}>{s.name}</span>
-                <code style={{
-                  background: '#f0ede8', padding: '2px 8px', borderRadius: '4px',
-                  fontSize: '0.72rem', color: '#555',
-                }}>{s.table}</code>
-              </div>
-              <div style={{ fontSize: '0.8rem', color: '#666', marginBottom: '8px' }}>{s.desc}</div>
-              {/* Options */}
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px' }}>
-                {s.options.map(opt => (
-                  <div key={opt.label} title={opt.note} style={{
-                    background: opt.active ? `${s.color}10` : '#faf8f5',
-                    border: `1px solid ${opt.active ? s.color + '40' : '#e0dcd5'}`,
-                    borderRadius: '6px', padding: '4px 10px',
-                    fontSize: '0.72rem', color: opt.active ? s.color : '#888',
-                    fontWeight: opt.active ? 600 : 400,
-                    cursor: 'default',
-                  }}>
-                    {opt.label}
-                    {opt.active && <span style={{ marginLeft: '4px', fontSize: '0.65rem' }}>{'\u2713'}</span>}
-                  </div>
-                ))}
-              </div>
-            </div>
+    <div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+          gap: '28px',
+          borderTop: '1px solid #e8e5e1',
+          paddingTop: '18px',
+        }}
+      >
+        {STACK.map((cat) => (
+          <div key={cat.label}>
+            <div className="eyebrow">{cat.label}</div>
+            <ul
+              style={{
+                listStyle: 'none',
+                padding: 0,
+                margin: '12px 0 0 0',
+                fontFamily: '"Space Grotesk", system-ui, sans-serif',
+                fontSize: '13px',
+                lineHeight: 1.7,
+                color: '#606373',
+              }}
+            >
+              {cat.items.map((item) => (
+                <li key={item}>{item}</li>
+              ))}
+            </ul>
           </div>
-          {/* Connector line */}
-          {i < PIPELINE_STEPS.length - 1 && (
-            <div style={{
-              width: '2px', height: '14px', background: '#d4a019', marginLeft: '17px',
-            }} />
-          )}
-        </div>
-      ))}
+        ))}
+      </div>
     </div>
   )
+}
+
+const STATUS_COLOR: Record<string, string> = {
+  ok: '#606373', success: '#606373', completed: '#606373',
+  partial: '#2d5b7d', running: '#606373',
+  failed: '#c71f48', error: '#c71f48',
+}
+
+const DELIVERY_STATUS_COLOR: Record<string, string> = {
+  sent: '#606373', dry_run: '#606373', failed: '#c71f48',
 }
 
 // ---------------------------------------------------------------------------
@@ -145,8 +84,8 @@ function ArchitectureDiagram() {
 // ---------------------------------------------------------------------------
 
 const EVAL_SCRIPTS = [
-  { cmd: 'python tests/eval_healing.py', label: 'Self-Healing Detection', desc: 'Tests anomaly detection precision/recall and imputation accuracy' },
-  { cmd: 'python tests/eval_forecast.py', label: 'Forecast Accuracy', desc: 'Evaluates MAE/RMSE of MOS-corrected forecasts vs observations' },
+  { cmd: 'python tests/eval_healing.py', label: 'Cleaning detection', desc: 'Tests anomaly detection precision and recall and filled-reading accuracy' },
+  { cmd: 'python tests/eval_forecast.py', label: 'Forecast Accuracy', desc: 'Evaluates forecast accuracy against observations' },
   { cmd: 'python tests/eval_rag.py', label: 'RAG Retrieval', desc: 'Measures precision@5 and recall of hybrid FAISS+BM25 retrieval' },
   { cmd: 'python tests/eval_advisory.py', label: 'Advisory Quality', desc: 'Scores advisory accuracy, actionability, safety, and cultural fit' },
   { cmd: 'python tests/eval_translation.py', label: 'Translation Quality', desc: 'Evaluates semantic similarity and agricultural term preservation' },
@@ -163,23 +102,7 @@ function EvalMetricsTab() {
     return (
       <div className="space-y-4">
         <div className="card card-body" style={{ textAlign: 'center', padding: '32px' }}>
-          <p style={{ color: '#888', fontSize: '0.9rem', marginBottom: '16px' }}>
-            No eval results found yet. Run the eval scripts from the project root:
-          </p>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3" style={{ textAlign: 'left' }}>
-            {EVAL_SCRIPTS.map(e => (
-              <button
-                key={e.cmd}
-                className="btn-secondary"
-                title={e.desc}
-                style={{ fontSize: '0.78rem', textAlign: 'left', padding: '10px 14px' }}
-                onClick={() => alert(`Run this from your terminal:\n${e.cmd}`)}
-              >
-                <div style={{ fontWeight: 600, marginBottom: '2px' }}>{e.label}</div>
-                <code style={{ fontSize: '0.72rem', color: '#888' }}>{e.cmd}</code>
-              </button>
-            ))}
-          </div>
+          <p style={{ color: '#888', fontSize: '0.9rem' }}>No eval results available yet.</p>
         </div>
       </div>
     )
@@ -194,7 +117,7 @@ function EvalMetricsTab() {
         const pft = h.per_fault_type || {}
         return (
           <div className="space-y-3">
-            <div className="section-header">Self-Healing Detection</div>
+            <div className="section-header">Cleaning detection</div>
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               <MetricCard label="Precision" value={bd.precision != null ? `${(bd.precision * 100).toFixed(0)}%` : '--'} />
               <MetricCard label="Recall" value={bd.recall != null ? `${(bd.recall * 100).toFixed(0)}%` : '--'} />
@@ -398,7 +321,7 @@ function AgentLogTab() {
     return (
       <div className="card card-body text-center py-8">
         <p style={{ color: '#888', fontSize: '0.85rem' }}>
-          No conversation logs yet. Use the Chat widget or <code>python run_chat.py</code> to generate data.
+          No conversation logs yet. Open the chat widget in the bottom-right to start a conversation.
         </p>
       </div>
     )
@@ -484,7 +407,7 @@ function DeliveryFunnelTab() {
     return (
       <div className="card card-body text-center py-8">
         <p style={{ color: '#888', fontSize: '0.85rem' }}>
-          No delivery metrics yet. Run <code>python run_pipeline.py</code> to generate data.
+          No delivery metrics yet.
         </p>
       </div>
     )
@@ -499,9 +422,9 @@ function DeliveryFunnelTab() {
   const funnel = [
     { label: 'Stations', value: totalStations, color: '#2E7D32' },
     { label: 'Forecasts', value: totalForecasts, color: '#1565C0' },
-    { label: 'Advisories', value: totalAdvisories, color: '#d4a019' },
+    { label: 'Advisories', value: totalAdvisories, color: '#2d5b7d' },
     { label: 'Attempted', value: totalAttempted, color: '#E65100' },
-    { label: 'Succeeded', value: totalSucceeded, color: '#2a9d8f' },
+    { label: 'Succeeded', value: totalSucceeded, color: '#606373' },
   ]
   const maxVal = Math.max(...funnel.map(f => f.value), 1)
 
@@ -529,14 +452,14 @@ function DeliveryFunnelTab() {
 
       {/* Funnel bar chart */}
       <div style={{
-        background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
+        background: '#fff', border: '1px solid #e8e5e1', borderRadius: '8px', padding: '16px',
       }}>
         {funnel.map(f => (
           <div key={f.label} style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '8px' }}>
             <div style={{ width: '90px', fontSize: '0.78rem', fontWeight: 500, color: '#555', textAlign: 'right' }}>
               {f.label}
             </div>
-            <div style={{ flex: 1, background: '#f0ede8', borderRadius: '4px', height: '24px', overflow: 'hidden' }}>
+            <div style={{ flex: 1, background: '#f0ece6', borderRadius: '4px', height: '24px', overflow: 'hidden' }}>
               <div style={{
                 width: `${(f.value / maxVal) * 100}%`, height: '100%',
                 background: f.color, borderRadius: '4px',
@@ -568,7 +491,7 @@ function DeliveryFunnelTab() {
                   <td>{s.adv}</td>
                   <td>{s.att}</td>
                   <td>{s.succ}</td>
-                  <td style={{ color: rate !== '--' && parseFloat(rate) >= 90 ? '#2a9d8f' : '#e63946' }}>
+                  <td style={{ color: rate !== '--' && parseFloat(rate) >= 90 ? '#606373' : '#c71f48' }}>
                     {rate === '--' ? '--' : `${rate}%`}
                   </td>
                 </tr>
@@ -626,7 +549,7 @@ function SystemDeliveryLogTab() {
                       }}>{d.status || '--'}</span>
                     </td>
                     <td style={{ fontSize: '0.82rem', color: '#555', maxWidth: '200px' }} className="truncate">
-                      {(d.message_preview || '').slice(0, 80)}
+                      {(d.message || '').slice(0, 80)}
                     </td>
                     <td style={{ fontSize: '0.78rem', color: '#888' }}>{formatTime(d.delivered_at || d.created_at)}</td>
                   </tr>
@@ -645,8 +568,8 @@ function SystemDeliveryLogTab() {
 // ---------------------------------------------------------------------------
 
 const ASSESSMENT_COLOR_MAP: Record<string, string> = {
-  good: '#2a9d8f', corrected: '#4361ee', filled: '#d4a019',
-  flagged: '#e76f51', dropped: '#e63946',
+  good: '#606373', corrected: '#606373', filled: '#2d5b7d',
+  flagged: '#e76f51', dropped: '#c71f48',
 }
 
 function HealingStatsTab() {
@@ -654,9 +577,9 @@ function HealingStatsTab() {
   const healingLog = useHealingLog(30)
   const hStats = healingStats.data
 
-  if (healingStats.isLoading) return <p style={{ color: '#888', fontSize: '0.85rem' }}>Loading healing data...</p>
+  if (healingStats.isLoading) return <p style={{ color: '#888', fontSize: '0.85rem' }}>Loading cleaning data...</p>
 
-  if (!hStats) return <p style={{ color: '#888', fontSize: '0.85rem' }}>No healing data available</p>
+  if (!hStats) return <p style={{ color: '#888', fontSize: '0.85rem' }}>No cleaning data available</p>
 
   return (
     <div className="space-y-6">
@@ -702,9 +625,9 @@ function HealingStatsTab() {
       )}
 
       <div>
-        <div className="section-header">Recent Healing Records</div>
+        <div className="section-header">Recent cleaning records</div>
         {(!healingLog.data || healingLog.data.length === 0) ? (
-          <p style={{ color: '#888', fontSize: '0.85rem' }}>No healing records</p>
+          <p style={{ color: '#888', fontSize: '0.85rem' }}>No cleaning records</p>
         ) : (
           <div className="space-y-2">
             {healingLog.data.slice(0, 15).map((h, i) => {
@@ -712,11 +635,11 @@ function HealingStatsTab() {
               const color = ASSESSMENT_COLOR_MAP[assessment] || '#888'
               return (
                 <div key={h.id ?? i} style={{
-                  background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
+                  background: '#fff', border: '1px solid #e8e5e1', borderRadius: '8px',
                   padding: '10px 14px',
                 }}>
                   <div className="flex items-center gap-2 flex-wrap">
-                    <span style={{ fontWeight: 600, color: '#1a1a1a' }}>{h.station_id}</span>
+                    <span style={{ fontWeight: 600, color: '#1b1e2d' }}>{h.station_id}</span>
                     <span style={{
                       background: `${color}22`, color, border: `1px solid ${color}44`,
                       padding: '1px 8px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 600,
@@ -736,7 +659,7 @@ function HealingStatsTab() {
                     <div className="flex gap-1 flex-wrap mt-1">
                       {h.tools_used.split(',').map((tool: string, j: number) => (
                         <span key={j} style={{
-                          background: '#f0ede8', border: '1px solid #d0ccc5',
+                          background: '#f0ece6', border: '1px solid #d0ccc5',
                           borderRadius: '12px', padding: '2px 10px', fontSize: '0.72rem',
                         }}>{tool.trim()}</span>
                       ))}
@@ -757,19 +680,6 @@ function HealingStatsTab() {
 // ---------------------------------------------------------------------------
 
 // ---------------------------------------------------------------------------
-// Pipeline Architecture Tab — stage action cards
-// ---------------------------------------------------------------------------
-
-function ArchitectureTab() {
-  return (
-    <div className="space-y-6">
-      <ArchitectureDiagram />
-      <ScalingCostPanel />
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
 // Scaling cost panel — shows what the pipeline costs at three tiers of
 // personalization, making the "per-user cost is decoupled from LLM cost"
 // design point concrete. Plain cards, no animations.
@@ -782,68 +692,78 @@ function ScalingCostPanel() {
       scale: '2,000 farmers · broadcast advisory',
       cost: '~$0.30 / week',
       note: 'One advisory per station, delivered to every farmer in that station\u2019s radius. 10 featured farmers also get a personalized version.',
-      color: '#2a9d8f',
+      color: '#606373',
     },
     {
       label: 'Full personalization',
-      scale: '2,000 farmers · Haiku per farmer',
+      scale: '2,000 farmers · advisory per farmer',
       cost: '~$6 / week',
-      note: 'Every farmer gets an advisory tailored to their crops, soil, irrigation, and land size. Weekly run, prompt caching on.',
+      note: 'Every farmer gets an advisory tailored to their crops, soil, irrigation, and land size. Weekly run.',
       color: '#1565C0',
     },
     {
       label: 'State-wide',
-      scale: '10,000 farmers · Haiku per farmer',
+      scale: '10,000 farmers · advisory per farmer',
       cost: '~$30 / week',
-      note: 'Full state extension network. The LLM cost still scales linearly — the pipeline, not the bill, is what has to keep up.',
-      color: '#d4a019',
+      note: 'Full state extension network. The model cost still scales linearly — the pipeline, not the bill, is what has to keep up.',
+      color: '#2d5b7d',
     },
   ]
 
   return (
-    <div>
-      <div style={{
-        fontSize: '0.72rem', fontWeight: 600, color: '#888',
-        textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '12px',
-      }}>
-        What it costs to run at pilot scale
-      </div>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-        gap: '12px',
-      }}>
+    <div style={{ marginTop: '32px' }}>
+      <div className="section-header">What it costs to run at pilot scale</div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(3, 1fr)',
+          gap: '32px',
+        }}
+      >
         {TIERS.map(tier => (
-          <div key={tier.label} style={{
-            background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-            padding: '16px 18px', borderLeft: `3px solid ${tier.color}`,
-          }}>
-            <div style={{
-              fontSize: '0.72rem', fontWeight: 600, color: tier.color,
-              textTransform: 'uppercase', letterSpacing: '0.5px', marginBottom: '6px',
-            }}>
-              {tier.label}
-            </div>
-            <div style={{
-              fontSize: '1.35rem', fontWeight: 700, color: '#1a1a1a',
-              fontFamily: 'Source Serif 4, serif', marginBottom: '4px',
-            }}>
+          <div
+            key={tier.label}
+            style={{
+              borderTop: '1px solid #e8e5e1',
+              paddingTop: '16px',
+            }}
+          >
+            <div className="eyebrow">{tier.label}</div>
+            <div
+              style={{
+                fontFamily: '"Source Serif 4", Georgia, serif',
+                fontSize: '28px',
+                lineHeight: '34px',
+                color: '#1b1e2d',
+                marginTop: '12px',
+                fontVariantNumeric: 'tabular-nums',
+              }}
+            >
               {tier.cost}
             </div>
-            <div style={{ fontSize: '0.78rem', color: '#666', marginBottom: '8px' }}>
+            <div style={{ fontSize: '13px', color: '#606373', marginTop: '6px' }}>
               {tier.scale}
             </div>
-            <div style={{ fontSize: '0.72rem', color: '#888', lineHeight: 1.5 }}>
+            <p style={{ fontSize: '13px', color: '#8d909e', marginTop: '10px', lineHeight: 1.6 }}>
               {tier.note}
-            </div>
+            </p>
           </div>
         ))}
       </div>
-      <p style={{
-        fontSize: '0.72rem', color: '#888', marginTop: '12px', fontStyle: 'italic',
-      }}>
-        2,000 farmers live in the registry right now, distributed 100 per station across Kerala + Tamil Nadu.
-        Broadcast delivery goes to all of them every run; per-farmer personalization runs for 10 featured farmers so the capability is visible without the bill scaling.
+      <p
+        style={{
+          fontSize: '12px',
+          color: '#8d909e',
+          marginTop: '20px',
+          fontStyle: 'italic',
+          maxWidth: '780px',
+          lineHeight: 1.6,
+        }}
+      >
+        2,000 farmers live in the registry right now, distributed 100 per
+        station across Kerala and Tamil Nadu. Broadcast delivery goes to all
+        of them every run; per-farmer personalization runs for 10 featured
+        farmers so the capability is visible without the bill scaling.
       </p>
     </div>
   )
@@ -869,24 +789,30 @@ export default function Pipeline() {
   const okRuns = runList.filter(r => r.status === 'ok' || r.status === 'success' || r.status === 'completed').length
   const failedRuns = runList.filter(r => r.status === 'failed' || r.status === 'error').length
 
-  const TABS = ['Architecture', 'Run History', 'Build Your Own']
+  const TABS = ['Run History', 'Cost & scale', 'Build Your Own']
 
   // Cost calculator derived values
   const perRunCost = (stationCount / 20) * (claudeModel === 'sonnet' ? 0.27 : 0.03) + 0.02
   const monthlyCost = perRunCost * runsPerWeek * 4.33
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5">
       <div>
-        <h1 className="page-title" data-tour="pipeline-title">How It Works</h1>
-        <p className="page-caption">
-          Six automated steps turn raw weather data into farming advice delivered by SMS
-        </p>
+        <h1 className="page-title" data-tour="pipeline-title">
+          How it works
+        </h1>
+        <button
+          type="button"
+          onClick={() => window.dispatchEvent(new Event('relaunch-tour'))}
+          className="text-link"
+          style={{ marginTop: '12px' }}
+        >
+          Take the guided tour →
+        </button>
       </div>
 
-      <PageContext id="pipeline">
-        Six-step linear pipeline from raw weather data to SMS delivery, with independent degradation chains ensuring no single API failure cascades.
-      </PageContext>
+      {/* Stack */}
+      <HowItWorksSection />
 
       {/* Tabs */}
       <div className="tab-list">
@@ -897,46 +823,49 @@ export default function Pipeline() {
         ))}
       </div>
 
-      {/* Tab 0: Architecture */}
+      {/* Tab 0: Run History */}
       <TabPanel active={activeTab === 0}>
-        <ArchitectureTab />
-      </TabPanel>
-
-      {/* Tab 1: Run History */}
-      <TabPanel active={activeTab === 1}>
         <div className="space-y-6">
-          {/* Scheduler compact card */}
-          <div style={{
-            background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-            padding: '16px', display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: '16px',
-          }}>
+          {/* Scheduler caption */}
+          <div
+            style={{
+              borderTop: '1px solid #e8e5e1',
+              paddingTop: '16px',
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'baseline',
+              gap: '16px',
+            }}
+          >
             <div style={{ flex: '1 1 auto', minWidth: '200px' }}>
-              <div style={{ fontWeight: 600, fontSize: '0.88rem', color: '#1a1a1a', marginBottom: '4px' }}>
-                Weekly Pipeline Schedule
-              </div>
-              <div style={{ fontSize: '0.78rem', color: '#888' }}>
-                Runs every Monday at 06:00 {REGION.timezoneLabel} via GitHub Actions. The pipeline processes all stations in ~6 minutes.
+              <div className="eyebrow">Schedule</div>
+              <div
+                style={{
+                  fontSize: '14px',
+                  color: '#606373',
+                  lineHeight: 1.6,
+                  marginTop: '8px',
+                  maxWidth: '620px',
+                }}
+              >
+                Runs every Monday at 06:00 {REGION.timezoneLabel}. The
+                pipeline processes all stations in about six minutes.
               </div>
             </div>
 
             {/* Recent runs (compact) */}
             {runList.length > 0 && (
-              <div style={{ flexBasis: '100%' }}>
-                <div style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase' as const, letterSpacing: '1px', color: '#888', marginBottom: '6px' }}>
-                  Recent Runs
-                </div>
-                <div className="flex gap-3 flex-wrap">
+              <div style={{ flexBasis: '100%', marginTop: '8px' }}>
+                <div className="eyebrow" style={{ marginBottom: '8px' }}>Recent runs</div>
+                <div className="flex gap-6 flex-wrap">
                   {runList.slice(0, 3).map((r, i) => {
                     const s = r.status || '?'
-                    const color = STATUS_COLOR[s] || '#888'
+                    const color = STATUS_COLOR[s] || '#606373'
                     const started = (r.started_at || '').slice(0, 16)
                     return (
-                      <div key={r.id ?? i} className="flex items-center gap-2">
-                        <span style={{
-                          background: color, color: '#fff', padding: '2px 8px',
-                          borderRadius: '3px', fontSize: '0.7rem', fontWeight: 600,
-                        }}>{s}</span>
-                        <span style={{ color: '#555', fontSize: '0.78rem' }}>{started}</span>
+                      <div key={r.id ?? i} style={{ display: 'flex', alignItems: 'baseline', gap: '10px', fontSize: '13px' }}>
+                        <span style={{ color, fontWeight: 500 }}>{s}</span>
+                        <span style={{ color: '#606373' }}>{started}</span>
                       </div>
                     )
                   })}
@@ -947,10 +876,19 @@ export default function Pipeline() {
 
           {/* Run history table */}
           <div className="space-y-4">
-            <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-              <MetricCard label="Total Runs" value={runList.length} />
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '32px',
+                borderTop: '1px solid #e8e5e1',
+                paddingTop: '20px',
+                marginTop: '16px',
+              }}
+            >
+              <MetricCard label="Total runs" value={runList.length} />
               <MetricCard label="Successful" value={okRuns} />
-              <MetricCard label="Partial / Failed" value={failedRuns + runList.filter(r => r.status === 'partial').length} />
+              <MetricCard label="Partial / failed" value={failedRuns + runList.filter(r => r.status === 'partial').length} />
             </div>
 
             {runList.length === 0 ? (
@@ -978,23 +916,21 @@ export default function Pipeline() {
                       return (
                         <tr key={r.id ?? i}>
                           <td>
-                            <span style={{
-                              background: color, color: '#fff', padding: '2px 10px',
-                              borderRadius: '5px', fontSize: '0.68rem', fontWeight: 700,
-                              display: 'inline-block', minWidth: '50px', textAlign: 'center',
-                            }}>{s}</span>
+                            <span style={{ color, fontSize: '13px', fontWeight: 500 }}>
+                              {s}
+                            </span>
                           </td>
-                          <td style={{ fontFamily: 'monospace', fontSize: '0.75rem', color: '#aaa' }}>
+                          <td style={{ fontVariantNumeric: 'tabular-nums', color: '#8d909e' }}>
                             {(r.run_id || r.id?.toString() || '').slice(0, 8)}
                           </td>
-                          <td style={{ fontSize: '0.82rem' }}>{formatTime(r.started_at)}</td>
-                          <td>
-                            {r.duration_seconds != null ? `${r.duration_seconds.toFixed(1)}s` : '--'}
+                          <td>{formatTime(r.started_at)}</td>
+                          <td className="num">
+                            {r.duration_seconds != null ? `${r.duration_seconds.toFixed(1)}s` : '—'}
                           </td>
-                          <td>{r.stations_processed ?? '--'}</td>
-                          <td>{r.records_ingested ?? '--'}</td>
-                          <td style={{ fontSize: '0.82rem', color: '#555', maxWidth: '200px' }} className="truncate">
-                            {(r.error_detail || '').slice(0, 80) || '--'}
+                          <td className="num">{r.stations_processed ?? '—'}</td>
+                          <td className="num">{r.records_ingested ?? '—'}</td>
+                          <td style={{ color: '#606373', maxWidth: '200px' }} className="truncate">
+                            {(r.error_detail || '').slice(0, 80) || '—'}
                           </td>
                         </tr>
                       )
@@ -1007,18 +943,85 @@ export default function Pipeline() {
         </div>
       </TabPanel>
 
+      {/* Tab 1: Cost & scale */}
+      <TabPanel active={activeTab === 1}>
+        <div className="space-y-8">
+          <ScalingCostPanel />
+
+          {/* Cost Calculator */}
+          <div>
+            <div className="section-header">Customize for your region</div>
+            <div style={{
+              background: '#ffffff', border: '1px solid #e8e5e1', borderRadius: '4px',
+              padding: '20px',
+            }}>
+              <p style={{ fontSize: '13px', color: '#606373', marginBottom: '16px', lineHeight: 1.6 }}>
+                Estimate the running cost for your deployment based on station count, run frequency, and Claude model choice.
+              </p>
+              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span className="eyebrow">Stations</span>
+                  <input type="number" min={1} max={200} step={5} value={stationCount}
+                    onChange={e => setStationCount(Math.max(1, Math.min(200, Number(e.target.value))))}
+                    className="input" style={{ width: '90px' }} />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span className="eyebrow">Runs / week</span>
+                  <input type="number" min={1} max={28} step={1} value={runsPerWeek}
+                    onChange={e => setRunsPerWeek(Math.max(1, Math.min(28, Number(e.target.value))))}
+                    className="input" style={{ width: '90px' }} />
+                </label>
+                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                  <span className="eyebrow">model choice</span>
+                  <select value={claudeModel} onChange={e => setClaudeModel(e.target.value as 'sonnet' | 'haiku')}
+                    className="input">
+                    <option value="sonnet">Sonnet (~$3/M tokens)</option>
+                    <option value="haiku">Haiku (~$0.25/M tokens)</option>
+                  </select>
+                </label>
+              </div>
+              <div
+                className="grid grid-cols-1 md:grid-cols-2"
+                style={{
+                  gap: '40px',
+                  borderTop: '1px solid #e8e5e1',
+                  paddingTop: '20px',
+                }}
+              >
+                <div>
+                  <div className="eyebrow">Per-run cost</div>
+                  <p className="metric-number" style={{ marginTop: '8px' }}>
+                    ${perRunCost.toFixed(2)}
+                  </p>
+                  <p style={{ fontFamily: '"Space Grotesk", system-ui, sans-serif', fontSize: '13px', color: '#606373', marginTop: '6px' }}>
+                    Claude: ~${(perRunCost - 0.02).toFixed(2)} · Compute: ~$0.02
+                  </p>
+                </div>
+                <div>
+                  <div className="eyebrow">Monthly estimate</div>
+                  <p className="metric-number" style={{ marginTop: '8px' }}>
+                    ${monthlyCost.toFixed(2)}
+                  </p>
+                  <p style={{ fontFamily: '"Space Grotesk", system-ui, sans-serif', fontSize: '13px', color: '#606373', marginTop: '6px' }}>
+                    {runsPerWeek}×/week · 4.33 weeks · ${perRunCost.toFixed(2)}/run
+                  </p>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </TabPanel>
+
       {/* Tab 2: Build Your Own */}
       <TabPanel active={activeTab === 2}>
         <div className="space-y-6">
-          <div className="section-header">Build Your Own</div>
-
-          <div className="card card-body">
-            <p style={{ fontSize: '0.88rem', color: '#1a1a1a', lineHeight: 1.7 }}>
+          <div>
+            <p style={{ fontSize: '14px', color: '#1b1e2d', lineHeight: 1.65, maxWidth: '720px' }}>
               Want to run this for your own region? Fork the{' '}
-              <a href="https://github.com/jtlevine18/weather-ai-pipeline" target="_blank" rel="noopener" style={{ color: '#d4a019', fontWeight: 600 }}>GitHub repo</a>,
-              fill in the prompt below with your stations and data source, then paste it into{' '}
-              <a href="https://claude.ai/code" target="_blank" rel="noopener" style={{ color: '#d4a019', fontWeight: 600 }}>Claude Code</a>.
-              It adapts the full pipeline — ingestion, forecasting, crop advisories, farmer profiles, and dashboard — for your geography.
+              <a href="https://github.com/jtlevine18/weather-ai-pipeline" target="_blank" rel="noopener" style={{ color: '#2d5b7d', fontWeight: 600 }}>GitHub repo</a>,
+              copy the prompt below, and paste it into{' '}
+              <a href="https://claude.ai/code" target="_blank" rel="noopener" style={{ color: '#2d5b7d', fontWeight: 600 }}>Claude Code</a>.
+              It adapts the full pipeline — data collection, forecasting, crop advisories, farmer profiles, and dashboard — for your geography.
             </p>
           </div>
 
@@ -1038,18 +1041,20 @@ export default function Pipeline() {
                 id="copy-btn"
                 style={{
                   position: 'sticky', top: '8px', float: 'right', zIndex: 1,
-                  background: '#d4a019', color: '#fff', border: 'none', borderRadius: '6px',
-                  padding: '8px 18px', fontSize: '0.78rem', fontWeight: 600, cursor: 'pointer',
-                  fontFamily: 'DM Sans, sans-serif', letterSpacing: '0.3px',
+                  background: '#fcfaf7', color: '#1b1e2d', border: '1px solid #e8e5e1', borderRadius: '4px',
+                  padding: '8px 18px', fontSize: '13px', fontWeight: 600, cursor: 'pointer',
+                  fontFamily: '"Space Grotesk", system-ui, sans-serif',
                   marginRight: '10px', marginTop: '10px',
                 }}
               >
                 Copy prompt
               </button>
               <pre id="rebuild-prompt" style={{
-                background: '#1a1a1a', color: '#e0dcd5', borderRadius: '8px',
-                padding: '20px', fontSize: '0.78rem', lineHeight: 1.65,
+                background: '#fcfaf7', color: '#1b1e2d', borderRadius: '4px',
+                border: '1px solid #e8e5e1',
+                padding: '24px', fontSize: '12px', lineHeight: 1.7,
                 overflow: 'auto', whiteSpace: 'pre-wrap', maxHeight: '600px',
+                fontFamily: '"Space Grotesk", system-ui, sans-serif',
               }}>
 {`I forked https://github.com/jtlevine18/weather-ai-pipeline — an AI weather forecasting and crop advisory pipeline. I want to adapt it for my region. Read CLAUDE.md to understand the full architecture, then make all the changes below.
 
@@ -1139,56 +1144,6 @@ These are globally portable: src/forecasting.py, src/weather_clients.py, src/dow
             </div>
           </div>
 
-          {/* Cost Calculator */}
-          <div>
-            <div className="section-header">Cost Calculator</div>
-            <div style={{
-              background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-              padding: '20px',
-            }}>
-              <p style={{ fontSize: '0.82rem', color: '#666', marginBottom: '16px' }}>
-                Estimate the running cost for your deployment based on station count, run frequency, and Claude model choice.
-              </p>
-              <div style={{ display: 'flex', gap: '20px', flexWrap: 'wrap', marginBottom: '20px' }}>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Stations</span>
-                  <input type="number" min={1} max={200} step={5} value={stationCount}
-                    onChange={e => setStationCount(Math.max(1, Math.min(200, Number(e.target.value))))}
-                    className="input" style={{ width: '90px' }} />
-                </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Runs/week</span>
-                  <input type="number" min={1} max={28} step={1} value={runsPerWeek}
-                    onChange={e => setRunsPerWeek(Math.max(1, Math.min(28, Number(e.target.value))))}
-                    className="input" style={{ width: '90px' }} />
-                </label>
-                <label style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                  <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#888', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Claude model</span>
-                  <select value={claudeModel} onChange={e => setClaudeModel(e.target.value as 'sonnet' | 'haiku')}
-                    className="input">
-                    <option value="sonnet">Sonnet (~$3/M tokens)</option>
-                    <option value="haiku">Haiku (~$0.25/M tokens)</option>
-                  </select>
-                </label>
-              </div>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                <div style={{ background: '#faf8f5', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', color: '#888', marginBottom: '6px' }}>Per-Run Cost</div>
-                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~${perRunCost.toFixed(2)}</div>
-                  <div style={{ color: '#666', fontSize: '0.82rem', marginTop: '4px' }}>
-                    Claude: ~${(perRunCost - 0.02).toFixed(2)} + GPU: ~$0.02
-                  </div>
-                </div>
-                <div style={{ background: '#faf8f5', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px' }}>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 600, textTransform: 'uppercase', letterSpacing: '1px', color: '#888', marginBottom: '6px' }}>Monthly Estimate</div>
-                  <div style={{ fontSize: '2rem', fontWeight: 700, color: '#d4a019' }}>~${monthlyCost.toFixed(2)}/mo</div>
-                  <div style={{ color: '#666', fontSize: '0.82rem', marginTop: '4px' }}>
-                    {runsPerWeek}x/week {'\u00D7'} 4.33 weeks {'\u00D7'} ${perRunCost.toFixed(2)}/run
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
         </div>
       </TabPanel>
     </div>

@@ -7,14 +7,13 @@ import {
   Settings,
   X,
 } from 'lucide-react'
-import { REGION } from '../regionConfig'
 
 const NAV_ITEMS = [
   { to: '/', label: 'Home', icon: Home },
   { to: '/stations', label: 'Data', icon: Database },
   { to: '/forecasts', label: 'Forecasts', icon: CloudSun },
   { to: '/advisories', label: 'Advisories', icon: Wheat },
-  { to: '/pipeline', label: 'How It Works', icon: Settings },
+  { to: '/pipeline', label: 'How it works', icon: Settings },
 ]
 
 interface Props {
@@ -28,63 +27,89 @@ export function Sidebar({ open, onClose }: Props) {
       {/* Backdrop for mobile */}
       {open && (
         <div
-          className="fixed inset-0 z-40 bg-black/30 backdrop-blur-sm lg:hidden"
+          className="fixed inset-0 z-40 lg:hidden"
+          style={{ background: 'rgba(27, 30, 45, 0.4)' }}
           onClick={onClose}
         />
       )}
 
       <aside
         className={`
-          fixed top-0 left-0 z-50 h-full w-72
+          fixed top-0 left-0 z-50 h-full w-60
           flex flex-col transition-transform duration-200 ease-in-out
           lg:translate-x-0 lg:static lg:z-auto
           ${open ? 'translate-x-0' : '-translate-x-full'}
         `}
-        style={{ background: 'linear-gradient(180deg, #1a1a1a 0%, #222018 100%)' }}
+        style={{ background: '#1b1e2d' }}
       >
         {/* Brand */}
-        <div className="flex items-center justify-between h-16 px-5 border-b border-white/10">
-          <Link to="/" className="flex items-center gap-2.5 no-underline">
-            <div className="w-8 h-8 rounded-lg bg-gold flex items-center justify-center">
-              <CloudSun size={18} className="text-white" />
-            </div>
-            <div>
-              <h1 className="text-sm font-bold text-white leading-tight font-serif">Weather Forecast</h1>
-              <p className="text-[10px] text-[#e0dcd5] font-sans font-medium uppercase tracking-wider">Farmer Advisor</p>
-            </div>
+        <div
+          className="flex items-center justify-between h-16 px-5"
+          style={{ borderBottom: '1px solid rgba(255,255,255,0.06)' }}
+        >
+          <Link to="/" className="flex items-baseline gap-2 no-underline">
+            <span
+              style={{
+                fontFamily: '"Source Serif 4", Georgia, serif',
+                fontSize: '18px',
+                fontWeight: 400,
+                color: '#fcfaf7',
+                letterSpacing: '-0.005em',
+              }}
+            >
+              Weather AI
+            </span>
           </Link>
           <button
             onClick={onClose}
             aria-label="Close navigation menu"
-            className="lg:hidden p-1 rounded-md hover:bg-white/10 text-[#e0dcd5]"
+            className="lg:hidden p-1"
+            style={{ color: '#8d909e', background: 'none', border: 'none' }}
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
 
         {/* Navigation */}
-        <nav className="flex-1 px-3 py-4 space-y-0.5 overflow-y-auto">
+        <nav className="flex-1 py-4 overflow-y-auto">
           {NAV_ITEMS.map(({ to, label, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
               end={to === '/'}
               onClick={onClose}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-sans font-medium transition-colors duration-100 ${
-                  isActive
-                    ? 'bg-gold/15 text-gold'
-                    : 'text-[#e0dcd5] hover:bg-white/5 hover:text-white'
-                }`
-              }
+              className="sidebar-link"
             >
-              <Icon size={18} />
-              {label}
+              <Icon size={16} style={{ flexShrink: 0 }} />
+              <span>{label}</span>
             </NavLink>
           ))}
         </nav>
 
       </aside>
+
+      <style>{`
+        .sidebar-link {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          padding: 10px 20px;
+          font-family: "Space Grotesk", system-ui, sans-serif;
+          font-size: 13px;
+          font-weight: 500;
+          color: #8d909e;
+          border-left: 2px solid transparent;
+          text-decoration: none;
+          transition: color 0.15s ease, border-color 0.15s ease;
+        }
+        .sidebar-link:hover {
+          color: #fcfaf7;
+        }
+        .sidebar-link.active {
+          color: #fcfaf7;
+          border-left-color: #2d5b7d;
+        }
+      `}</style>
     </>
   )
 }

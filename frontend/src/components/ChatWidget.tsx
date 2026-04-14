@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { MessageCircle, X, Send, Search, Trash2 } from 'lucide-react'
+import { X, Send, Search, Trash2 } from 'lucide-react'
 import { apiFetch, ApiError } from '../api/client'
 import { useFarmers } from '../api/hooks'
 import type { FarmerSummary, FarmerDetail } from '../api/hooks'
@@ -24,9 +24,8 @@ interface FarmerInfo {
 const INITIAL_MSG: ChatMessage = {
   role: 'assistant',
   content:
-    "Welcome! I can explain how this weather system works, show you forecasts for any station, " +
-    "or answer questions about the technology. Try: 'How are forecasts generated?', " +
-    "'Show the latest data for Chennai', or 'What technology powers this?'",
+    "Hi — I can explain how this system works, show forecasts for any station, or walk through a farmer's profile. " +
+    "Try: 'How are forecasts generated?', 'Show the latest data for Chennai', or 'What does a farmer advisory look like?'",
 }
 
 function renderMarkdown(text: string): string {
@@ -186,19 +185,41 @@ export function ChatWidget() {
       <button
         onClick={() => setOpen(true)}
         aria-label="Open farmer advisor chat"
-        title="Open Chat"
-        className="fixed bottom-6 right-6 z-[1000] w-[52px] h-[52px] rounded-full bg-gold text-white border-0 cursor-pointer shadow-[0_4px_16px_rgba(212,160,25,0.4)] flex items-center justify-center transition-transform hover:scale-[1.08]"
+        title="Ask the model"
+        className="fixed bottom-8 left-8 z-[1000]"
+        style={{
+          background: 'none',
+          border: 'none',
+          padding: '10px 14px',
+          fontFamily: '"Space Grotesk", system-ui, sans-serif',
+          fontSize: '13px',
+          fontWeight: 500,
+          color: '#2d5b7d',
+          cursor: 'pointer',
+          textUnderlineOffset: '4px',
+        }}
       >
-        <MessageCircle size={22} />
+        → Ask the model
       </button>
     )
   }
 
   return (
-    <div className="chat-widget-container fixed bottom-6 right-6 z-[1000] w-[380px] max-w-[calc(100vw-48px)] h-[600px] max-h-[calc(100vh-48px)] bg-cream rounded-xl border border-warm-border shadow-[0_8px_32px_rgba(0,0,0,0.15)] flex flex-col overflow-hidden">
+    <div
+      className="chat-widget-container fixed bottom-6 right-6 z-[1000] flex flex-col overflow-hidden"
+      style={{
+        width: '420px',
+        maxWidth: 'calc(100vw - 48px)',
+        height: '540px',
+        maxHeight: 'calc(100vh - 48px)',
+        background: '#ffffff',
+        border: '1px solid #e8e5e1',
+        borderRadius: '4px',
+      }}
+    >
       <style>{`
         .chat-widget-container code {
-          background: #f5f3ef;
+          background: #fcfaf7;
           padding: 1px 4px;
           border-radius: 3px;
           font-size: 0.8rem;
@@ -210,65 +231,96 @@ export function ChatWidget() {
         }
       `}</style>
       {/* Header */}
-      <div className="bg-sidebar text-white px-4 py-[14px] flex items-center justify-between shrink-0">
-        <div className="flex items-center gap-2">
-          <MessageCircle size={16} />
-          <span className="font-semibold text-[0.88rem]">Farmer Advisor Chat</span>
+      <div
+        className="flex items-center justify-between shrink-0"
+        style={{
+          padding: '16px 20px 12px 20px',
+          borderBottom: '1px solid #e8e5e1',
+          background: '#ffffff',
+        }}
+      >
+        <div>
+          <div className="eyebrow">Ask the model</div>
+          <div
+            style={{
+              fontFamily: '"Source Serif 4", Georgia, serif',
+              fontSize: '18px',
+              color: '#1b1e2d',
+              marginTop: '4px',
+            }}
+          >
+            Farmer advisor
+          </div>
         </div>
         <button
           onClick={() => setOpen(false)}
           aria-label="Close chat"
-          className="bg-transparent border-0 text-[#aaa] cursor-pointer p-0.5 flex hover:text-white"
+          style={{
+            background: 'none',
+            border: 'none',
+            color: '#8d909e',
+            cursor: 'pointer',
+            padding: '4px',
+          }}
         >
           <X size={18} />
         </button>
       </div>
 
       {/* Farmer Identity */}
-      <div className="px-[14px] py-[10px] border-b border-warm-border bg-warm-header-bg shrink-0">
-        <div className="text-[0.72rem] font-semibold text-warm-muted uppercase tracking-label mb-1.5">
-          Farmer Identity
-        </div>
-        <div className="flex gap-1.5">
+      <div
+        className="shrink-0"
+        style={{
+          padding: '14px 20px',
+          borderBottom: '1px solid #e8e5e1',
+          background: '#fcfaf7',
+        }}
+      >
+        <div className="eyebrow" style={{ marginBottom: '8px' }}>Look up a farmer</div>
+        <div className="flex gap-2">
           <input
             value={farmerPhone}
             onChange={e => setFarmerPhone(e.target.value)}
             placeholder="+919876543210"
             onKeyDown={e => e.key === 'Enter' && lookupFarmer(farmerPhone)}
             aria-label="Farmer phone number"
-            className="flex-1 px-[10px] py-1.5 text-[0.82rem] border border-warm-border rounded-md bg-white outline-none text-[#1a1a1a]"
+            className="input"
+            style={{ flex: 1 }}
           />
           <button
             onClick={() => lookupFarmer(farmerPhone)}
             disabled={lookingUp}
-            className="px-[10px] py-1.5 text-[0.75rem] font-semibold bg-gold text-white border-0 rounded-md cursor-pointer flex items-center gap-1"
+            className="btn-primary"
+            style={{ padding: '6px 14px', fontSize: '13px' }}
           >
             <Search size={12} />
-            {lookingUp ? '...' : 'Look up'}
+            {lookingUp ? '…' : 'Look up'}
           </button>
         </div>
 
         {farmerInfo && (
-          <div className="mt-1.5 text-[0.78rem] text-warm-body">
-            <strong>{farmerInfo.name}</strong> · {farmerInfo.district}, {farmerInfo.state}<br />
+          <div style={{ marginTop: '10px', fontSize: '13px', color: '#606373' }}>
+            <strong style={{ color: '#1b1e2d' }}>{farmerInfo.name}</strong> · {farmerInfo.district}, {farmerInfo.state}<br />
             Crops: {farmerInfo.crops.join(', ')} · {farmerInfo.area.toFixed(1)} ha
           </div>
         )}
 
         <button
           onClick={() => setShowDemoFarmers(!showDemoFarmers)}
-          className="mt-1.5 bg-transparent border-0 text-gold text-[0.72rem] cursor-pointer p-0 underline"
+          className="text-link"
+          style={{ marginTop: '10px', fontSize: '12px' }}
         >
-          {showDemoFarmers ? 'Hide' : 'Demo farmers'}
+          {showDemoFarmers ? 'Hide examples' : 'Try a demo farmer'}
         </button>
 
         {showDemoFarmers && farmers.data && (
-          <div className="mt-1 flex flex-wrap gap-1">
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginTop: '6px' }}>
             {farmers.data.slice(0, 6).map(f => (
               <button
                 key={f.phone}
                 onClick={() => selectDemoFarmer(f)}
-                className="bg-white border border-warm-border rounded px-2 py-[3px] text-[0.7rem] cursor-pointer text-warm-body"
+                className="chip"
+                style={{ fontSize: '12px', padding: '4px 10px' }}
               >
                 {f.name} ({f.phone.slice(-4)})
               </button>
@@ -278,25 +330,37 @@ export function ChatWidget() {
       </div>
 
       {/* Messages */}
-      <div className="flex-1 overflow-y-auto px-[14px] py-3 flex flex-col gap-2.5">
+      <div
+        className="flex-1 overflow-y-auto flex flex-col"
+        style={{ padding: '16px 20px', gap: '20px' }}
+      >
         {messages.map((msg, i) => (
-          <div
-            key={i}
-            className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
-          >
+          <div key={i}>
             <div
-              className={`max-w-[85%] px-3 py-2 rounded-[10px] text-[0.82rem] leading-[1.5] ${
-                msg.role === 'user'
-                  ? 'bg-gold text-white border-0'
-                  : 'bg-white text-[#1a1a1a] border border-warm-border'
-              }`}
+              className="eyebrow"
+              style={{ marginBottom: '6px', fontSize: '11px' }}
             >
-              <span dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }} />
+              {msg.role === 'user' ? 'You' : 'Model'}
+            </div>
+            <div
+              style={{
+                fontFamily:
+                  msg.role === 'user'
+                    ? '"Space Grotesk", system-ui, sans-serif'
+                    : '"Source Serif 4", Georgia, serif',
+                fontSize: msg.role === 'user' ? '13px' : '15px',
+                lineHeight: 1.65,
+                color: '#1b1e2d',
+              }}
+            >
+              <span
+                dangerouslySetInnerHTML={{ __html: renderMarkdown(msg.content) }}
+              />
             </div>
           </div>
         ))}
         {sending && (
-          <div className="flex items-center gap-1 px-3 py-2">
+          <div className="flex items-center gap-1">
             <span className="typing-dot" />
             <span className="typing-dot" />
             <span className="typing-dot" />
@@ -306,23 +370,33 @@ export function ChatWidget() {
       </div>
 
       {/* Input */}
-      <div className="px-[14px] py-2.5 border-t border-warm-border bg-warm-header-bg flex gap-1.5 shrink-0">
+      <div
+        className="flex gap-2 shrink-0"
+        style={{
+          padding: '12px 20px',
+          borderTop: '1px solid #e8e5e1',
+          background: '#fcfaf7',
+        }}
+      >
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
           onKeyDown={e => e.key === 'Enter' && !e.shiftKey && sendMessage()}
-          placeholder="Ask something..."
+          placeholder="Ask a question..."
           disabled={sending}
           aria-label="Chat message input"
-          className="flex-1 px-3 py-2 text-[0.82rem] border border-warm-border rounded-lg bg-white outline-none text-[#1a1a1a]"
+          className="input"
+          style={{ flex: 1 }}
         />
         <button
           onClick={sendMessage}
           disabled={sending || !input.trim()}
           aria-label="Send message"
-          className={`px-3 py-2 bg-gold text-white border-0 rounded-lg cursor-pointer flex items-center ${
-            sending || !input.trim() ? 'opacity-50' : ''
-          }`}
+          className="btn-primary"
+          style={{
+            padding: '6px 12px',
+            opacity: sending || !input.trim() ? 0.5 : 1,
+          }}
         >
           <Send size={14} />
         </button>
@@ -330,7 +404,8 @@ export function ChatWidget() {
           onClick={clearChat}
           title="Clear conversation"
           aria-label="Clear conversation"
-          className="p-2 bg-transparent border border-warm-border rounded-lg cursor-pointer flex items-center text-warm-muted"
+          className="btn-secondary"
+          style={{ padding: '6px 10px' }}
         >
           <Trash2 size={14} />
         </button>

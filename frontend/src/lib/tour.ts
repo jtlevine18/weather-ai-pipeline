@@ -5,7 +5,7 @@ export const tourSteps: Step[] = [
   {
     target: '[data-tour="hero"]',
     title: 'Welcome',
-    content: 'This dashboard runs a weather intelligence system for smallholder farmers in Southern India. Every week, it collects real weather data, generates locally accurate forecasts, and sends personalized farming advice by SMS — in Tamil and Malayalam. The whole thing costs about $3/month to run.',
+    content: 'This dashboard runs a weather intelligence system for smallholder farmers in Southern India. Every week, it collects real weather data, generates locally accurate forecasts, and sends personalized farming advice by SMS — in Tamil and Malayalam. The whole thing costs under a dollar a week to run.',
     placement: 'bottom',
     disableBeacon: true,
   },
@@ -21,14 +21,14 @@ export const tourSteps: Step[] = [
   {
     target: '[data-tour="stations-title"]',
     title: 'Real station data',
-    content: 'It starts with live observations from 20 weather stations across Kerala and Tamil Nadu. Ground-truth weather data in most of the world is patchy, delayed, and full of sensor errors — this is no exception.',
+    content: 'It starts with live observations from 20 weather stations across Kerala and Tamil Nadu. Ground-truth weather data is patchy, delayed, and full of sensor errors almost everywhere — Southern India is no exception.',
     placement: 'bottom',
     disableBeacon: true,
   },
   {
     target: '[data-tour="stations-metrics"]',
     title: 'Data quality',
-    content: 'These metrics show what came in and how clean it is. The accuracy score reflects how much the AI had to intervene to fix problems.',
+    content: 'These metrics show what came in and how clean it is. The accuracy score reflects how often the AI had to step in to correct or fill readings.',
     placement: 'bottom',
     disableBeacon: true,
   },
@@ -59,7 +59,7 @@ export const tourSteps: Step[] = [
   {
     target: '[data-tour="forecasts-tabs"]',
     title: 'Personalized to each farm',
-    content: 'Weather stations are spread far apart, but farmers need forecasts for their exact location. The system uses NASA satellite data and altitude adjustments to tailor predictions to each farmer\'s GPS coordinates — farm-level weather without farm-level infrastructure.',
+    content: 'Weather stations are spread far apart, but farmers need forecasts for their exact location. The system uses NASA satellite data and altitude corrections to tailor predictions to each farmer\'s GPS coordinates.',
     placement: 'top',
     disableBeacon: true,
     disableScrolling: true,
@@ -84,7 +84,7 @@ export const tourSteps: Step[] = [
   {
     target: '[data-tour="advisories-tabs"]',
     title: 'The last mile',
-    content: 'Advisories go out by SMS. The Farmer Profiles tab shows how each farmer\'s official records — land ownership, soil tests, crop insurance, credit — are used to personalize the advice they receive. The hard part isn\'t the technology. It\'s building trust so farmers actually act on it.',
+    content: 'Advisories go out by SMS. The Farmer Profiles tab shows how each farmer\'s official records — land ownership, soil tests, crop insurance, credit — are used to personalize the advice they receive.',
     placement: 'top',
     disableBeacon: true,
     disableScrolling: true,
@@ -118,10 +118,10 @@ export const stepRoutes: Record<number, string> = {
 export const tourStyles = {
   options: {
     zIndex: 10000,
-    arrowColor: '#1a1a1a',
-    backgroundColor: '#1a1a1a',
-    primaryColor: '#d4a019',
-    textColor: '#e0dcd5',
+    arrowColor: '#1b1e2d',
+    backgroundColor: '#1b1e2d',
+    primaryColor: '#2d5b7d',
+    textColor: '#e8e5e1',
     overlayColor: 'rgba(0, 0, 0, 0.45)',
   },
   tooltip: {
@@ -136,14 +136,14 @@ export const tourStyles = {
     fontFamily: '"Source Serif 4", Georgia, serif',
     fontWeight: 700,
     fontSize: '1.05rem',
-    color: '#d4a019',
+    color: '#2d5b7d',
     marginBottom: 8,
   },
   tooltipContent: {
     padding: '8px 0 0',
   },
   buttonNext: {
-    backgroundColor: '#d4a019',
+    backgroundColor: '#2d5b7d',
     color: '#fff',
     borderRadius: 6,
     fontFamily: '"DM Sans", system-ui, sans-serif',

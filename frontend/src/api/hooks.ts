@@ -1,51 +1,95 @@
 import { useQuery } from '@tanstack/react-query'
-import { apiFetch } from './client'
+import {
+  STATIONS_VIEW,
+  TELEMETRY_RAW,
+  TELEMETRY_CLEAN,
+  STATION_LATEST_BY_ID,
+  FORECASTS,
+  ALERTS,
+  DELIVERIES,
+  HEALING_RECORDS,
+  HEALING_STATS,
+  PIPELINE_RUNS,
+  PIPELINE_STATS,
+  SOURCES,
+  MOS_STATUS,
+  EVAL_METRICS,
+  CONVERSATION_LOG,
+  DELIVERY_METRICS_AGG,
+  FARMERS_SUMMARY,
+  FARMERS_DETAIL_BY_PHONE,
+} from './mockData'
 
 // ── Types ──────────────────────────────────────────────────
 
+// Matches reskin/original api/stations.ts hardcoded stub shape
+// (no `stations` table exists in the DB schema)
 export interface Station {
-  station_id: string
+  id: string
   name: string
   state: string
-  latitude: number
-  longitude: number
-  elevation?: number
+  lat: number
+  lon: number
+  altitude_m?: number
+  // Not in the stub but tolerated by components — `source` and `active`
+  // are still referenced in the mock; they'll be undefined when port chat
+  // switches to the real endpoint unless/until it enriches the response.
   source?: string
   active?: boolean
 }
 
+// Matches DB `forecasts` table columns
 export interface Forecast {
-  id?: number
+  id?: string | number
   station_id: string
+  // Derived frontend-only, filled from stationMap fallback where used
   station_name?: string
-  forecast_date?: string
+  issued_at?: string
+  valid_for_ts?: string
   forecast_day?: number
-  temp_min?: number
-  temp_max?: number
-  rainfall_mm?: number
+  temperature?: number
   humidity?: number
+  wind_speed?: number
+  rainfall?: number
   condition?: string
-  model?: string
   model_used?: string
+  nwp_source?: string
+  nwp_temp?: number
+  correction?: number
   confidence?: number
   created_at?: string
+  // Frontend-only derived fields (NOT in DB) — components use them for
+  // day-level min/max display. Port chat will need to compute these or
+  // switch the UI to the single `temperature` field.
+  temp_min?: number
+  temp_max?: number
 }
 
+// Matches DB `agricultural_alerts` table columns
 export interface Alert {
-  id?: number
+  id?: string | number
   station_id: string
+  // Derived frontend-only
   station_name?: string
+  farmer_lat?: number
+  farmer_lon?: number
+  issued_at?: string
   condition?: string
-  severity?: string
   advisory_en?: string
   advisory_local?: string
   language?: string
   provider?: string
+  retrieval_docs?: number
   forecast_days?: number
-  issued_at?: string
   created_at?: string
+  // Frontend-only — no `severity` column in DB; port chat may compute from
+  // `condition` or drop the filter.
+  severity?: string
 }
 
+// NOTE: No backend endpoint exists for station-latest. Shape kept as-is;
+// the port chat will need to stand one up (e.g. by joining stations with
+// the latest clean_telemetry row) and decide on the final field names.
 export interface StationLatest {
   station_id: string
   station_name?: string
@@ -61,12 +105,19 @@ export interface StationLatest {
   source?: string
 }
 
+// Matches DB `pipeline_runs` table columns
 export interface PipelineRun {
-  id?: number
-  run_id?: string
-  status?: string
+  id?: string | number
   started_at?: string
-  finished_at?: string
+  ended_at?: string
+  status?: string
+  steps_ok?: number
+  steps_fail?: number
+  summary?: string
+  // Frontend-only fields that the DB schema does NOT currently contain.
+  // The port chat will either need to add columns, compute them from
+  // related tables, or remove these from the UI.
+  run_id?: string
   duration_seconds?: number
   stations_processed?: number
   records_ingested?: number
@@ -74,30 +125,42 @@ export interface PipelineRun {
   error_detail?: string
 }
 
+// Matches DB `raw_telemetry` / `clean_telemetry` table columns
 export interface TelemetryRecord {
-  id?: number
+  id?: string | number
   station_id: string
+  // Derived frontend-only
   station_name?: string
+  ts?: string
   temperature?: number
   humidity?: number
-  rainfall_mm?: number
   wind_speed?: number
-  observed_at?: string
+  wind_dir?: number
+  pressure?: number
+  rainfall?: number
   quality_score?: number
   source?: string
+  fault_type?: string
   heal_action?: string
+  heal_source?: string
+  created_at?: string
+  // Frontend-only derived field; not in DB.
   fields_filled?: number
 }
 
+// Matches DB `delivery_log` table columns
 export interface DeliveryRecord {
-  id?: number
+  id?: string | number
+  alert_id?: string
   station_id?: string
+  // Derived frontend-only
   station_name?: string
   channel?: string
   recipient?: string
   status?: string
-  message_preview?: string
+  message?: string
   delivered_at?: string
+  // Not in DB — kept so `d.created_at` references continue to type-check.
   created_at?: string
 }
 
@@ -174,64 +237,54 @@ export interface SourceInfo {
   status?: string
 }
 
-// ── Hooks ──────────────────────────────────────────────────
+// ── Mock delay helper ──────────────────────────────────────
+// Simulates a fast network request so React Query still treats
+// these as real async sources (isLoading, caching, etc. all work).
 
-interface RawStation {
-  station_id?: string
-  id?: string
-  name?: string
-  state?: string
-  latitude?: number
-  longitude?: number
-  lat?: number
-  lon?: number
-  elevation?: number
-  altitude_m?: number
-  source?: string
-  active?: boolean
+function mock<T>(value: T, delayMs = 260): Promise<T> {
+  return new Promise((resolve) => setTimeout(() => resolve(value), delayMs))
 }
+
+// ── Hooks ──────────────────────────────────────────────────
 
 export function useStations() {
   return useQuery<Station[]>({
     queryKey: ['stations'],
-    queryFn: async () => {
-      const raw = await apiFetch<RawStation[]>('/api/stations')
-      return raw.map((s) => ({
-        station_id: s.station_id ?? s.id ?? '',
-        name: s.name ?? '',
-        state: s.state ?? '',
-        latitude: s.latitude ?? s.lat ?? 0,
-        longitude: s.longitude ?? s.lon ?? 0,
-        elevation: s.elevation ?? s.altitude_m,
-        source: s.source,
-        active: s.active,
-      }))
-    },
+    queryFn: () => mock(STATIONS_VIEW),
     staleTime: 5 * 60 * 1000,
   })
 }
 
 export function useForecasts(limit = 50, forecastDay?: number) {
-  const params = new URLSearchParams({ limit: String(limit) })
-  if (forecastDay !== undefined) params.set('forecast_day', String(forecastDay))
-
   return useQuery<Forecast[]>({
     queryKey: ['forecasts', limit, forecastDay],
-    queryFn: () => apiFetch(`/api/forecasts?${params}`),
+    queryFn: () => {
+      let rows = FORECASTS
+      if (forecastDay !== undefined) {
+        rows = rows.filter((f) => f.forecast_day === forecastDay)
+      }
+      return mock(rows.slice(0, limit))
+    },
   })
 }
 
 export function useAlerts(limit = 50) {
   return useQuery<Alert[]>({
     queryKey: ['alerts', limit],
-    queryFn: () => apiFetch(`/api/alerts?limit=${limit}`),
+    queryFn: () => mock(ALERTS.slice(0, limit)),
   })
 }
 
 export function useStationLatest(stationId: string) {
   return useQuery<StationLatest>({
     queryKey: ['station-latest', stationId],
-    queryFn: () => apiFetch(`/api/station/${stationId}/latest`),
+    queryFn: () => {
+      const row = STATION_LATEST_BY_ID[stationId]
+      if (!row) {
+        return Promise.reject(new Error(`Station ${stationId} not found`))
+      }
+      return mock(row)
+    },
     enabled: !!stationId,
   })
 }
@@ -239,97 +292,56 @@ export function useStationLatest(stationId: string) {
 export function usePipelineRuns(limit = 20) {
   return useQuery<PipelineRun[]>({
     queryKey: ['pipeline-runs', limit],
-    queryFn: () => apiFetch(`/api/pipeline?mode=runs&limit=${limit}`),
+    queryFn: () => mock(PIPELINE_RUNS.slice(0, limit)),
   })
-}
-
-interface RawTelemetry extends TelemetryRecord {
-  ts?: string
-  rainfall?: number
-}
-
-function normalizeTelemetry(raw: RawTelemetry[]): TelemetryRecord[] {
-  return raw.map((r) => ({
-    ...r,
-    observed_at: r.observed_at ?? r.ts ?? '',
-    rainfall_mm: r.rainfall_mm ?? r.rainfall,
-    heal_action: r.heal_action ?? undefined,
-    fields_filled: r.fields_filled ?? undefined,
-  }))
 }
 
 export function useTelemetryRaw(limit = 50) {
   return useQuery<TelemetryRecord[]>({
     queryKey: ['telemetry-raw', limit],
-    queryFn: async () => {
-      const data = await apiFetch<RawTelemetry[]>(`/api/telemetry?type=raw&limit=${limit}`)
-      return normalizeTelemetry(data)
-    },
+    queryFn: () => mock(TELEMETRY_RAW.slice(0, limit)),
   })
 }
 
 export function useTelemetryClean(limit = 50) {
   return useQuery<TelemetryRecord[]>({
     queryKey: ['telemetry-clean', limit],
-    queryFn: async () => {
-      const data = await apiFetch<RawTelemetry[]>(`/api/telemetry?type=clean&limit=${limit}`)
-      return normalizeTelemetry(data)
-    },
+    queryFn: () => mock(TELEMETRY_CLEAN.slice(0, limit)),
   })
 }
 
 export function useDeliveryLog(limit = 50) {
   return useQuery<DeliveryRecord[]>({
     queryKey: ['delivery-log', limit],
-    queryFn: () => apiFetch(`/api/delivery?mode=log&limit=${limit}`),
+    queryFn: () => mock(DELIVERIES.slice(0, limit)),
   })
 }
 
 export function useHealingLog(limit = 50) {
   return useQuery<HealingRecord[]>({
     queryKey: ['healing-log', limit],
-    queryFn: () => apiFetch(`/api/healing?mode=log&limit=${limit}`),
+    queryFn: () => mock(HEALING_RECORDS.slice(0, limit)),
   })
 }
 
 export function useHealingStats() {
   return useQuery<HealingStats>({
     queryKey: ['healing-stats'],
-    queryFn: () => apiFetch('/api/healing?mode=stats'),
+    queryFn: () => mock(HEALING_STATS),
   })
 }
 
 export function usePipelineStats() {
   return useQuery<PipelineStats>({
     queryKey: ['pipeline-stats'],
-    queryFn: () => apiFetch('/api/pipeline?mode=stats'),
+    queryFn: () => mock(PIPELINE_STATS),
   })
-}
-
-interface RawSource {
-  source?: string
-  name?: string
-  count?: number
-  type?: string
-  stations?: number
-  status?: string
 }
 
 export function useSources() {
   return useQuery<SourceInfo[]>({
     queryKey: ['sources'],
-    queryFn: async () => {
-      const raw = await apiFetch<RawSource[]>('/api/sources')
-      // API returns [{source: "imd", count: 210}] — normalize to SourceInfo
-      return raw.map((s) => ({
-        name: s.source ?? s.name ?? 'Unknown',
-        source: s.source,
-        count: s.count,
-        type: s.type,
-        stations: s.stations ?? s.count,
-        status: s.status,
-      }))
-    },
+    queryFn: () => mock(SOURCES),
     staleTime: 5 * 60 * 1000,
   })
 }
@@ -337,7 +349,7 @@ export function useSources() {
 export function useEvals() {
   return useQuery<Record<string, any>>({
     queryKey: ['evals'],
-    queryFn: () => apiFetch('/api/metrics'),
+    queryFn: () => mock(EVAL_METRICS),
     staleTime: 5 * 60 * 1000,
   })
 }
@@ -345,26 +357,30 @@ export function useEvals() {
 export function useConversationLog(limit = 50) {
   return useQuery<any[]>({
     queryKey: ['conversation-log', limit],
-    queryFn: () => apiFetch(`/api/conversation?limit=${limit}`),
+    queryFn: () => mock(CONVERSATION_LOG.slice(0, limit)),
   })
 }
 
 export function useDeliveryMetricsAgg(limit = 200) {
   return useQuery<any[]>({
     queryKey: ['delivery-metrics', limit],
-    queryFn: () => apiFetch(`/api/delivery?mode=metrics&limit=${limit}`),
+    queryFn: () => mock(DELIVERY_METRICS_AGG.slice(0, limit)),
   })
 }
 
 // ── Farmer / DPI ──────────────────────────────────────────
 
+// Matches DB `farmer_profiles` table columns (with the caveat that
+// `primary_crops` is stored as VARCHAR in the DB — the port chat will
+// need to parse it to an array on the way out, or the backend can split
+// before returning).
 export interface FarmerSummary {
   phone: string
   name: string
   district: string
-  station: string
-  crops: string[]
-  area_ha: number
+  station_id: string
+  primary_crops: string[]
+  total_area: number
 }
 
 export interface FarmerDetail {
@@ -381,7 +397,7 @@ export interface FarmerDetail {
 export function useFarmers(opts?: { enabled?: boolean }) {
   return useQuery<FarmerSummary[]>({
     queryKey: ['farmers'],
-    queryFn: () => apiFetch('/api/farmers'),
+    queryFn: () => mock(FARMERS_SUMMARY),
     staleTime: 5 * 60 * 1000,
     enabled: opts?.enabled ?? true,
   })
@@ -390,7 +406,13 @@ export function useFarmers(opts?: { enabled?: boolean }) {
 export function useFarmerDetail(phone: string) {
   return useQuery<FarmerDetail>({
     queryKey: ['farmer-detail', phone],
-    queryFn: () => apiFetch(`/api/farmers/${encodeURIComponent(phone)}`),
+    queryFn: () => {
+      const detail = FARMERS_DETAIL_BY_PHONE[phone]
+      if (!detail) {
+        return Promise.reject(new Error(`Farmer ${phone} not found`))
+      }
+      return mock(detail)
+    },
     enabled: !!phone,
   })
 }
@@ -414,8 +436,7 @@ export interface MosStatus {
 export function useMosStatus() {
   return useQuery<MosStatus>({
     queryKey: ['mos-status'],
-    queryFn: () => apiFetch('/api/pipeline?mode=mos-status'),
+    queryFn: () => mock(MOS_STATUS),
     staleTime: 30_000,
   })
 }
-

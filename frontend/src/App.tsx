@@ -18,19 +18,17 @@ export default function App() {
   const [stepIndex, setStepIndex] = useState(0)
   const navigate = useNavigate()
 
-  // Auto-start on first visit, or when ?tour=true
+  // Tour autostart disabled for re-skin; relaunch via button still works
   useEffect(() => {
     const forced = searchParams.get('tour') === 'true'
-    const seen = localStorage.getItem('weather_tour_v2') === '1'
-    if (forced || !seen) {
+    if (forced) {
       const timer = setTimeout(() => {
         if (location.pathname !== '/') navigate('/')
         setTimeout(() => {
           setStepIndex(0)
           setRunTour(true)
-          localStorage.setItem('weather_tour_v2', '1')
         }, 150)
-      }, 700)
+      }, 400)
       return () => clearTimeout(timer)
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps

@@ -15,42 +15,50 @@ import {
 // ---------------------------------------------------------------------------
 
 const CONDITION_COLOR: Record<string, string> = {
-  heavy_rain: '#1565C0',
-  moderate_rain: '#1976D2',
-  heat_stress: '#C62828',
-  drought_risk: '#E65100',
-  frost_risk: '#0277BD',
-  high_wind: '#455A64',
-  foggy: '#546E7A',
-  clear: '#2E7D32',
+  heavy_rain: '#2d5b7d',
+  moderate_rain: '#2d5b7d',
+  heat_stress: '#c71f48',
+  drought_risk: '#2d5b7d',
+  frost_risk: '#606373',
+  high_wind: '#606373',
+  foggy: '#606373',
+  clear: '#606373',
 }
 
-const CONDITION_EMOJI: Record<string, string> = {
-  heavy_rain: '\u{1F327}\uFE0F',
-  moderate_rain: '\u{1F326}\uFE0F',
-  heat_stress: '\u{1F321}\uFE0F',
-  drought_risk: '\u{1F335}',
-  frost_risk: '\u2744\uFE0F',
-  high_wind: '\u{1F4A8}',
-  foggy: '\u{1F32B}\uFE0F',
-  clear: '\u2600\uFE0F',
+const MODEL_LABEL: Record<string, string> = {
+  neuralgcm_mos: 'Neural + local correction',
+  neuralgcm_only: 'Neural (raw)',
+  hybrid_mos: 'Standard + local correction',
+  nwp_only: 'Standard (raw)',
+  persistence: 'Last known reading',
+}
+
+const CONDITION_LABEL: Record<string, string> = {
+  heavy_rain: 'Heavy rain',
+  moderate_rain: 'Moderate rain',
+  heat_stress: 'Heat stress',
+  drought_risk: 'Drought risk',
+  frost_risk: 'Frost risk',
+  high_wind: 'High wind',
+  foggy: 'Fog',
+  clear: 'Clear',
 }
 
 const MODEL_COLOR: Record<string, string> = {
-  neuralgcm_mos: '#4361ee',
-  neuralgcm_only: '#7b8cde',
-  hybrid_mos: '#2a9d8f',
-  nwp_only: '#6db5a8',
-  persistence: '#e63946',
+  neuralgcm_mos: '#2d5b7d',
+  neuralgcm_only: '#2d5b7d',
+  hybrid_mos: '#606373',
+  nwp_only: '#606373',
+  persistence: '#c71f48',
 }
 
 const DEGRADATION_TIERS = [
-  { tier: 'Tier 1', name: 'AI-Powered Forecasts', sub: 'Most accurate', color: '#4361ee',
-    desc: 'Google DeepMind\u2019s neural weather model produces global forecasts, refined with machine learning trained on local weather history.' },
-  { tier: 'Tier 2', name: 'Standard Weather Models', sub: 'Good accuracy, lower cost', color: '#2a9d8f',
-    desc: 'Traditional weather models via Open-Meteo when the AI model is unavailable, with the same local accuracy corrections.' },
-  { tier: 'Tier 3', name: 'Last Known Reading', sub: 'Emergency fallback', color: '#e63946',
-    desc: 'Uses the most recent observation with time-of-day adjustment. No corrections applied.' },
+  { tier: 'Tier 1', name: 'AI weather model + local correction', sub: 'primary', color: '#2d5b7d',
+    desc: 'NeuralGCM \u2014 Google DeepMind\u2019s open neural weather model \u2014 produces a global forecast, then a statistical model trained on twelve years of station history applies a per-station local correction.' },
+  { tier: 'Tier 2', name: 'Standard weather model + local correction', sub: 'fallback', color: '#606373',
+    desc: 'Open-Meteo\u2019s traditional weather models when NeuralGCM is unavailable, with the same local correction applied.' },
+  { tier: 'Tier 3', name: 'Last known reading', sub: 'emergency', color: '#c71f48',
+    desc: 'The most recent observation with a time-of-day adjustment. No corrections applied.' },
 ]
 
 const STATES = ['All', ...REGION.states]
@@ -65,9 +73,9 @@ function fmtVal(v: number | undefined | null, unit = '', decimals = 1): string {
 }
 
 function confidenceColor(c: number): string {
-  if (c >= 0.7) return '#2a9d8f'
-  if (c >= 0.4) return '#d4a019'
-  return '#e63946'
+  if (c >= 0.7) return '#606373'
+  if (c >= 0.4) return '#2d5b7d'
+  return '#c71f48'
 }
 
 function dayLabel(day: number | undefined): string {
@@ -91,7 +99,7 @@ export default function Forecasts() {
 
   const stationMap = useMemo(() => {
     const map: Record<string, { name: string; state: string }> = {}
-    stations?.forEach(s => { map[s.station_id] = { name: s.name, state: s.state } })
+    stations?.forEach(s => { map[s.id] = { name: s.name, state: s.state } })
     return map
   }, [stations])
 
@@ -102,7 +110,7 @@ export default function Forecasts() {
   const totalForecasts = allForecasts.length
   const avgConf = totalForecasts > 0
     ? allForecasts.reduce((s, f) => s + (f.confidence ?? 0), 0) / totalForecasts : 0
-  const getModel = (f: { model_used?: string; model?: string }) => f.model_used || f.model || ''
+  const getModel = (f: { model_used?: string }) => f.model_used || ''
   const mosCount = allForecasts.filter(f => getModel(f).includes('mos')).length
   const mosPct = totalForecasts > 0 ? Math.round(100 * mosCount / totalForecasts) : 0
   const mosStatus = useMosStatus()
@@ -114,7 +122,7 @@ export default function Forecasts() {
 
   // Conditions & models for filter dropdowns
   const conditions = useMemo(() => {
-    const set = new Set(allForecasts.map(f => f.condition).filter(Boolean))
+    const set = new Set(allForecasts.map(f => f.condition).filter((x): x is string => !!x))
     return ['All', ...Array.from(set)]
   }, [allForecasts])
   const models = useMemo(() => {
@@ -158,30 +166,41 @@ export default function Forecasts() {
   }, [allForecasts])
 
   if (isLoading) return <TableSkeleton />
-  if (error) return <div className="text-center py-12"><p className="text-error text-sm">Failed to load forecasts</p></div>
+  if (error) return <div className="text-center py-12"><p className="text-crit text-sm">Failed to load forecasts</p></div>
 
   const TABS = ['Station Forecasts', 'Model Performance', 'Downscaling']
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8">
       {/* Title */}
       <div>
-        <h1 className="page-title" data-tour="forecasts-title">Forecasts</h1>
-        <p className="page-caption">
-          7-day predictions for each station, adjusted to individual farmer locations
+        <h1 className="page-title" data-tour="forecasts-title">
+          Forecasts
+        </h1>
+        <p className="page-caption" style={{ maxWidth: '680px' }}>
+          Seven-day predictions for each station, then pulled in to each
+          farmer's exact location and corrected for elevation.
         </p>
       </div>
 
-
       {/* 5 Metrics */}
-      <div data-tour="forecasts-metrics" className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div
+        data-tour="forecasts-metrics"
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(5, 1fr)',
+          gap: '32px',
+          borderTop: '1px solid #e8e5e1',
+          paddingTop: '28px',
+        }}
+      >
         <MetricCard label="Stations Reporting" value={uniqueStations} />
         <MetricCard label="Total Forecasts" value={totalForecasts} />
         <MetricCard label="Avg Confidence" value={avgConf > 0 ? `${Math.round(avgConf * 100)}%` : '--'} />
         <MetricCard
-          label="MOS Correction"
+          label="Local correction"
           value={mosModelTrained ? `${(mosStatus.data?.metrics?.rmse ?? 0).toFixed(2)}\u00B0C RMSE` : 'Training'}
-          subtitle={mosCount > 0 ? `${mosPct}% of forecasts corrected` : mosModelTrained ? 'Applies on next pipeline run' : 'Needs more data to train'}
+          subtitle={mosCount > 0 ? `${mosPct}% of forecasts corrected` : mosModelTrained ? 'Applies on the next run' : 'Warming up'}
         />
         <MetricCard label="Weather Model" value={nwpSource} />
       </div>
@@ -203,15 +222,15 @@ export default function Forecasts() {
       <TabPanel active={activeTab === 0}>
         <div className="space-y-6">
           {/* Filters */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <select className="input" value={stateFilter} onChange={e => setStateFilter(e.target.value)}>
-              {STATES.map(s => <option key={s}>{s}</option>)}
+              {STATES.map(s => <option key={s} value={s}>{s === 'All' ? 'All states' : s}</option>)}
             </select>
             <select className="input" value={condFilter} onChange={e => setCondFilter(e.target.value)}>
-              {conditions.map(c => <option key={c}>{c}</option>)}
+              {conditions.map(c => <option key={c} value={c}>{c === 'All' ? 'All conditions' : (CONDITION_LABEL[c] ?? c)}</option>)}
             </select>
             <select className="input" value={modelFilter} onChange={e => setModelFilter(e.target.value)}>
-              {models.map(m => <option key={m}>{m}</option>)}
+              {models.map(m => <option key={m} value={m}>{m === 'All' ? 'All models' : (MODEL_LABEL[m] ?? m)}</option>)}
             </select>
           </div>
 
@@ -242,45 +261,35 @@ export default function Forecasts() {
                       {items.map((f, i) => {
                         const cond = f.condition || ''
                         const condColor = CONDITION_COLOR[cond] || '#888'
-                        const condEmoji = CONDITION_EMOJI[cond] || ''
                         const model = getModel(f)
                         const mColor = MODEL_COLOR[model] || '#888'
                         const conf = f.confidence ?? 0
                         return (
                           <tr key={f.id ?? i}>
-                            <td style={{ fontWeight: 500, color: '#1a1a1a' }}>
+                            <td style={{ fontWeight: 500, color: '#1b1e2d' }}>
                               {f.station_name || stationMap[f.station_id]?.name || f.station_id}
                             </td>
                             <td>{dayLabel(f.forecast_day)}</td>
-                            <td>{fmtVal(f.temp_max, '\u00B0C')}</td>
-                            <td>{fmtVal(f.rainfall_mm, ' mm')}</td>
+                            <td>{fmtVal(f.temp_max ?? f.temperature, '\u00B0C')}</td>
+                            <td>{fmtVal(f.rainfall, ' mm')}</td>
                             <td>
                               {cond ? (
-                                <span style={{
-                                  background: condColor, color: '#fff',
-                                  padding: '3px 10px', borderRadius: '12px',
-                                  fontSize: '0.82rem', fontWeight: 600, whiteSpace: 'nowrap',
-                                }}>
-                                  {condEmoji} {cond.replace(/_/g, ' ')}
+                                <span style={{ color: condColor, fontSize: '13px' }}>
+                                  {CONDITION_LABEL[cond] ?? cond.replace(/_/g, ' ')}
                                 </span>
-                              ) : '--'}
+                              ) : '—'}
                             </td>
                             <td>
                               {model ? (
-                                <span style={{
-                                  background: `${mColor}22`, color: mColor,
-                                  border: `1px solid ${mColor}`,
-                                  padding: '2px 8px', borderRadius: '4px',
-                                  fontSize: '0.78rem', fontWeight: 600,
-                                }}>
-                                  {model.replace(/_/g, ' ')}
+                                <span style={{ color: mColor, fontSize: '13px' }}>
+                                  {MODEL_LABEL[model] ?? model.replace(/_/g, ' ')}
                                 </span>
-                              ) : '--'}
+                              ) : '—'}
                             </td>
                             <td>
                               <div className="flex items-center gap-2">
                                 <div style={{
-                                  width: '80px', height: '8px', background: '#e0dcd5',
+                                  width: '80px', height: '8px', background: '#e8e5e1',
                                   borderRadius: '4px', overflow: 'hidden',
                                 }}>
                                   <div style={{
@@ -309,23 +318,44 @@ export default function Forecasts() {
         <div className="space-y-8">
           {/* Degradation Chain */}
           <div>
-            <div className="section-header">Degradation Chain</div>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div className="section-header">Degradation chain</div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '32px',
+              }}
+            >
               {DEGRADATION_TIERS.map(t => (
-                <div key={t.tier} style={{
-                  background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-                  padding: '16px', borderLeft: `4px solid ${t.color}`,
-                }}>
-                  <div style={{ textTransform: 'uppercase', fontSize: '0.72rem', color: '#999', letterSpacing: '1px' }}>
-                    {t.tier}
-                  </div>
-                  <div style={{ fontSize: '1rem', fontWeight: 700, color: '#1a1a1a', marginTop: '4px' }}>
+                <div
+                  key={t.tier}
+                  style={{
+                    borderTop: '1px solid #e8e5e1',
+                    paddingTop: '16px',
+                  }}
+                >
+                  <div className="eyebrow">{t.tier} · {t.sub}</div>
+                  <div
+                    style={{
+                      fontFamily: '"Source Serif 4", Georgia, serif',
+                      fontSize: '20px',
+                      lineHeight: '26px',
+                      color: '#1b1e2d',
+                      marginTop: '10px',
+                    }}
+                  >
                     {t.name}
                   </div>
-                  <div style={{ fontSize: '0.78rem', color: '#888', marginTop: '2px' }}>{t.sub}</div>
-                  <div style={{ fontSize: '0.82rem', color: '#555', marginTop: '8px', lineHeight: 1.5 }}>
+                  <p
+                    style={{
+                      fontSize: '13px',
+                      color: '#606373',
+                      marginTop: '10px',
+                      lineHeight: 1.6,
+                    }}
+                  >
                     {t.desc}
-                  </div>
+                  </p>
                 </div>
               ))}
             </div>
@@ -333,31 +363,51 @@ export default function Forecasts() {
 
           {/* Model Confidence Chart */}
           <div>
-            <div className="section-header">Usage Breakdown</div>
-            <div style={{
-              background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px',
-              padding: '16px',
-            }}>
+            <div className="section-header">Usage breakdown</div>
+            <div
+              style={{
+                borderTop: '1px solid #e8e5e1',
+                borderBottom: '1px solid #e8e5e1',
+                padding: '24px 0',
+              }}
+            >
               <ResponsiveContainer width="100%" height={240}>
                 <BarChart
                   data={modelBreakdown.map(([model]) => {
                     const items = allForecasts.filter(f => getModel(f) === model)
                     const confs = items.map(f => f.confidence ?? 0).filter(c => c > 0)
                     const avg = confs.length > 0 ? confs.reduce((a, b) => a + b, 0) / confs.length : 0
-                    return { model: model.replace(/_/g, ' '), avgConfidence: Math.round(avg * 100), _key: model }
+                    return { model: MODEL_LABEL[model] ?? model.replace(/_/g, ' '), avgConfidence: Math.round(avg * 100), _key: model }
                   })}
                   margin={{ top: 8, right: 16, left: 0, bottom: 4 }}
                 >
-                  <CartesianGrid strokeDasharray="3 3" stroke="#e0dcd5" />
-                  <XAxis dataKey="model" tick={{ fill: '#888', fontSize: 12, fontFamily: 'DM Sans' }} />
-                  <YAxis domain={[0, 100]} tick={{ fill: '#888', fontSize: 12, fontFamily: 'DM Sans' }} unit="%" />
-                  <Tooltip
-                    contentStyle={{ borderRadius: '8px', border: '1px solid #e0dcd5', fontFamily: 'DM Sans, sans-serif' }}
-                    formatter={(value: number) => [`${value}%`, 'Avg Confidence']}
+                  <CartesianGrid stroke="#e7e7e7" horizontal vertical={false} />
+                  <XAxis
+                    dataKey="model"
+                    tick={{ fill: '#606373', fontSize: 11, fontFamily: 'Space Grotesk' }}
+                    axisLine={false}
+                    tickLine={false}
                   />
-                  <Bar dataKey="avgConfidence" radius={[4, 4, 0, 0]}>
+                  <YAxis
+                    domain={[0, 100]}
+                    tick={{ fill: '#606373', fontSize: 11, fontFamily: 'Space Grotesk' }}
+                    axisLine={false}
+                    tickLine={false}
+                    unit="%"
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#fcfaf7',
+                      border: '1px solid #e8e5e1',
+                      borderRadius: '2px',
+                      fontSize: '12px',
+                      fontFamily: '"Space Grotesk", system-ui, sans-serif',
+                    }}
+                    formatter={(value: number) => [`${value}%`, 'Avg confidence']}
+                  />
+                  <Bar dataKey="avgConfidence">
                     {modelBreakdown.map(([model]) => (
-                      <Cell key={model} fill={MODEL_COLOR[model] || '#888'} />
+                      <Cell key={model} fill={MODEL_COLOR[model] || '#606373'} />
                     ))}
                   </Bar>
                 </BarChart>
@@ -382,10 +432,10 @@ export default function Forecasts() {
                     const max = confs.length > 0 ? Math.max(...confs) : 0
                     return (
                       <tr key={model}>
-                        <td style={{ fontWeight: 500 }}>{model.replace(/_/g, ' ')}</td>
+                        <td style={{ fontWeight: 500 }}>{MODEL_LABEL[model] ?? model.replace(/_/g, ' ')}</td>
                         <td>
                           <div className="flex items-center gap-2">
-                            <div style={{ width: '80px', height: '8px', background: '#e0dcd5', borderRadius: '4px', overflow: 'hidden' }}>
+                            <div style={{ width: '80px', height: '8px', background: '#e8e5e1', borderRadius: '4px', overflow: 'hidden' }}>
                               <div style={{ width: `${(avg * 100).toFixed(0)}%`, height: '100%', background: confidenceColor(avg), borderRadius: '4px' }} />
                             </div>
                             <span style={{ fontSize: '0.82rem', color: '#666' }}>{(avg * 100).toFixed(0)}%</span>
@@ -409,38 +459,63 @@ export default function Forecasts() {
       </TabPanel>
 
       {/* ── About this model (collapsible) ── */}
-      <div className="mt-8">
+      <div style={{ marginTop: '24px' }}>
         <button
           onClick={() => setShowModel(!showModel)}
-          className="flex items-center gap-2 text-sm font-sans font-medium text-warm-muted cursor-pointer bg-transparent border-none"
+          style={{
+            background: 'none',
+            border: 'none',
+            padding: 0,
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '6px',
+            fontFamily: '"Space Grotesk", system-ui, sans-serif',
+            fontSize: '13px',
+            fontWeight: 500,
+            color: '#606373',
+          }}
         >
           {showModel ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
           About this model
         </button>
         {showModel && (
-          <div className="animate-tab-enter mt-3 card card-body" style={{ maxWidth: '560px' }}>
-            <div className="grid grid-cols-3 gap-4 mb-3">
+          <div
+            className="animate-tab-enter"
+            style={{
+              marginTop: '16px',
+              borderTop: '1px solid #e8e5e1',
+              paddingTop: '20px',
+              maxWidth: '780px',
+            }}
+          >
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '32px' }}>
               <div>
-                <div className="text-[10px] text-warm-muted uppercase tracking-wider font-semibold mb-0.5">Forecasting</div>
-                <div className="text-sm font-semibold text-[#1a1a1a]">Neural weather model + local correction</div>
+                <div className="eyebrow">Forecasting</div>
+                <div style={{ fontSize: '14px', color: '#1b1e2d', marginTop: '8px', lineHeight: 1.5 }}>
+                  Neural weather model with a local correction layer.
+                </div>
               </div>
               <div>
-                <div className="text-[10px] text-warm-muted uppercase tracking-wider font-semibold mb-0.5">Local Correction</div>
-                <div className="text-sm font-semibold text-[#1a1a1a]">
+                <div className="eyebrow">Local correction</div>
+                <div style={{ fontSize: '14px', color: '#1b1e2d', marginTop: '8px', lineHeight: 1.5 }}>
                   {mosStatus.data?.metrics?.rmse != null
                     ? `Trained on ${mosStatus.data.metrics.n_train ?? '—'} observations, ${mosStatus.data.metrics.rmse.toFixed(1)}°C accuracy`
                     : 'Not yet trained'}
                 </div>
               </div>
               <div>
-                <div className="text-[10px] text-warm-muted uppercase tracking-wider font-semibold mb-0.5">Advisories</div>
-                <div className="text-sm font-semibold text-[#1a1a1a]">Bilingual crop advice from agricultural knowledge base</div>
+                <div className="eyebrow">Advisories</div>
+                <div style={{ fontSize: '14px', color: '#1b1e2d', marginTop: '8px', lineHeight: 1.5 }}>
+                  Bilingual crop advice from an agricultural knowledge base.
+                </div>
               </div>
             </div>
-            <p className="text-xs text-warm-body leading-relaxed m-0">
-              A global neural weather model generates raw forecasts, then a correction model trained
-              on local observations adjusts for regional accuracy. Crop-specific farming advice is
-              generated in {REGION.languageList} from a curated knowledge base.
+            <p style={{ fontSize: '13px', color: '#606373', lineHeight: 1.65, marginTop: '16px' }}>
+              A global neural weather model generates raw forecasts; a
+              correction model trained on local observations adjusts for
+              regional accuracy. Crop-specific farming advice is generated in
+              {' '}{REGION.languageList} from a curated knowledge base.
             </p>
           </div>
         )}
@@ -465,20 +540,20 @@ function DownscalingTab({ stations, forecasts }: {
   const effectRows = useMemo(() => {
     const rows: { station: string; stationTemp: string; farmer: string; distance: string; lapseDelta: string; finalTemp: string }[] = []
     for (const farmer of farmerList.slice(0, 10)) {
-      const station = stationList.find(s => s.station_id === farmer.station)
+      const station = stationList.find(s => s.id === farmer.station_id)
       if (!station) continue
-      const fc = forecasts.find(f => f.station_id === farmer.station && (f.forecast_day === 0 || f.forecast_day === undefined))
+      const fc = forecasts.find(f => f.station_id === farmer.station_id && (f.forecast_day === 0 || f.forecast_day === undefined))
       const fcTemp = fc?.temp_max ?? fc?.temperature ?? null
       if (fcTemp === null) continue
       // Approximate distance (degree-based)
-      const dLat = (farmer as any).gps_lat ? ((farmer as any).gps_lat - station.latitude) : 0
-      const dLon = (farmer as any).gps_lon ? ((farmer as any).gps_lon - station.longitude) : 0
+      const dLat = (farmer as any).gps_lat ? ((farmer as any).gps_lat - station.lat) : 0
+      const dLon = (farmer as any).gps_lon ? ((farmer as any).gps_lon - station.lon) : 0
       const dist = Math.sqrt(dLat * dLat + dLon * dLon) * 111
       // Lapse rate (approximate — farmer altitude unknown, use small random delta)
-      const altDelta = (station.elevation ?? 0) * 0.1 // rough estimate
+      const altDelta = (station.altitude_m ?? 0) * 0.1 // rough estimate
       const lapse = -0.0065 * altDelta
       rows.push({
-        station: `${station.name} (${station.station_id})`,
+        station: `${station.name} (${station.id})`,
         stationTemp: `${fcTemp.toFixed(1)}\u00B0C`,
         farmer: farmer.name,
         distance: `${dist.toFixed(1)} km`,
@@ -493,12 +568,13 @@ function DownscalingTab({ stations, forecasts }: {
     <div className="space-y-6">
       <div className="section-header">Spatial Downscaling</div>
       <div style={{
-        background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
+        background: '#fff', border: '1px solid #e8e5e1', borderRadius: '8px', padding: '16px',
       }}>
         <p style={{ fontSize: '0.85rem', color: '#555', lineHeight: 1.7 }}>
-          Station forecasts are adjusted to individual farmer GPS coordinates using
-          <strong> Inverse Distance Weighting (IDW)</strong> on a NASA POWER 0.5{'\u00B0'} grid, plus a
-          <strong> lapse-rate elevation correction</strong> of 6.5{'\u00B0'}C per 1000m.
+          Station forecasts are adjusted to each farmer's exact GPS location by
+          blending nearby NASA satellite grid points (closer points count more)
+          and correcting for altitude — temperatures drop about 6.5{'\u00B0'}C
+          for every 1000m of elevation gain.
         </p>
       </div>
 
@@ -507,11 +583,11 @@ function DownscalingTab({ stations, forecasts }: {
         <div className="section-header">Station & Farmer Locations</div>
         <div className="flex gap-4 mb-3" style={{ fontSize: '0.8rem', color: '#666' }}>
           <span className="flex items-center gap-2">
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#d4a019', display: 'inline-block' }} />
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#2d5b7d', display: 'inline-block' }} />
             Stations
           </span>
           <span className="flex items-center gap-2">
-            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#2a9d8f', display: 'inline-block' }} />
+            <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#606373', display: 'inline-block' }} />
             Farmer locations
           </span>
         </div>
@@ -522,17 +598,17 @@ function DownscalingTab({ stations, forecasts }: {
             </thead>
             <tbody>
               {stationList.slice(0, 10).map(s => (
-                <tr key={s.station_id}>
+                <tr key={s.id}>
                   <td>
                     <span style={{
-                      width: '8px', height: '8px', borderRadius: '50%', background: '#d4a019',
+                      width: '8px', height: '8px', borderRadius: '50%', background: '#2d5b7d',
                       display: 'inline-block', marginRight: '6px',
                     }} />
                     Station
                   </td>
-                  <td style={{ fontWeight: 500, color: '#1a1a1a' }}>{s.name}</td>
-                  <td>{s.latitude?.toFixed(2)}</td>
-                  <td>{s.longitude?.toFixed(2)}</td>
+                  <td style={{ fontWeight: 500, color: '#1b1e2d' }}>{s.name}</td>
+                  <td>{s.lat?.toFixed(2)}</td>
+                  <td>{s.lon?.toFixed(2)}</td>
                   <td>{s.state}</td>
                 </tr>
               ))}
@@ -540,12 +616,12 @@ function DownscalingTab({ stations, forecasts }: {
                 <tr key={f.phone}>
                   <td>
                     <span style={{
-                      width: '8px', height: '8px', borderRadius: '50%', background: '#2a9d8f',
+                      width: '8px', height: '8px', borderRadius: '50%', background: '#606373',
                       display: 'inline-block', marginRight: '6px',
                     }} />
                     Farmer
                   </td>
-                  <td style={{ fontWeight: 500, color: '#1a1a1a' }}>{f.name}</td>
+                  <td style={{ fontWeight: 500, color: '#1b1e2d' }}>{f.name}</td>
                   <td>--</td>
                   <td>--</td>
                   <td>{f.district}</td>
@@ -576,7 +652,7 @@ function DownscalingTab({ stations, forecasts }: {
                     <td>{row.farmer}</td>
                     <td>{row.distance}</td>
                     <td>{row.lapseDelta}</td>
-                    <td style={{ fontWeight: 600, color: '#1a1a1a' }}>{row.finalTemp}</td>
+                    <td style={{ fontWeight: 600, color: '#1b1e2d' }}>{row.finalTemp}</td>
                   </tr>
                 ))}
               </tbody>
@@ -585,22 +661,6 @@ function DownscalingTab({ stations, forecasts }: {
         </div>
       )}
 
-      {/* Lapse rate explanation */}
-      <div style={{
-        background: '#fff', border: '1px solid #e0dcd5', borderRadius: '8px', padding: '16px',
-      }}>
-        <div style={{ fontWeight: 600, color: '#1a1a1a', marginBottom: '8px' }}>
-          Environmental Lapse Rate
-        </div>
-        <code style={{ fontSize: '0.9rem', color: '#333' }}>
-          T_farmer = T_station - 0.0065 {'\u00D7'} (altitude_farmer - altitude_station)
-        </code>
-        <p style={{ fontSize: '0.85rem', color: '#666', marginTop: '6px' }}>
-          Temperature decreases by approximately 6.5{'\u00B0'}C for every 1000m increase in elevation.
-          This correction adjusts station-level forecasts to account for altitude differences
-          between the weather station and each farmer's field location.
-        </p>
-      </div>
     </div>
   )
 }
