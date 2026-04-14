@@ -14,7 +14,7 @@ pip install -r requirements.txt
 # Add API keys + database URL
 cp .env.example .env      # then fill in keys + DATABASE_URL
 
-# Run the full pipeline with real IMD data (all 20 stations)
+# Run the full pipeline with real IMD data (all configured stations)
 python run_pipeline.py
 
 # Run with NeuralGCM forecasting (requires GPU + neuralgcm package)
@@ -59,16 +59,16 @@ Claude API           → Step 5 Translate   (RAG advisory + Tamil/Malayalam)
 |---|---|---|
 | 1 Ingest | `raw_telemetry` | Real IMD station data (scraper → imdlib → synthetic fallback) |
 | 2 Heal | `clean_telemetry` + `healing_log` | Claude Sonnet agentic healer (5 tools: station metadata, historical normals, Tomorrow.io reference, neighboring stations, seasonal context) with rule-based fallback |
-| 3 Forecast | `forecasts` | NeuralGCM 1.4° on GPU (ERA5 init, single batch for all 20 stations) → XGBoost MOS correction; fallback: Open-Meteo GFS/ECMWF API |
+| 3 Forecast | `forecasts` | NeuralGCM 1.4° on GPU (ERA5 init, single batch for all configured stations) → XGBoost MOS correction; fallback: Open-Meteo GFS/ECMWF API |
 | 4 Downscale | `forecasts` (updated) | NASA POWER IDW interpolation + lapse-rate elevation correction |
 | 5 Translate | `agricultural_alerts` | Hybrid RAG (FAISS+BM25) + Claude advisory + translation |
 | 6 Deliver | `delivery_log` | Console SMS (Twilio dry-run) |
 
 ### Parallelization
 - Step 2 Heal: Tomorrow.io fetched in batches of 10 with 0.2s sleep
-- Step 3 Forecast: NeuralGCM runs once globally (all 20 stations from one inference); Open-Meteo fallback fetched in single batch of 20
-- Step 4 Downscale: all 20 stations downscaled in parallel via `asyncio.gather()`
-- Step 5 Translate: all 20 advisories generated in parallel via `asyncio.gather()`
+- Step 3 Forecast: NeuralGCM runs once globally (all configured stations from one inference); Open-Meteo fallback fetched in a single batch
+- Step 4 Downscale: all configured stations downscaled in parallel via `asyncio.gather()`
+- Step 5 Translate: all advisories generated in parallel via `asyncio.gather()`
 
 ### Quality score design
 Quality score measures **accuracy of compared fields only** (how well IMD temp/rainfall match Tomorrow.io reference). NULL-filling from Tomorrow.io is expected enrichment (IMD never provides wind/pressure/humidity) and does NOT penalize quality. `cross_validated` and `null_filled` coexist as independent heal actions. `fields_filled` count tracked per reading.
@@ -154,7 +154,7 @@ weather AI 2/
 │   ├── dpi/                   # Digital Public Infrastructure agent
 │   │   ├── __init__.py        # DPIAgent: profile assembly from 6 services
 │   │   ├── models.py          # Dataclasses: AadhaarProfile, LandRecord, SoilHealthCard, etc.
-│   │   ├── simulator.py       # SimulatedDPIRegistry: 40+ farmers across 20 stations
+│   │   ├── simulator.py       # SimulatedDPIRegistry: 40+ farmers across all configured stations
 │   │   └── services.py        # DPIService protocol + SimulatedDPIService + factory
 │   ├── daily_scheduler.py     # Singleton daily scheduler (APScheduler, toggle via System tab, auto-resumes)
 │   ├── event_bus.py           # File-based pub/sub event bus
@@ -253,7 +253,7 @@ Crop contexts: verified per-district from state agriculture department data.
 
 - **NWP primary: NeuralGCM 1.4°** (Google DeepMind's neural GCM, runs on GPU via JAX)
   - Initial conditions: ERA5 reanalysis from ARCO Zarr (free, ~5-day lag via ERA5T)
-  - Single inference pass produces global forecast → extract all 20 stations
+  - Single inference pass produces global forecast → extract all configured stations
   - Matches ECMWF-HRES accuracy for 1-5 day forecasts
   - Requires GPU (L4/T4 on HF Spaces), enabled via `--neuralgcm` flag
 - **NWP fallback: Open-Meteo** (GFS/ECMWF via free API, no GPU needed)
@@ -290,7 +290,7 @@ Aadhaar eKYC, Land Records, Soil Health Card, PM-KISAN, PMFBY crop insurance, Ki
 
 **DPIAgent** (`src/dpi/__init__.py`): phone → identify → parallel fetch all 6 services → composite FarmerProfile → cache to DB.
 
-**40+ simulated farmers** across 20 stations with realistic Kerala/Tamil Nadu data (district-specific crops, soil types, irrigation, names in Malayalam/Tamil).
+**40+ simulated farmers** across all configured stations with realistic Kerala/Tamil Nadu data (district-specific crops, soil types, irrigation, names in Malayalam/Tamil).
 
 ---
 
@@ -450,7 +450,7 @@ Vercel (always on)       → serverless API reads from → Neon → serves front
 
 ## Tech Stack
 
-- **Python 3.12+**, **PostgreSQL** (Neon hosted) + **psycopg2-binary**
+- **Python 3.11+**, **PostgreSQL** (Neon hosted) + **psycopg2-binary**
 - **neuralgcm** + **jax[cuda12]** (Google DeepMind neural weather model on GPU)
 - **anthropic** (Claude API — advisory generation + translation)
 - **xgboost** + **scikit-learn** (MOS correction model)

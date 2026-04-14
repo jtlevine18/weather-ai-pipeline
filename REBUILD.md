@@ -66,7 +66,7 @@ Generate stations.json in the project root with my stations. Format:
 Update the _HARDCODED_STATIONS list in config.py to match (this is the fallback if
 stations.json is missing).
 
-Set these in .env:
+Copy `.env.example` to `.env` and set:
   REGION_NAME=[my region name]
   TIMEZONE=[my timezone]
 
@@ -83,9 +83,15 @@ Write a custom async ingestion function for my data source. The function signatu
           "rainfall": float,      # mm
       }
 
-Register it in config.py by setting:
-  WeatherDataConfig.ingestion_source = "custom"
-  WeatherDataConfig.custom_ingest_fn = my_fetch
+Register it at runtime where `PipelineConfig` is instantiated (see `run_pipeline.py`,
+which already does `config = get_config(); config.weather.ingestion_source = args.source`).
+Add an import for your new `my_fetch` function and assign both fields on the config
+instance before calling `WeatherPipeline(config, ...)`:
+
+  from src.ingestion import my_fetch  # or wherever you defined it
+  config = get_config()
+  config.weather.ingestion_source = "custom"
+  config.weather.custom_ingest_fn = my_fetch
 
 The custom ingestion path in ingest_all_stations() will call this function for each
 station, wrap the result in the standard raw_telemetry record format, and insert into

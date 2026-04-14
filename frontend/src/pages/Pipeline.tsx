@@ -1086,7 +1086,7 @@ Make ALL of the following changes. This is a 6-step weather pipeline that ingest
 Generate stations.json in the project root with my stations. Format:
 [{"station_id": "[XX_CCC]", "name": "[City]", "lat": X, "lon": X, "altitude_m": X, "state": "[State]", "crop_context": "[crops]", "language": "[ISO 639-1]", "imd_id": ""}]
 
-Update _HARDCODED_STATIONS in config.py to match. Set REGION_NAME and TIMEZONE in .env.
+Update _HARDCODED_STATIONS in config.py to match. Copy \`.env.example\` to \`.env\` and set REGION_NAME and TIMEZONE.
 
 --- 2. DATA INGESTION (src/ingestion.py) ---
 
@@ -1094,7 +1094,7 @@ Write a custom async ingestion function for my data source:
   async def my_fetch(station: StationConfig) -> dict:
       return {"temperature": float, "humidity": float, "wind_speed": float, "pressure": float, "rainfall": float}
 
-Register it: WeatherDataConfig.ingestion_source = "custom", WeatherDataConfig.custom_ingest_fn = my_fetch
+Register it at runtime where PipelineConfig is instantiated (see run_pipeline.py, which already does config = get_config(); config.weather.ingestion_source = args.source). Import your my_fetch and assign both fields on the config instance before calling WeatherPipeline(config, ...): config.weather.ingestion_source = "custom"; config.weather.custom_ingest_fn = my_fetch.
 
 If using Open-Meteo: write a function calling the Open-Meteo current weather API for each station's lat/lon.
 
