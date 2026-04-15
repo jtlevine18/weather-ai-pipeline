@@ -729,7 +729,7 @@ export default function Pipeline() {
   const okRuns = runList.filter(r => r.status === 'ok' || r.status === 'success' || r.status === 'completed').length
   const failedRuns = runList.filter(r => r.status === 'failed' || r.status === 'error').length
 
-  const TABS = ['Run History', 'Cost & scale', 'Build Your Own']
+  const TABS = ['Run history', 'Cost calculator', 'Build your own']
 
   // Cost calculator derived values
   const perRunCost = (stationCount / 20) * (claudeModel === 'sonnet' ? 0.27 : 0.03) + 0.02
@@ -910,7 +910,7 @@ export default function Pipeline() {
         </div>
       </TabPanel>
 
-      {/* Tab 1: Cost & scale */}
+      {/* Tab 1: Cost calculator */}
       <TabPanel active={activeTab === 1}>
         <div className="space-y-8">
           <ScalingCostPanel />
