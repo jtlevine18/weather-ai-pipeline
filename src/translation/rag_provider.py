@@ -209,15 +209,10 @@ class RAGProvider:
             "weather forecast. Reference specific days when giving actionable advice "
             "(e.g., 'avoid spraying on Day 3-4 due to heavy rain'). "
             "Be specific to the crops and conditions. "
-            "Write in plain English that can be easily understood and translated.\n\n"
-            "You must ALSO generate a short SMS version that fits on a 2G phone "
-            "(160 characters maximum, plain text, no markdown, no emoji). The SMS "
-            "should call out the single most important action for the week.\n\n"
-            "Output format (exactly, nothing else):\n"
-            "ADVISORY:\n"
-            "<the full 4-6 sentence advisory>\n\n"
-            "SMS:\n"
-            "<the <=160 character SMS version>"
+            "Write in plain English that can be easily understood and translated. "
+            "You must also produce a short SMS version (≤160 characters, plain text, no markdown, no emoji) "
+            "calling out the single most important action for the week. "
+            "Return both via the emit_advisory tool."
         )
         user = (
             f"7-day weather forecast for {station.name}, {station.state}:\n"
@@ -226,16 +221,42 @@ class RAGProvider:
             f"Knowledge base:\n{context if context else '[No relevant documents found]'}\n\n"
             "Generate the advisory and SMS for the farmer:"
         )
+        tools = [{
+            "name": "emit_advisory",
+            "description": "Emit the weekly farmer advisory and an SMS-sized version",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "advisory_en": {
+                        "type": "string",
+                        "description": "4-6 sentence weekly advisory in plain English, referencing specific days and the farmer's crops",
+                    },
+                    "sms_en": {
+                        "type": "string",
+                        "description": "Plain-text SMS version, 160 characters maximum, no markdown, no emoji, calling out the single most important action for the week",
+                    },
+                },
+                "required": ["advisory_en", "sms_en"],
+            },
+        }]
         client = self._get_client()
         msg = await client.messages.create(
             model=self.config.model,
-            max_tokens=500,
+            max_tokens=800,
             system=system,
             messages=[{"role": "user", "content": user}],
+            tools=tools,
+            tool_choice={"type": "tool", "name": "emit_advisory"},
         )
-        text = msg.content[0].text.strip() if msg.content else ""
-        advisory_en, sms_en = _parse_advisory_and_sms(text)
-        # Hard cap SMS at 160 chars — prompt asks the model to self-limit,
+        advisory_en = ""
+        sms_en = ""
+        for block in (msg.content or []):
+            if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == "emit_advisory":
+                inputs = block.input or {}
+                advisory_en = (inputs.get("advisory_en") or "").strip()
+                sms_en = (inputs.get("sms_en") or "").strip()
+                break
+        # Hard cap SMS at 160 chars — tool schema asks the model to self-limit,
         # but we don't trust the model to count precisely.
         if sms_en and len(sms_en) > 160:
             sms_en = sms_en[:157].rstrip() + "..."
@@ -258,31 +279,52 @@ class RAGProvider:
             f"Translate both the full advisory and the SMS version into {lang_name}. "
             f"Preserve technical terms, numbers, and actionable instructions precisely. "
             f"The SMS translation MUST stay under 160 characters in {lang_name}. "
-            f"Return only the translations, no English, no explanations.\n\n"
-            f"Output format (exactly):\n"
-            f"ADVISORY:\n"
-            f"<full advisory in {lang_name}>\n\n"
-            f"SMS:\n"
-            f"<SMS in {lang_name}, <=160 characters>"
+            f"Return the translations via the emit_translation tool."
         )
         user = (
-            f"Translate these agricultural advisories for farmers near {station_name} to {lang_name}:\n\n"
-            f"ADVISORY:\n{advisory_en}\n\n"
-            f"SMS:\n{sms_en}"
+            f"Translate these agricultural advisories for farmers near {station_name} to {lang_name}.\n\n"
+            f"Full advisory (English):\n{advisory_en}\n\n"
+            f"SMS version (English):\n{sms_en}"
         )
+        tools = [{
+            "name": "emit_translation",
+            "description": f"Emit the {lang_name} translation of both the full advisory and the SMS",
+            "input_schema": {
+                "type": "object",
+                "properties": {
+                    "advisory_local": {
+                        "type": "string",
+                        "description": f"The full advisory translated into {lang_name}, preserving technical terms, numbers, and actions",
+                    },
+                    "sms_local": {
+                        "type": "string",
+                        "description": f"The SMS translated into {lang_name}, 160 characters maximum, plain text, no markdown",
+                    },
+                },
+                "required": ["advisory_local", "sms_local"],
+            },
+        }]
         client = self._get_client()
         msg = await client.messages.create(
             model=self.config.model,
-            max_tokens=700,
+            max_tokens=900,
             system=system,
             messages=[{"role": "user", "content": user}],
+            tools=tools,
+            tool_choice={"type": "tool", "name": "emit_translation"},
         )
-        text = msg.content[0].text.strip() if msg.content else ""
-        advisory_local, sms_local = _parse_advisory_and_sms(text)
+        advisory_local = ""
+        sms_local = ""
+        for block in (msg.content or []):
+            if getattr(block, "type", None) == "tool_use" and getattr(block, "name", None) == "emit_translation":
+                inputs = block.input or {}
+                advisory_local = (inputs.get("advisory_local") or "").strip()
+                sms_local = (inputs.get("sms_local") or "").strip()
+                break
         if not advisory_local:
-            # Model skipped the format — fall back to treating the whole
-            # response as the translated advisory so we don't drop data.
-            advisory_local = text
+            # Belt-and-suspenders: if the tool call somehow returned empty,
+            # fall back to the English advisory rather than dropping content.
+            advisory_local = advisory_en
         if sms_local and len(sms_local) > 160:
             sms_local = sms_local[:157].rstrip() + "..."
         return {"advisory_local": advisory_local, "sms_local": sms_local}
