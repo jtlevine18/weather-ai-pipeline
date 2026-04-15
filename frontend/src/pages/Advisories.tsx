@@ -536,7 +536,12 @@ function AdvisoryCard({
 function FarmerSampleRow({ sample }: { sample: DeliverySample }) {
   const crops = parseFarmerCrops(sample.primary_crops)
   const name = sample.name || sample.recipient
-  const sms = (sample.sms_text || sample.message || '').trim()
+  // Prefer the dedicated sms_text column (populated by the 4-stage delivery
+  // step). Old rows have it null — fall through to `message`, but strip
+  // markdown so a 2,000-char advisory body doesn't blow up the card.
+  const sms = sample.sms_text?.trim()
+    ? sample.sms_text.trim()
+    : extractSmsPreview(sample.message)
   return (
     <div
       style={{
