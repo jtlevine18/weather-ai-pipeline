@@ -413,19 +413,15 @@ Weather 2 now follows the same pattern as Market Intelligence and Climate Risk E
 ### 2. HF Spaces — Pipeline runner (sleeps, wakes weekly)
 - **Space:** `jtlevine/ai-weather-pipeline-runner`
 - **URL:** `https://jtlevine-ai-weather-pipeline-runner.hf.space`
-- **How to push:** the runner Space has its OWN independent git history — it is NOT a remote on the main repo. To update it, clone it separately (`GIT_LFS_SKIP_SMUDGE=1 git clone https://huggingface.co/spaces/jtlevine/ai-weather-pipeline-runner`), make changes there, and `git push origin main` from inside that clone. Its `src/` directory is a snapshot of the main repo's `src/` at the time it was last updated.
+- **Git remote:** `hf-runner` → `https://huggingface.co/spaces/jtlevine/ai-weather-pipeline-runner` (configured as a second remote on the main repo — the Space's history is unified with `github main`, so pushes go to both from the same working tree).
+- **Push command:** `git push hf-runner main` (add `&& git push github main` if both remotes need updating; see the push checklist below).
 - The Space's `Dockerfile` runs `uvicorn src.api:app` on port 7860. It serves a pipeline tracker page at `/` with a manual **Run Pipeline** button, a `/health` endpoint, and `/api/pipeline/trigger` + `/api/pipeline/status` that the weekly GitHub Action polls. The pipeline does NOT auto-run on Space wake-up — it's triggered explicitly.
+- The Space includes the full main-repo tree (`COPY . .` in the Dockerfile). `frontend/`, `tests/`, `streamlit_app/`, etc. are copied in but unused at runtime — only `src/`, `config.py`, `stations.json`, and `requirements.txt` are read by `src.api:app`. Total tracked size is ~2 MB, so image bloat is negligible.
 - Scheduled weekly via GitHub Action; sleeps between runs to save compute
 - Optional L4 GPU for NeuralGCM (falls back to Open-Meteo without GPU)
 - **Env vars (Space secrets — set these before pushing):** `DATABASE_URL`, `ANTHROPIC_API_KEY`, `TOMORROW_IO_API_KEY`, `JWT_SECRET_KEY` (required if `ENV=production`), `WEBHOOK_SECRET` (only if webhook receiver is wired in), optional `ALLOWED_ORIGINS`
 - **Hardware:** set explicitly in *Settings → Variables and secrets → Hardware* — it does not persist across Space rebuilds automatically
-- **Retired:** `jtlevine/ai-weather-pipeline` was the original pipeline-runner Space and has been deleted. Do not reference it in code, docs, or git remotes.
-
-### Stale: `hf-api` git remote
-There is a leftover `hf-api` git remote pointing at the retired `jtlevine/weather-pipeline-api` Space. Don't push to it. Safe to remove:
-```bash
-git remote remove hf-api
-```
+- **Retired:** `jtlevine/ai-weather-pipeline` (without `-runner`) was the original pipeline-runner Space and has been deleted. Do not reference it in code, docs, or git remotes. The stale `origin` and `hf-api` remotes that used to point at retired Spaces have been removed.
 
 ### Data flow
 ```
@@ -434,13 +430,16 @@ Vercel (always on)       → serverless API reads from → Neon → serves front
 ```
 
 ### Push checklist
+The main repo now has two remotes: `github` (Vercel source of truth) and `hf-runner` (HF Space). Push destinations by file type:
+
 | What changed | Push to |
 |---|---|
 | Frontend React code (`frontend/src/`) | `git push github main` |
 | Vercel serverless API (`frontend/api/*.ts`) | `git push github main` |
-| Pipeline code (`src/pipeline.py`, `src/ingestion.py`, `src/healing.py`, etc.) | `git push github main` + `git push origin main` |
-| `src/api.py` changes (runs on the Space as the status/health page) | `git push github main` + `git push origin main` |
-| Database schema (`src/database/`) | `git push github main` + `git push origin main` |
+| Pipeline code (`src/pipeline.py`, `src/ingestion.py`, `src/healing.py`, etc.) | `git push github main && git push hf-runner main` |
+| `src/api.py` changes (runs on the Space as the status/health page) | `git push github main && git push hf-runner main` |
+| `config.py`, `requirements.txt`, `stations.json`, `Dockerfile` | `git push github main && git push hf-runner main` |
+| Database schema (`src/database/`) | `git push github main && git push hf-runner main` |
 | Docs only (`README.md`, `CLAUDE.md`) | `git push github main` |
 
 ### Legacy
