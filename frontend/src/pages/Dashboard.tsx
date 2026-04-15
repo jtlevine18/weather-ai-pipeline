@@ -257,45 +257,65 @@ function StepOutput({ outputType }: { outputType: typeof HERO_STEPS[number]['out
       (a) => a.advisory_local || a.advisory_en,
     )
     if (!alert) return <div style={panelStyle}>Loading…</div>
+
+    // Pipeline emits full markdown-formatted weekly advisories (~1500 chars
+    // each). Strip the formatting and take a readable preview so the card
+    // doesn't overflow its 240px max-height.
+    const preview = (text: string | undefined, maxLen: number): string => {
+      if (!text) return ''
+      const stripped = text
+        .replace(/^#+\s+.*$/gm, '')
+        .replace(/\*\*(.*?)\*\*/g, '$1')
+        .replace(/\*(.*?)\*/g, '$1')
+        .replace(/\s+/g, ' ')
+        .trim()
+      if (stripped.length <= maxLen) return stripped
+      return stripped.slice(0, maxLen).replace(/\s+\S*$/, '') + '…'
+    }
+
+    const localPreview = preview(alert.advisory_local, 180)
+    const enPreview = preview(alert.advisory_en, 180)
+    const fullLength = (alert.advisory_local ?? alert.advisory_en ?? '').length
+
     return (
-      <div style={panelStyle}>
+      <div style={{ ...panelStyle, minWidth: 0 }}>
         <div className="eyebrow" style={{ marginBottom: '10px' }}>
           Advisory · {alert.station_name ?? alert.station_id ?? 'Farmer'} ·{' '}
           {alert.language === 'ml' ? 'Malayalam' : alert.language === 'ta' ? 'Tamil' : alert.language}
         </div>
-        {alert.advisory_local && (
+        {localPreview && (
           <p
             style={{
               fontFamily: '"Source Serif 4", Georgia, serif',
-              fontSize: '14px',
-              lineHeight: 1.55,
+              fontSize: '13px',
+              lineHeight: 1.5,
               color: '#1b1e2d',
               marginBottom: '6px',
               maxWidth: '100%',
-              overflowWrap: 'break-word',
+              overflowWrap: 'anywhere',
               wordBreak: 'break-word',
             }}
           >
-            {alert.advisory_local}
+            {localPreview}
           </p>
         )}
-        {alert.advisory_en && (
+        {enPreview && (
           <p
             style={{
               fontSize: '12px',
               color: '#606373',
-              lineHeight: 1.55,
+              lineHeight: 1.5,
               marginBottom: '8px',
               maxWidth: '100%',
-              overflowWrap: 'break-word',
+              overflowWrap: 'anywhere',
               wordBreak: 'break-word',
             }}
           >
-            {alert.advisory_en}
+            {enPreview}
           </p>
         )}
         <div style={{ fontSize: '11px', color: '#8d909e' }}>
-          {(alert.advisory_local ?? '').length} characters · sent via SMS
+          {fullLength.toLocaleString()} chars · weekly advisory
         </div>
         <Link to="/advisories" style={exploreLinkStyle}>
           → See the advisory feed
