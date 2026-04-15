@@ -17,6 +17,7 @@ import { MetricCard } from '../components/MetricCard'
 import { TableSkeleton } from '../components/LoadingSpinner'
 import { TabPanel } from '../components/TabPanel'
 import { REGION } from '../regionConfig'
+import { formatTimeShort } from '../lib/format'
 
 // ---------------------------------------------------------------------------
 // Constants
@@ -335,7 +336,7 @@ function StationReadingsTab({ stations, rawData, cleanData }: ReadingsTabProps) 
                   </thead>
                   <tbody>
                     {rows.map((row) => {
-                      const ts = (row.ts || '').slice(0, 16)
+                      const ts = formatTimeShort(row.ts)
                       return (
                         <tr key={row.station_id}>
                           <td>
@@ -441,7 +442,7 @@ function StationReadingsTab({ stations, rawData, cleanData }: ReadingsTabProps) 
                       <tr key={i} className="border-b border-hairline/60 hover:bg-cream/60">
                         <td className="px-3 py-2 text-[#1b1e2d]">{r.station_id}</td>
                         <td className="px-3 py-2 text-mute text-xs">
-                          {(r.ts || '').slice(0, 16)}
+                          {formatTimeShort(r.ts)}
                         </td>
                         <td className="px-3 py-2 tabular-nums">{fmtVal(r.temperature)}</td>
                         <td className="px-3 py-2 tabular-nums">{fmtVal(r.humidity)}</td>

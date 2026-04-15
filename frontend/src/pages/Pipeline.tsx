@@ -819,7 +819,7 @@ export default function Pipeline() {
             <div
               style={{
                 display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
+                gridTemplateColumns: `repeat(${(failedRuns + runList.filter(r => r.status === 'partial').length) > 0 ? 3 : 2}, 1fr)`,
                 gap: '32px',
                 borderTop: '1px solid #e8e5e1',
                 paddingTop: '20px',
@@ -828,7 +828,9 @@ export default function Pipeline() {
             >
               <MetricCard label="Total runs" value={runList.length} />
               <MetricCard label="Successful" value={okRuns} />
-              <MetricCard label="Partial / failed" value={failedRuns + runList.filter(r => r.status === 'partial').length} />
+              {(failedRuns + runList.filter(r => r.status === 'partial').length) > 0 && (
+                <MetricCard label="Partial / failed" value={failedRuns + runList.filter(r => r.status === 'partial').length} />
+              )}
             </div>
 
             {runList.length === 0 ? (
