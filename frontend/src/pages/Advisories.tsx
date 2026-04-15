@@ -216,13 +216,14 @@ export default function Advisories() {
                       <p
                         style={{
                           fontFamily: '"Source Serif 4", "Noto Serif Malayalam", "Noto Serif Tamil", Georgia, serif',
-                          fontSize: '18px',
+                          fontSize: '14px',
                           lineHeight: 1.6,
                           color: '#1b1e2d',
                           marginTop: '12px',
                           maxWidth: '100%',
                           overflowWrap: 'break-word',
                           wordBreak: 'break-word',
+                          whiteSpace: 'pre-wrap',
                         }}
                       >
                         {alert.advisory_local}
@@ -234,13 +235,14 @@ export default function Advisories() {
                       <p
                         style={{
                           fontFamily: '"Space Grotesk", system-ui, sans-serif',
-                          fontSize: '13px',
-                          lineHeight: 1.7,
+                          fontSize: '12px',
+                          lineHeight: 1.65,
                           color: '#606373',
                           marginTop: alert.advisory_local ? '8px' : '12px',
                           maxWidth: '100%',
                           overflowWrap: 'break-word',
                           wordBreak: 'break-word',
+                          whiteSpace: 'pre-wrap',
                         }}
                       >
                         {alert.advisory_en}
@@ -414,7 +416,10 @@ function FarmersDPITab({ alerts, stationMap }: {
   if (!farmers || farmers.length === 0) {
     return (
       <div className="card card-body text-center py-8">
-        <p style={{ color: '#888', fontSize: '0.85rem' }}>No farmer data available. Run the pipeline first.</p>
+        <p style={{ color: '#888', fontSize: '0.85rem' }}>
+          No farmer profiles cached yet. Profiles populate as the conversation agent
+          looks up farmers by phone, or after the DPI eval suite runs.
+        </p>
       </div>
     )
   }

@@ -42,7 +42,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   try {
-    const rows = await sql`SELECT * FROM farmer_profiles ORDER BY created_at DESC`
+    const rows = await sql`
+      SELECT phone, name, district, station_id, primary_crops, total_area
+      FROM farmer_profiles
+      ORDER BY cached_at DESC
+      LIMIT 500
+    `
     return res.json(rows)
   } catch {
     return res.json([])

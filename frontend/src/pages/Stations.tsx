@@ -1041,7 +1041,7 @@ export default function Stations() {
         </h1>
         <p className="page-caption" style={{ maxWidth: '680px' }}>
           Twenty stations across {REGION.states.join(' and ')}. An AI agent
-          validates every reading against historical normals, neighbouring
+          validates every reading against historical normals, neighboring
           stations, and a satellite reference.
         </p>
       </div>

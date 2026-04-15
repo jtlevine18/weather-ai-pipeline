@@ -41,7 +41,7 @@ const CONDITION_LABEL: Record<string, string> = {
   frost_risk: 'Frost risk',
   high_wind: 'High wind',
   foggy: 'Fog',
-  clear: 'Clear',
+  clear: 'Clear skies',
 }
 
 const MODEL_COLOR: Record<string, string> = {
@@ -168,7 +168,7 @@ export default function Forecasts() {
   if (isLoading) return <TableSkeleton />
   if (error) return <div className="text-center py-12"><p className="text-crit text-sm">Failed to load forecasts</p></div>
 
-  const TABS = ['Station Forecasts', 'Model Performance', 'Downscaling']
+  const TABS = ['Station forecasts', 'Downscaling']
 
   return (
     <div className="space-y-8">
@@ -199,11 +199,26 @@ export default function Forecasts() {
         <MetricCard label="Avg Confidence" value={avgConf > 0 ? `${Math.round(avgConf * 100)}%` : '--'} />
         <MetricCard
           label="Local correction"
-          value={mosModelTrained ? `${(mosStatus.data?.metrics?.rmse ?? 0).toFixed(2)}\u00B0C RMSE` : 'Training'}
+          value={mosModelTrained ? 'Trained' : 'Training'}
           subtitle={mosCount > 0 ? `${mosPct}% of forecasts corrected` : mosModelTrained ? 'Applies on the next run' : 'Warming up'}
         />
         <MetricCard label="Weather Model" value={nwpSource} />
       </div>
+
+      <p
+        style={{
+          fontSize: '12px',
+          color: '#8d909e',
+          lineHeight: 1.55,
+          maxWidth: '680px',
+          marginTop: '-4px',
+        }}
+      >
+        Confidence reflects how closely recent forecasts for each station matched observed
+        weather over the last few weeks. A station with clean ground data and a well-behaved
+        model scores higher; one with intermittent sensor gaps or a model tier fallback scores
+        lower.
+      </p>
 
       {/* Tabs */}
       <div data-tour="forecasts-tabs" className="tab-list">
@@ -315,146 +330,6 @@ export default function Forecasts() {
       </TabPanel>
 
       <TabPanel active={activeTab === 1}>
-        <div className="space-y-8">
-          {/* Degradation Chain */}
-          <div>
-            <div className="section-header">Degradation chain</div>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(3, 1fr)',
-                gap: '32px',
-              }}
-            >
-              {DEGRADATION_TIERS.map(t => (
-                <div
-                  key={t.tier}
-                  style={{
-                    borderTop: '1px solid #e8e5e1',
-                    paddingTop: '16px',
-                  }}
-                >
-                  <div className="eyebrow">{t.tier} · {t.sub}</div>
-                  <div
-                    style={{
-                      fontFamily: '"Source Serif 4", Georgia, serif',
-                      fontSize: '20px',
-                      lineHeight: '26px',
-                      color: '#1b1e2d',
-                      marginTop: '10px',
-                    }}
-                  >
-                    {t.name}
-                  </div>
-                  <p
-                    style={{
-                      fontSize: '13px',
-                      color: '#606373',
-                      marginTop: '10px',
-                      lineHeight: 1.6,
-                    }}
-                  >
-                    {t.desc}
-                  </p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Model Confidence Chart */}
-          <div>
-            <div className="section-header">Usage breakdown</div>
-            <div
-              style={{
-                borderTop: '1px solid #e8e5e1',
-                borderBottom: '1px solid #e8e5e1',
-                padding: '24px 0',
-              }}
-            >
-              <ResponsiveContainer width="100%" height={240}>
-                <BarChart
-                  data={modelBreakdown.map(([model]) => {
-                    const items = allForecasts.filter(f => getModel(f) === model)
-                    const confs = items.map(f => f.confidence ?? 0).filter(c => c > 0)
-                    const avg = confs.length > 0 ? confs.reduce((a, b) => a + b, 0) / confs.length : 0
-                    return { model: MODEL_LABEL[model] ?? model.replace(/_/g, ' '), avgConfidence: Math.round(avg * 100), _key: model }
-                  })}
-                  margin={{ top: 8, right: 16, left: 0, bottom: 4 }}
-                >
-                  <CartesianGrid stroke="#e7e7e7" horizontal vertical={false} />
-                  <XAxis
-                    dataKey="model"
-                    tick={{ fill: '#606373', fontSize: 11, fontFamily: 'Space Grotesk' }}
-                    axisLine={false}
-                    tickLine={false}
-                  />
-                  <YAxis
-                    domain={[0, 100]}
-                    tick={{ fill: '#606373', fontSize: 11, fontFamily: 'Space Grotesk' }}
-                    axisLine={false}
-                    tickLine={false}
-                    unit="%"
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      backgroundColor: '#fcfaf7',
-                      border: '1px solid #e8e5e1',
-                      borderRadius: '2px',
-                      fontSize: '12px',
-                      fontFamily: '"Space Grotesk", system-ui, sans-serif',
-                    }}
-                    formatter={(value: number) => [`${value}%`, 'Avg confidence']}
-                  />
-                  <Bar dataKey="avgConfidence">
-                    {modelBreakdown.map(([model]) => (
-                      <Cell key={model} fill={MODEL_COLOR[model] || '#606373'} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          </div>
-
-          {/* Confidence by Model */}
-          <div>
-            <div className="section-header">Confidence by Model</div>
-            <div className="table-container">
-              <table>
-                <thead>
-                  <tr><th>Model</th><th>Avg Confidence</th><th>Min</th><th>Max</th><th>Count</th></tr>
-                </thead>
-                <tbody>
-                  {modelBreakdown.map(([model, count]) => {
-                    const items = allForecasts.filter(f => getModel(f) === model)
-                    const confs = items.map(f => f.confidence ?? 0).filter(c => c > 0)
-                    const avg = confs.length > 0 ? confs.reduce((a, b) => a + b, 0) / confs.length : 0
-                    const min = confs.length > 0 ? Math.min(...confs) : 0
-                    const max = confs.length > 0 ? Math.max(...confs) : 0
-                    return (
-                      <tr key={model}>
-                        <td style={{ fontWeight: 500 }}>{MODEL_LABEL[model] ?? model.replace(/_/g, ' ')}</td>
-                        <td>
-                          <div className="flex items-center gap-2">
-                            <div style={{ width: '80px', height: '8px', background: '#e8e5e1', borderRadius: '4px', overflow: 'hidden' }}>
-                              <div style={{ width: `${(avg * 100).toFixed(0)}%`, height: '100%', background: confidenceColor(avg), borderRadius: '4px' }} />
-                            </div>
-                            <span style={{ fontSize: '0.82rem', color: '#666' }}>{(avg * 100).toFixed(0)}%</span>
-                          </div>
-                        </td>
-                        <td>{(min * 100).toFixed(0)}%</td>
-                        <td>{(max * 100).toFixed(0)}%</td>
-                        <td>{count}</td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </div>
-      </TabPanel>
-
-      <TabPanel active={activeTab === 2}>
         <DownscalingTab stations={stations ?? []} forecasts={allForecasts} />
       </TabPanel>
 
