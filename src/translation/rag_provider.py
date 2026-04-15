@@ -182,11 +182,12 @@ class RAGProvider:
 
     async def _generate_english(self, forecasts: List[Dict[str, Any]], station,
                                   context_docs: List[str]) -> Dict[str, str]:
-        """Step 1: Generate English weekly outlook advisory + SMS version from RAG context.
+        """Step 1: Generate English weekly outlook advisory from RAG context.
 
-        Returns a dict with ``advisory_en`` (full markdown) and ``sms_en``
-        (<=160 char plain text). If the model skips the SMS block, ``sms_en``
-        falls back to an empty string and the caller should treat it as None.
+        Returns ``advisory_en`` (full prose) and ``sms_en`` (deterministic
+        first-sentence fallback, used only if Stage 2 crop_sms fails).
+        Claude 4.6 Sonnet no longer supports assistant-message prefill, so
+        this call is single-turn user message only.
         """
         context = "\n---\n".join(context_docs[:TOP_K]) if context_docs else ""
 
@@ -209,55 +210,40 @@ class RAGProvider:
             "weather forecast. Reference specific days when giving actionable advice "
             "(e.g., 'avoid spraying on Day 3-4 due to heavy rain'). "
             "Be specific to the crops and conditions. "
-            "Write in plain English that can be easily understood and translated.\n\n"
-            "You MUST ALSO generate a short SMS version that fits on a 2G phone "
-            "(160 characters maximum, plain text, no markdown, no emoji). The SMS "
-            "must call out the single most important action for the week. "
-            "The SMS block is mandatory — responses without it are invalid.\n\n"
-            "Respond with EXACTLY these two blocks, in this order, with nothing else:\n\n"
-            "ADVISORY:\n"
-            "<the full 4-6 sentence advisory>\n\n"
-            "SMS:\n"
-            "<the <=160 character SMS version — required, never empty>"
+            "Write in plain English that can be easily understood and translated. "
+            "Output ONLY the advisory text — no headers, labels, or meta-commentary."
         )
         user = (
             f"7-day weather forecast for {station.name}, {station.state}:\n"
             + "\n".join(forecast_lines) + "\n\n"
             f"Crops: {station.crop_context}\n\n"
             f"Knowledge base:\n{context if context else '[No relevant documents found]'}\n\n"
-            "Generate the advisory and SMS for the farmer:"
+            f"Write the weekly advisory for {station.name} farmers."
         )
         client = self._get_client()
-        # Assistant prefill forces the ADVISORY:/SMS: format reliably — Claude
-        # cannot "unwrite" a prefilled assistant turn, so it has to continue
-        # the format from "ADVISORY:" onward. Anthropic's API rejects any
-        # assistant prefill ending in whitespace, so the label ends at the
-        # colon (no newline) and we add the newline back in post-reconstruction
-        # before passing to the parser regex.
+        # Single-turn user message — Sonnet 4.6 rejects any assistant-role
+        # message in the input (treats it as unsupported prefill). Per-crop
+        # SMS chunks come from the separate Haiku generate_crop_sms call,
+        # which is still allowed to prefill.
         msg = await client.messages.create(
             model=self.config.model,
             max_tokens=800,
             system=system,
-            messages=[
-                {"role": "user", "content": user},
-                {"role": "assistant", "content": "ADVISORY:"},
-            ],
+            messages=[{"role": "user", "content": user}],
         )
-        continuation = msg.content[0].text if msg.content else ""
-        text = "ADVISORY:\n" + continuation
-        advisory_en, sms_en = _parse_advisory_and_sms(text)
-        # Hard cap SMS at 160 chars — prompt asks the model to self-limit,
-        # but we don't trust the model to count precisely.
-        if sms_en and len(sms_en) > 160:
-            sms_en = sms_en[:157].rstrip() + "..."
+        advisory_en = msg.content[0].text.strip() if msg.content else ""
+        # Deterministic fallback sms: first sentence of the advisory,
+        # markdown stripped, truncated to 160. Only used by the template
+        # expander if crop_sms fails — normally crop_sms wins.
+        sms_en = _fallback_sms(advisory_en, "", max_len=160) if advisory_en else ""
         return {"advisory_en": advisory_en, "sms_en": sms_en}
 
     async def _translate(self, advisory_en: str, sms_en: str, language: str,
                    station_name: str) -> Dict[str, str]:
-        """Step 2: Separate Claude call to translate both advisory and SMS.
+        """Step 2: Translate the advisory into the station's local language.
 
-        Returns dict with ``advisory_local`` and ``sms_local``. For English
-        stations both pass through unchanged.
+        Single-turn user message — no prefill (Sonnet 4.6 rejects it). For
+        English stations both fields pass through unchanged.
         """
         if language == "en":
             return {"advisory_local": advisory_en, "sms_local": sms_en}
@@ -266,42 +252,24 @@ class RAGProvider:
 
         system = (
             f"You are a professional translator specializing in agricultural content. "
-            f"Translate both the full advisory and the SMS version into {lang_name}. "
+            f"Translate the advisory below into {lang_name}. "
             f"Preserve technical terms, numbers, and actionable instructions precisely. "
-            f"The SMS translation MUST stay under 160 characters in {lang_name}. "
-            f"The SMS block is mandatory — responses without it are invalid.\n\n"
-            f"Respond with EXACTLY these two blocks, in this order, with nothing else:\n\n"
-            f"ADVISORY:\n"
-            f"<full advisory in {lang_name}>\n\n"
-            f"SMS:\n"
-            f"<SMS in {lang_name}, ≤160 characters — required, never empty>"
+            f"Output ONLY the translated advisory — no headers, labels, or meta-commentary."
         )
         user = (
-            f"Translate these agricultural advisories for farmers near {station_name} to {lang_name}:\n\n"
-            f"ADVISORY:\n{advisory_en}\n\n"
-            f"SMS:\n{sms_en}"
+            f"Translate this agricultural advisory for farmers near {station_name} "
+            f"into {lang_name}:\n\n{advisory_en}"
         )
         client = self._get_client()
         msg = await client.messages.create(
             model=self.config.model,
             max_tokens=900,
             system=system,
-            messages=[
-                {"role": "user", "content": user},
-                # Prefill must not end in whitespace (Anthropic rejects it) —
-                # label ends at the colon; newline is re-added in stitching.
-                {"role": "assistant", "content": "ADVISORY:"},
-            ],
+            messages=[{"role": "user", "content": user}],
         )
-        continuation = msg.content[0].text if msg.content else ""
-        text = "ADVISORY:\n" + continuation
-        advisory_local, sms_local = _parse_advisory_and_sms(text)
-        if not advisory_local:
-            # Belt-and-suspenders: if the parser somehow got nothing,
-            # fall back to the English advisory rather than dropping content.
-            advisory_local = advisory_en
-        if sms_local and len(sms_local) > 160:
-            sms_local = sms_local[:157].rstrip() + "..."
+        advisory_local = (msg.content[0].text.strip() if msg.content else "") or advisory_en
+        # Deterministic local-language sms fallback from the translated body.
+        sms_local = _fallback_sms(advisory_local, "", max_len=160) if advisory_local else ""
         return {"advisory_local": advisory_local, "sms_local": sms_local}
 
     async def generate_crop_sms(
