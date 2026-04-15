@@ -7,12 +7,13 @@ from typing import Any, Dict
 def insert_delivery_log(conn: Any, record: Dict[str, Any]) -> None:
     conn.execute(
         """INSERT INTO delivery_log
-           (id, alert_id, station_id, channel, recipient, status, message)
-           VALUES (?,?,?,?,?,?,?)
+           (id, alert_id, station_id, channel, recipient, status, message, sms_text)
+           VALUES (?,?,?,?,?,?,?,?)
            ON CONFLICT (id) DO NOTHING""",
         [record["id"], record.get("alert_id"), record.get("station_id"),
          record.get("channel"), record.get("recipient"),
-         record.get("status", "sent"), record.get("message", "")],
+         record.get("status", "sent"), record.get("message", ""),
+         record.get("sms_text")],
     )
 
 

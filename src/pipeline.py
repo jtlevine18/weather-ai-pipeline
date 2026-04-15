@@ -603,12 +603,17 @@ class WeatherPipeline:
                 "area_hectares":   land.area_hectares if land else 0.0,
                 "advisory_en":     result.advisory_en,
                 "advisory_local":  result.advisory_local,
+                "sms_en":          result.sms_en,
+                "sms_local":       result.sms_local,
                 "language":        station.language,
                 "model":           result.model,
                 "tokens_in":       result.tokens_in,
                 "tokens_out":      result.tokens_out,
                 "cache_read":      result.cache_read_tokens,
             }
+            # Stash the personalized record on the alert so Step 6 Deliver can
+            # pick the farmer-specific SMS without re-querying the DB.
+            alert.setdefault("_personalized_by_farmer", {})[phone] = record
             try:
                 insert_personalized_advisory(self.conn, record)
                 successes += 1
@@ -639,8 +644,30 @@ class WeatherPipeline:
             alert = alert_map.get(recipient.station_id)
             if alert is None:
                 continue
+            # Resolve the SMS text for this farmer. Featured farmers get a
+            # personalized SMS (via the Haiku pass in Step 5); everyone else
+            # reuses the station-level SMS from the Sonnet pass.
+            personalized = (alert.get("_personalized_by_farmer") or {}).get(recipient.phone)
+            if personalized:
+                sms_text = (
+                    personalized.get("sms_local")
+                    or personalized.get("sms_en")
+                )
+            else:
+                sms_text = (
+                    alert.get("sms_local")
+                    or alert.get("sms_en")
+                )
             logs = await self.delivery.deliver(alert, recipient)
             for entry in logs:
+                # sms_text is the short-form preview the farmer's 2G phone
+                # would actually receive. Keep the old `message` field for
+                # backward compatibility with existing dashboards, but
+                # prefer the sms_text when it exists so deduped log views
+                # don't render the full markdown body.
+                if sms_text:
+                    entry["sms_text"] = sms_text
+                    entry["message"] = sms_text
                 insert_delivery_log(self.conn, entry)
             total += len(logs)
 

@@ -181,8 +181,13 @@ class RAGProvider:
         )
 
     async def _generate_english(self, forecasts: List[Dict[str, Any]], station,
-                                  context_docs: List[str]) -> str:
-        """Step 1: Generate English weekly outlook advisory from RAG context."""
+                                  context_docs: List[str]) -> Dict[str, str]:
+        """Step 1: Generate English weekly outlook advisory + SMS version from RAG context.
+
+        Returns a dict with ``advisory_en`` (full markdown) and ``sms_en``
+        (<=160 char plain text). If the model skips the SMS block, ``sms_en``
+        falls back to an empty string and the caller should treat it as None.
+        """
         context = "\n---\n".join(context_docs[:TOP_K]) if context_docs else ""
 
         # Build 7-day forecast table for the prompt
@@ -204,50 +209,83 @@ class RAGProvider:
             "weather forecast. Reference specific days when giving actionable advice "
             "(e.g., 'avoid spraying on Day 3-4 due to heavy rain'). "
             "Be specific to the crops and conditions. "
-            "Write in plain English that can be easily understood and translated."
+            "Write in plain English that can be easily understood and translated.\n\n"
+            "You must ALSO generate a short SMS version that fits on a 2G phone "
+            "(160 characters maximum, plain text, no markdown, no emoji). The SMS "
+            "should call out the single most important action for the week.\n\n"
+            "Output format (exactly, nothing else):\n"
+            "ADVISORY:\n"
+            "<the full 4-6 sentence advisory>\n\n"
+            "SMS:\n"
+            "<the <=160 character SMS version>"
         )
         user = (
             f"7-day weather forecast for {station.name}, {station.state}:\n"
             + "\n".join(forecast_lines) + "\n\n"
             f"Crops: {station.crop_context}\n\n"
             f"Knowledge base:\n{context if context else '[No relevant documents found]'}\n\n"
-            "Generate a weekly outlook advisory for the farmer:"
+            "Generate the advisory and SMS for the farmer:"
         )
         client = self._get_client()
         msg = await client.messages.create(
             model=self.config.model,
-            max_tokens=400,
+            max_tokens=500,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
-        return msg.content[0].text.strip()
+        text = msg.content[0].text.strip() if msg.content else ""
+        advisory_en, sms_en = _parse_advisory_and_sms(text)
+        # Hard cap SMS at 160 chars — prompt asks the model to self-limit,
+        # but we don't trust the model to count precisely.
+        if sms_en and len(sms_en) > 160:
+            sms_en = sms_en[:157].rstrip() + "..."
+        return {"advisory_en": advisory_en, "sms_en": sms_en}
 
-    async def _translate(self, advisory_en: str, language: str,
-                   station_name: str) -> str:
-        """Step 2: Separate Claude call to translate English advisory."""
+    async def _translate(self, advisory_en: str, sms_en: str, language: str,
+                   station_name: str) -> Dict[str, str]:
+        """Step 2: Separate Claude call to translate both advisory and SMS.
+
+        Returns dict with ``advisory_local`` and ``sms_local``. For English
+        stations both pass through unchanged.
+        """
         if language == "en":
-            return advisory_en
+            return {"advisory_local": advisory_en, "sms_local": sms_en}
 
         lang_name = {"ta": "Tamil", "ml": "Malayalam"}.get(language, language)
 
         system = (
             f"You are a professional translator specializing in agricultural content. "
-            f"Translate the given English agricultural advisory to {lang_name}. "
+            f"Translate both the full advisory and the SMS version into {lang_name}. "
             f"Preserve technical terms, numbers, and actionable instructions precisely. "
-            f"Return only the translated text, no English, no explanations."
+            f"The SMS translation MUST stay under 160 characters in {lang_name}. "
+            f"Return only the translations, no English, no explanations.\n\n"
+            f"Output format (exactly):\n"
+            f"ADVISORY:\n"
+            f"<full advisory in {lang_name}>\n\n"
+            f"SMS:\n"
+            f"<SMS in {lang_name}, <=160 characters>"
         )
         user = (
-            f"Translate this agricultural advisory for farmers near {station_name} to {lang_name}:\n\n"
-            f"{advisory_en}"
+            f"Translate these agricultural advisories for farmers near {station_name} to {lang_name}:\n\n"
+            f"ADVISORY:\n{advisory_en}\n\n"
+            f"SMS:\n{sms_en}"
         )
         client = self._get_client()
         msg = await client.messages.create(
             model=self.config.model,
-            max_tokens=512,
+            max_tokens=700,
             system=system,
             messages=[{"role": "user", "content": user}],
         )
-        return msg.content[0].text.strip()
+        text = msg.content[0].text.strip() if msg.content else ""
+        advisory_local, sms_local = _parse_advisory_and_sms(text)
+        if not advisory_local:
+            # Model skipped the format — fall back to treating the whole
+            # response as the translated advisory so we don't drop data.
+            advisory_local = text
+        if sms_local and len(sms_local) > 160:
+            sms_local = sms_local[:157].rstrip() + "..."
+        return {"advisory_local": advisory_local, "sms_local": sms_local}
 
     async def generate_advisory(
         self,
@@ -267,16 +305,41 @@ class RAGProvider:
                                               threshold=self.config.score_threshold)
             context_docs = [text for text, _ in hits]
 
-        # Generate English weekly outlook advisory
-        advisory_en = await self._generate_english(forecasts, station, context_docs)
+        # Generate English weekly outlook advisory + SMS
+        english = await self._generate_english(forecasts, station, context_docs)
+        advisory_en = english.get("advisory_en", "")
+        sms_en = english.get("sms_en") or None  # empty string -> None for DB
 
-        # Translate
-        advisory_local = await self._translate(advisory_en, station.language, station.name)
+        # Translate both advisory + SMS
+        translated = await self._translate(
+            advisory_en, sms_en or "", station.language, station.name,
+        )
+        advisory_local = translated.get("advisory_local", "")
+        sms_local = translated.get("sms_local") or None
 
         return {
             "advisory_en":    advisory_en,
             "advisory_local": advisory_local,
+            "sms_en":         sms_en,
+            "sms_local":      sms_local,
             "language":       station.language,
             "provider":       "rag_claude",
             "retrieval_docs": len(context_docs),
         }
+
+
+def _parse_advisory_and_sms(text: str) -> Tuple[str, str]:
+    """Split an ADVISORY:/SMS: structured response into (advisory, sms).
+
+    Tolerant to case and whitespace. If the response lacks either header,
+    falls back to (text, "") so the caller never crashes on a parse miss.
+    """
+    if not text:
+        return "", ""
+    adv_match = re.search(r"ADVISORY:\s*(.*?)(?:\n\s*SMS:|$)", text, re.DOTALL | re.IGNORECASE)
+    sms_match = re.search(r"SMS:\s*(.*?)\s*$", text, re.DOTALL | re.IGNORECASE)
+    advisory = adv_match.group(1).strip() if adv_match else ""
+    sms = sms_match.group(1).strip() if sms_match else ""
+    if not advisory and not sms:
+        return text.strip(), ""
+    return advisory, sms

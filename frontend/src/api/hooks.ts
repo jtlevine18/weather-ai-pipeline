@@ -76,6 +76,8 @@ export interface Alert {
   condition?: string
   advisory_en?: string
   advisory_local?: string
+  sms_en?: string
+  sms_local?: string
   language?: string
   provider?: string
   retrieval_docs?: number
@@ -158,6 +160,7 @@ export interface DeliveryRecord {
   recipient?: string
   status?: string
   message?: string
+  sms_text?: string
   delivered_at?: string
   // Not in DB — kept so `d.created_at` references continue to type-check.
   created_at?: string

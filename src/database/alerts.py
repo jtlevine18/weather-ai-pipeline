@@ -10,14 +10,15 @@ def insert_alert(conn: Any, record: Dict[str, Any]) -> None:
     conn.execute(
         """INSERT INTO agricultural_alerts
            (id, station_id, farmer_lat, farmer_lon, issued_at, condition,
-            advisory_en, advisory_local, language, provider, retrieval_docs,
-            forecast_days)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?)
+            advisory_en, advisory_local, sms_en, sms_local,
+            language, provider, retrieval_docs, forecast_days)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT (id) DO NOTHING""",
         [record["id"], record["station_id"],
          record.get("farmer_lat"), record.get("farmer_lon"),
          record["issued_at"], record.get("condition"),
          record.get("advisory_en"), record.get("advisory_local"),
+         record.get("sms_en"), record.get("sms_local"),
          record.get("language", "en"), record.get("provider", "unknown"),
          record.get("retrieval_docs", 0),
          record.get("forecast_days", 1)],
@@ -38,15 +39,16 @@ def insert_personalized_advisory(conn: Any, record: Dict[str, Any]) -> None:
         """INSERT INTO personalized_advisories
            (id, alert_id, station_id, farmer_phone, farmer_name,
             crops, soil_type, irrigation_type, area_hectares,
-            advisory_en, advisory_local, language, model,
-            tokens_in, tokens_out, cache_read)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            advisory_en, advisory_local, sms_en, sms_local,
+            language, model, tokens_in, tokens_out, cache_read)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT (id) DO NOTHING""",
         [record["id"], record["alert_id"], record["station_id"],
          record["farmer_phone"], record.get("farmer_name"),
          record.get("crops"), record.get("soil_type"),
          record.get("irrigation_type"), record.get("area_hectares"),
          record.get("advisory_en"), record.get("advisory_local"),
+         record.get("sms_en"), record.get("sms_local"),
          record.get("language", "en"), record.get("model", ""),
          record.get("tokens_in", 0), record.get("tokens_out", 0),
          record.get("cache_read", 0)],

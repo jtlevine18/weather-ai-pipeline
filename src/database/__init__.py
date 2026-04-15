@@ -91,6 +91,8 @@ CREATE TABLE IF NOT EXISTS agricultural_alerts (
     condition      VARCHAR,
     advisory_en    VARCHAR,
     advisory_local VARCHAR,
+    sms_en         VARCHAR,
+    sms_local      VARCHAR,
     language       VARCHAR,
     provider       VARCHAR,
     retrieval_docs INTEGER DEFAULT 0,
@@ -110,6 +112,8 @@ CREATE TABLE IF NOT EXISTS personalized_advisories (
     area_hectares   DOUBLE PRECISION,
     advisory_en     VARCHAR,
     advisory_local  VARCHAR,
+    sms_en          VARCHAR,
+    sms_local       VARCHAR,
     language        VARCHAR,
     model           VARCHAR,
     tokens_in       INTEGER DEFAULT 0,
@@ -126,6 +130,7 @@ CREATE TABLE IF NOT EXISTS delivery_log (
     recipient   VARCHAR,
     status      VARCHAR,
     message     VARCHAR,
+    sms_text    VARCHAR,
     delivered_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -264,6 +269,15 @@ CREATE INDEX IF NOT EXISTS idx_forecasts_station_valid_for
     ON forecasts (station_id, valid_for_ts);
 CREATE INDEX IF NOT EXISTS idx_delivery_log_delivered_at
     ON delivery_log (delivered_at);
+
+-- Additive, idempotent column migrations. These run on every init_db() so
+-- existing Neon databases pick up new columns without a manual migration.
+-- ADD COLUMN IF NOT EXISTS is a no-op if the column already exists.
+ALTER TABLE agricultural_alerts    ADD COLUMN IF NOT EXISTS sms_en    VARCHAR;
+ALTER TABLE agricultural_alerts    ADD COLUMN IF NOT EXISTS sms_local VARCHAR;
+ALTER TABLE personalized_advisories ADD COLUMN IF NOT EXISTS sms_en    VARCHAR;
+ALTER TABLE personalized_advisories ADD COLUMN IF NOT EXISTS sms_local VARCHAR;
+ALTER TABLE delivery_log           ADD COLUMN IF NOT EXISTS sms_text  VARCHAR;
 """
 
 

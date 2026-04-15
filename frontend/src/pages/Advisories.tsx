@@ -248,6 +248,35 @@ export default function Advisories() {
                         {alert.advisory_en}
                       </p>
                     )}
+
+                    {/* SMS preview — what the farmer's 2G phone actually receives */}
+                    {(alert.sms_local || alert.sms_en) && (
+                      <div
+                        style={{
+                          marginTop: '14px',
+                          paddingTop: '12px',
+                          borderTop: '1px dashed #e8e5e1',
+                        }}
+                      >
+                        <div className="eyebrow" style={{ marginBottom: '6px' }}>
+                          What the farmer's 2G phone receives
+                        </div>
+                        <p
+                          style={{
+                            fontFamily: '"Space Grotesk", system-ui, sans-serif',
+                            fontSize: '12px',
+                            color: '#606373',
+                            lineHeight: 1.5,
+                            maxWidth: '100%',
+                            overflowWrap: 'break-word',
+                            wordBreak: 'break-word',
+                            margin: 0,
+                          }}
+                        >
+                          {alert.sms_local || alert.sms_en}
+                        </p>
+                      </div>
+                    )}
                   </div>
                 )
               })}
