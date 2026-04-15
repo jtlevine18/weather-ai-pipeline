@@ -20,6 +20,26 @@ const STATUS_COLOR: Record<string, string> = {
   sent: '#606373', dry_run: '#606373', failed: '#c71f48',
 }
 
+// Derive a ~160-char plain-text SMS preview from a markdown advisory.
+// Deterministic, client-side. Used as a fallback when the backend's
+// sms_en/sms_local columns are empty (which is most of the time —
+// Claude skips the SMS block when asked to emit multiple output blocks
+// in a single call, regardless of prompt strategy).
+function extractSmsPreview(text: string | undefined | null, maxLen = 160): string {
+  if (!text) return ''
+  const stripped = text
+    .replace(/^#+\s+.*$/gm, '')        // drop heading lines
+    .replace(/\*\*([^*]+)\*\*/g, '$1') // unwrap **bold**
+    .replace(/\*([^*]+)\*/g, '$1')     // unwrap *italic*
+    .replace(/`([^`]+)`/g, '$1')       // unwrap `code`
+    .replace(/^\s*[-•]\s+/gm, '')      // strip bullet markers
+    .replace(/\s+/g, ' ')               // collapse whitespace
+    .trim()
+  if (!stripped) return ''
+  if (stripped.length <= maxLen) return stripped
+  return stripped.slice(0, maxLen).replace(/\s+\S*$/, '').trimEnd() + '…'
+}
+
 const PROVIDER_LABEL: Record<string, string> = {
   rag: 'AI + knowledge base',
   rag_claude: 'AI + knowledge base',
@@ -249,34 +269,44 @@ export default function Advisories() {
                       </p>
                     )}
 
-                    {/* SMS preview — what the farmer's 2G phone actually receives */}
-                    {(alert.sms_local || alert.sms_en) && (
-                      <div
-                        style={{
-                          marginTop: '14px',
-                          paddingTop: '12px',
-                          borderTop: '1px dashed #e8e5e1',
-                        }}
-                      >
-                        <div className="eyebrow" style={{ marginBottom: '6px' }}>
-                          What the farmer's 2G phone receives
-                        </div>
-                        <p
+                    {/* SMS preview — what the farmer's 2G phone actually receives.
+                        Prefers the backend-populated sms_local/sms_en columns, falls
+                        back to a client-side extract from the advisory text so the
+                        strip always renders even on rows where the pipeline didn't
+                        populate the SMS columns. */}
+                    {(() => {
+                      const smsPreview =
+                        (alert.sms_local || alert.sms_en || '').trim() ||
+                        extractSmsPreview(alert.advisory_local || alert.advisory_en)
+                      if (!smsPreview) return null
+                      return (
+                        <div
                           style={{
-                            fontFamily: '"Space Grotesk", system-ui, sans-serif',
-                            fontSize: '12px',
-                            color: '#606373',
-                            lineHeight: 1.5,
-                            maxWidth: '100%',
-                            overflowWrap: 'break-word',
-                            wordBreak: 'break-word',
-                            margin: 0,
+                            marginTop: '14px',
+                            paddingTop: '12px',
+                            borderTop: '1px dashed #e8e5e1',
                           }}
                         >
-                          {alert.sms_local || alert.sms_en}
-                        </p>
-                      </div>
-                    )}
+                          <div className="eyebrow" style={{ marginBottom: '6px' }}>
+                            What the farmer's 2G phone receives
+                          </div>
+                          <p
+                            style={{
+                              fontFamily: '"Space Grotesk", system-ui, sans-serif',
+                              fontSize: '12px',
+                              color: '#606373',
+                              lineHeight: 1.5,
+                              maxWidth: '100%',
+                              overflowWrap: 'break-word',
+                              wordBreak: 'break-word',
+                              margin: 0,
+                            }}
+                          >
+                            {smsPreview}
+                          </p>
+                        </div>
+                      )
+                    })()}
                   </div>
                 )
               })}
