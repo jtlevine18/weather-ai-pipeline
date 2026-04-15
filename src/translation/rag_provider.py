@@ -282,18 +282,33 @@ class RAGProvider:
         """Extract per-crop ≤160-char SMS summaries via a dedicated Haiku tool-use call.
 
         Builds a dynamic tool schema with one required string field per crop so the
-        model must emit something for each. Any crop the model still omits (or emits
-        empty) is backfilled with a deterministic Python fallback from the advisory
-        text. This is intentionally a single-task call — prior attempts that asked
-        Sonnet to emit advisory + SMS in one response kept dropping the SMS block.
+        model must emit something for each. Crop names like ``rice (paddy)`` or
+        ``pulses (black gram)`` contain characters Anthropic's tool schema rejects
+        (properties must match ``^[a-zA-Z0-9_.-]{1,64}$``), so we sanitize each
+        crop into a schema-safe key and keep a map back to the original name for
+        both the description (which the model sees) and the returned dict (which
+        downstream template expansion matches against ``profile.primary_crops``).
+        Any crop the model still omits or leaves empty is backfilled with a
+        deterministic Python fallback from the advisory text.
         """
         if not advisory or not crops:
             return {}
 
         lang_name = {"ta": "Tamil", "ml": "Malayalam", "en": "English"}.get(language, language)
 
-        properties = {
-            crop: {
+        # Build schema keys that match ^[a-zA-Z0-9_.-]{1,64}$ while keeping the
+        # original crop name for the description and the output dict.
+        key_to_crop: Dict[str, str] = {}
+        properties: Dict[str, Dict[str, str]] = {}
+        for crop in crops:
+            base = _sanitize_schema_key(crop)
+            key = base
+            idx = 1
+            while key in properties:
+                idx += 1
+                key = f"{base}_{idx}"
+            key_to_crop[key] = crop
+            properties[key] = {
                 "type": "string",
                 "description": (
                     f"≤160 character SMS for {crop} farmers, written in {lang_name}. "
@@ -301,15 +316,14 @@ class RAGProvider:
                     f"single most important action for {crop} this week."
                 ),
             }
-            for crop in crops
-        }
+
         tool = {
             "name": "emit_crop_sms",
             "description": f"Emit one SMS per crop in {lang_name} (≤160 chars each).",
             "input_schema": {
                 "type":       "object",
                 "properties": properties,
-                "required":   list(crops),
+                "required":   list(properties.keys()),
             },
         }
 
@@ -339,8 +353,8 @@ class RAGProvider:
             for block in msg.content:
                 if getattr(block, "type", "") == "tool_use" and block.name == "emit_crop_sms":
                     raw = block.input or {}
-                    for crop in crops:
-                        val = (raw.get(crop) or "").strip()
+                    for key, crop in key_to_crop.items():
+                        val = (raw.get(key) or "").strip()
                         if len(val) > 160:
                             val = val[:157].rstrip() + "..."
                         if val:
@@ -455,6 +469,26 @@ _MD_HEAD = re.compile(r"^#{1,6}\s+", re.MULTILINE)
 _MD_BULL = re.compile(r"^\s*[-*]\s+", re.MULTILINE)
 _WS      = re.compile(r"\s+")
 _SENT    = re.compile(r"(?<=[.!?])\s+")
+
+# Anthropic tool schemas require property keys to match ^[a-zA-Z0-9_.-]{1,64}$.
+# Crop names like "rice (paddy)" or "pulses (black gram)" contain spaces and
+# parentheses that blow this up, so we sanitize each crop into a safe key.
+_SCHEMA_KEY_BAD = re.compile(r"[^a-zA-Z0-9_.-]+")
+_SCHEMA_KEY_DEDUP = re.compile(r"_+")
+
+
+def _sanitize_schema_key(crop: str) -> str:
+    """Return a crop name mapped into ``^[a-zA-Z0-9_.-]{1,64}$`` form.
+
+    Non-matching characters collapse to a single underscore; leading/trailing
+    underscores are trimmed; empty results fall back to the literal ``"crop"``;
+    length is capped at 64.
+    """
+    key = _SCHEMA_KEY_BAD.sub("_", (crop or "").strip())
+    key = _SCHEMA_KEY_DEDUP.sub("_", key).strip("_")
+    if not key:
+        return "crop"
+    return key[:64]
 
 
 def _strip_markdown(text: str) -> str:
