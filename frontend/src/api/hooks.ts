@@ -78,6 +78,10 @@ export interface Alert {
   advisory_local?: string
   sms_en?: string
   sms_local?: string
+  // JSON string stored in VARCHAR: {"en":{crop:sms},"local":{crop:sms}}.
+  // Populated by the Stage 2 Haiku call in rag_provider.generate_advisory.
+  // Older rows (pre-4-stage rollout) have this as null.
+  crop_sms?: string | null
   language?: string
   provider?: string
   retrieval_docs?: number
@@ -86,6 +90,32 @@ export interface Alert {
   // Frontend-only — no `severity` column in DB; port chat may compute from
   // `condition` or drop the filter.
   severity?: string
+}
+
+// Parsed shape of Alert.crop_sms after JSON.parse. Both buckets are optional
+// because older rows may have no crop_sms at all.
+export interface CropSmsBuckets {
+  en?: Record<string, string>
+  local?: Record<string, string>
+}
+
+// Row returned by /api/delivery?mode=samples. Joins delivery_log with
+// farmer_profiles so the UI can show "<name> (<crops>) → <sms_text>".
+// Fields from farmer_profiles are nullable when the phone isn't cached.
+export interface DeliverySample {
+  recipient: string
+  sms_text?: string | null
+  message?: string | null
+  delivered_at?: string
+  name?: string | null
+  district?: string | null
+  primary_crops?: string | null
+  station_id?: string
+}
+
+export interface DeliveryStationCount {
+  station_id: string
+  count: number
 }
 
 // NOTE: No backend endpoint exists for station-latest. Shape kept as-is;
@@ -367,6 +397,38 @@ export function useDeliveryMetricsAgg(limit = 200) {
   return useQuery<any[]>({
     queryKey: ['delivery-metrics', limit],
     queryFn: () => apiFetch<any[]>(`/api/delivery?mode=metrics&limit=${limit}`),
+  })
+}
+
+// Total delivery_log rows in the most recent pipeline run.
+export function useDeliveryCount() {
+  return useQuery<{ count: number }>({
+    queryKey: ['delivery-count'],
+    queryFn: () => apiFetch<{ count: number }>('/api/delivery?mode=count'),
+    staleTime: 60_000,
+  })
+}
+
+// Per-station counts for the most recent run.
+export function useDeliveryByStation() {
+  return useQuery<DeliveryStationCount[]>({
+    queryKey: ['delivery-by-station'],
+    queryFn: () => apiFetch<DeliveryStationCount[]>('/api/delivery?mode=by_station'),
+    staleTime: 60_000,
+  })
+}
+
+// Lazy-loaded sample farmers for a single station — enabled only when an
+// advisory card is expanded, so the page doesn't fire 20 joins on mount.
+export function useDeliverySamples(stationId: string, perStation = 3) {
+  return useQuery<DeliverySample[]>({
+    queryKey: ['delivery-samples', stationId, perStation],
+    queryFn: () =>
+      apiFetch<DeliverySample[]>(
+        `/api/delivery?mode=samples&station_id=${encodeURIComponent(stationId)}&per_station=${perStation}`,
+      ),
+    enabled: !!stationId,
+    staleTime: 60_000,
   })
 }
 
