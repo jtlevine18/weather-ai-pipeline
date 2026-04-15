@@ -230,16 +230,17 @@ class RAGProvider:
         client = self._get_client()
         # Assistant prefill forces the ADVISORY:/SMS: format reliably — Claude
         # cannot "unwrite" a prefilled assistant turn, so it has to continue
-        # the format from "ADVISORY:\n" onward. This is more reliable than
-        # prompt instructions alone (Claude silently ignores "output format"
-        # directives sometimes) and doesn't depend on tool-use SDK support.
+        # the format from "ADVISORY:" onward. Anthropic's API rejects any
+        # assistant prefill ending in whitespace, so the label ends at the
+        # colon (no newline) and we add the newline back in post-reconstruction
+        # before passing to the parser regex.
         msg = await client.messages.create(
             model=self.config.model,
             max_tokens=800,
             system=system,
             messages=[
                 {"role": "user", "content": user},
-                {"role": "assistant", "content": "ADVISORY:\n"},
+                {"role": "assistant", "content": "ADVISORY:"},
             ],
         )
         continuation = msg.content[0].text if msg.content else ""
@@ -287,7 +288,9 @@ class RAGProvider:
             system=system,
             messages=[
                 {"role": "user", "content": user},
-                {"role": "assistant", "content": "ADVISORY:\n"},
+                # Prefill must not end in whitespace (Anthropic rejects it) —
+                # label ends at the colon; newline is re-added in stitching.
+                {"role": "assistant", "content": "ADVISORY:"},
             ],
         )
         continuation = msg.content[0].text if msg.content else ""

@@ -34,10 +34,15 @@ class ConsoleProvider:
         temp_str  = f"{temp:.1f}°C" if temp is not None else "N/A"
         rain_str  = f"{rain:.1f}mm" if rain is not None else "N/A"
 
+        # Weekly advisories are station-level (one advisory fans out to every
+        # farmer in that station's registry). Don't print a specific farmer's
+        # name in the sample panel — it misleads readers into thinking the
+        # advisory is personalized. The delivery_log row still records the
+        # recipient's phone; only the visible debug panel is station-scoped.
         body = Text()
         body.append(f"{emoji} {condition.upper().replace('_', ' ')}\n", style="bold yellow")
-        body.append(f"Station: {station}  |  Recipient: {recipient.name}\n", style="dim")
-        body.append(f"Temp: {temp_str}  Rain: {rain_str}  Lang: {lang}\n\n")
+        body.append(f"Station: {station}  |  Lang: {lang}\n", style="dim")
+        body.append(f"Temp: {temp_str}  Rain: {rain_str}\n\n")
         body.append(advisory, style="green")
 
         console.print(Panel(body, title=f"[bold cyan]Advisory — {station}[/bold cyan]",

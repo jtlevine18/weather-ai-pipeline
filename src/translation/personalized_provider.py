@@ -137,16 +137,17 @@ class PersonalizedAdvisoryProvider:
 
         client = self._get_client()
         # Assistant prefill forces the 4-block format reliably — Claude cannot
-        # unwrite a prefilled assistant turn, so it has to continue from
-        # "ENGLISH:\n". Prompt instructions + prefill together is much more
-        # reliable than instructions alone.
+        # unwrite a prefilled assistant turn, so it has to continue from the
+        # "ENGLISH:" label. Anthropic rejects any prefill ending in whitespace,
+        # so the label ends at the colon and we stitch the newline back in
+        # before handing the stitched text to the parser.
         msg = await client.messages.create(
             model=self.model,
             max_tokens=1200,
             system=system_blocks,
             messages=[
                 {"role": "user", "content": user_msg},
-                {"role": "assistant", "content": "ENGLISH:\n"},
+                {"role": "assistant", "content": "ENGLISH:"},
             ],
         )
         continuation = msg.content[0].text if msg.content else ""
