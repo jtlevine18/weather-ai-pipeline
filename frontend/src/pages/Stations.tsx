@@ -28,16 +28,29 @@ const STATES = ['All States', ...REGION.states]
 const SOURCE_STYLE: Record<string, [string, string]> = REGION.sourceLabels
 
 const HEAL_STYLE: Record<string, [string, string]> = {
-  cross_validated: ['Validated', '#606373'],
-  null_filled: ['Filled', '#606373'],
-  ai_validated: ['AI OK', '#606373'],
-  ai_corrected: ['AI fixed', '#2d5b7d'],
-  ai_filled: ['AI filled', '#2d5b7d'],
-  ai_flagged: ['Needs review', '#c71f48'],
+  cross_validated: ['Matched reference', '#606373'],
+  null_filled: ['Missing field filled', '#606373'],
+  ai_validated: ['Verified by AI', '#606373'],
+  ai_corrected: ['Corrected by AI', '#2d5b7d'],
+  ai_filled: ['Gap filled by AI', '#2d5b7d'],
+  ai_flagged: ['Flagged for review', '#c71f48'],
   anomaly_flagged: ['Anomaly', '#c71f48'],
-  typo_corrected: ['Typo fix', '#2d5b7d'],
+  typo_corrected: ['Decimal fix', '#2d5b7d'],
   imputed_from_reference: ['From satellite', '#2d5b7d'],
   none: ['Original', '#8d909e'],
+}
+
+const HEAL_DESCRIPTION: Record<string, string> = {
+  cross_validated: 'Reading matched the reference data within expected tolerances.',
+  null_filled: "Missing fields filled from Tomorrow.io (expected — IMD doesn't always provide wind/pressure/humidity).",
+  ai_validated: 'AI confirmed the reading looked right against reference data and seasonal norms.',
+  ai_corrected: 'AI corrected a bad value (e.g. a misplaced decimal) with a written explanation.',
+  ai_filled: 'AI filled missing fields from reference data.',
+  ai_flagged: "AI flagged a suspicious reading it couldn't confidently correct.",
+  anomaly_flagged: 'Reading diverged too far from reference data to be trusted.',
+  typo_corrected: 'Decimal-place error corrected (e.g. 320°C to 32.0°C).',
+  imputed_from_reference: 'Station was offline — the full reading came from reference data.',
+  none: 'No cleaning action applied — original reading passed through as-is.',
 }
 
 const ASSESSMENT_COLOR: Record<string, string> = {
@@ -105,7 +118,12 @@ function SourceBadge({ source }: { source: string }) {
 function HealBadges({ action }: { action: string }) {
   if (!action || action === 'none') {
     return (
-      <span style={{ fontSize: '13px', color: '#8d909e' }}>Original</span>
+      <span
+        style={{ fontSize: '13px', color: '#8d909e', cursor: 'help' }}
+        title={HEAL_DESCRIPTION.none}
+      >
+        Original
+      </span>
     )
   }
   const parts = action.split(',').map((a) => a.trim()).filter(Boolean)
@@ -114,7 +132,11 @@ function HealBadges({ action }: { action: string }) {
       {parts.map((p) => {
         const [l, c] = HEAL_STYLE[p] ?? [p, '#606373']
         return (
-          <span key={p} style={{ fontSize: '13px', color: c }}>
+          <span
+            key={p}
+            style={{ fontSize: '13px', color: c, cursor: 'help' }}
+            title={HEAL_DESCRIPTION[p] ?? ''}
+          >
             {l}
           </span>
         )

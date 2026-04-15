@@ -215,7 +215,12 @@ export default function Advisories() {
         <MetricCard label="Farmers reached" value={farmersReached.toLocaleString()} />
         <MetricCard
           label="Languages"
-          value={languagesInUse.length ? languagesInUse.map(l => LANG_LABEL[l] ?? l).join(' · ') : '—'}
+          value={languagesInUse.length || '—'}
+          subtitle={
+            languagesInUse.length
+              ? languagesInUse.map(l => LANG_LABEL[l] ?? l).join(' · ')
+              : undefined
+          }
         />
       </div>
 
