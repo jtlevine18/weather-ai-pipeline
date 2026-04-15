@@ -93,6 +93,7 @@ CREATE TABLE IF NOT EXISTS agricultural_alerts (
     advisory_local VARCHAR,
     sms_en         VARCHAR,
     sms_local      VARCHAR,
+    crop_sms       VARCHAR,
     language       VARCHAR,
     provider       VARCHAR,
     retrieval_docs INTEGER DEFAULT 0,
@@ -275,6 +276,7 @@ CREATE INDEX IF NOT EXISTS idx_delivery_log_delivered_at
 -- ADD COLUMN IF NOT EXISTS is a no-op if the column already exists.
 ALTER TABLE agricultural_alerts    ADD COLUMN IF NOT EXISTS sms_en    VARCHAR;
 ALTER TABLE agricultural_alerts    ADD COLUMN IF NOT EXISTS sms_local VARCHAR;
+ALTER TABLE agricultural_alerts    ADD COLUMN IF NOT EXISTS crop_sms  VARCHAR;
 ALTER TABLE personalized_advisories ADD COLUMN IF NOT EXISTS sms_en    VARCHAR;
 ALTER TABLE personalized_advisories ADD COLUMN IF NOT EXISTS sms_local VARCHAR;
 ALTER TABLE delivery_log           ADD COLUMN IF NOT EXISTS sms_text  VARCHAR;

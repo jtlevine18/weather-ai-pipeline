@@ -301,6 +301,90 @@ class RAGProvider:
             sms_local = sms_local[:157].rstrip() + "..."
         return {"advisory_local": advisory_local, "sms_local": sms_local}
 
+    async def generate_crop_sms(
+        self,
+        advisory: str,
+        crops: List[str],
+        language: str,
+        station_name: str,
+    ) -> Dict[str, str]:
+        """Extract per-crop ≤160-char SMS summaries via a dedicated Haiku tool-use call.
+
+        Builds a dynamic tool schema with one required string field per crop so the
+        model must emit something for each. Any crop the model still omits (or emits
+        empty) is backfilled with a deterministic Python fallback from the advisory
+        text. This is intentionally a single-task call — prior attempts that asked
+        Sonnet to emit advisory + SMS in one response kept dropping the SMS block.
+        """
+        if not advisory or not crops:
+            return {}
+
+        lang_name = {"ta": "Tamil", "ml": "Malayalam", "en": "English"}.get(language, language)
+
+        properties = {
+            crop: {
+                "type": "string",
+                "description": (
+                    f"≤160 character SMS for {crop} farmers, written in {lang_name}. "
+                    f"Plain text only — no markdown, no emoji. Must call out the "
+                    f"single most important action for {crop} this week."
+                ),
+            }
+            for crop in crops
+        }
+        tool = {
+            "name": "emit_crop_sms",
+            "description": f"Emit one SMS per crop in {lang_name} (≤160 chars each).",
+            "input_schema": {
+                "type":       "object",
+                "properties": properties,
+                "required":   list(crops),
+            },
+        }
+
+        system = (
+            f"You are an agricultural SMS writer for smallholder farmers. "
+            f"Given a weekly weather advisory, emit one short SMS per crop in {lang_name}. "
+            f"Each SMS must be ≤160 characters, plain text, no markdown, no emoji. "
+            f"Focus on the single most important action for that crop this week. "
+            f"You MUST call the emit_crop_sms tool with one value per crop."
+        )
+        user = (
+            f"Weekly advisory for {station_name}:\n\n{advisory}\n\n"
+            f"Write one SMS per crop ({', '.join(crops)}) in {lang_name}."
+        )
+
+        out: Dict[str, str] = {}
+        try:
+            client = self._get_client()
+            msg = await client.messages.create(
+                model="claude-haiku-4-5-20251001",
+                max_tokens=1200,
+                system=system,
+                tools=[tool],
+                tool_choice={"type": "tool", "name": "emit_crop_sms"},
+                messages=[{"role": "user", "content": user}],
+            )
+            for block in msg.content:
+                if getattr(block, "type", "") == "tool_use" and block.name == "emit_crop_sms":
+                    raw = block.input or {}
+                    for crop in crops:
+                        val = (raw.get(crop) or "").strip()
+                        if len(val) > 160:
+                            val = val[:157].rstrip() + "..."
+                        if val:
+                            out[crop] = val
+                    break
+        except Exception as exc:
+            log.warning("generate_crop_sms failed for %s (%s): %s",
+                         station_name, lang_name, exc)
+
+        # Backfill any crop the model omitted or left empty.
+        for crop in crops:
+            if not out.get(crop):
+                out[crop] = _fallback_sms(advisory, crop)
+        return out
+
     async def generate_advisory(
         self,
         forecasts: Union[Dict[str, Any], List[Dict[str, Any]]],
@@ -331,11 +415,45 @@ class RAGProvider:
         advisory_local = translated.get("advisory_local", "")
         sms_local = translated.get("sms_local") or None
 
+        # Per-crop SMS chunks — one Haiku call per language. These feed the
+        # per-farmer template expansion in Step 6 so each of the 2,000 farmers
+        # receives an SMS that references their registered crops specifically.
+        crops_list = [c.strip() for c in (station.crop_context or "").split(",") if c.strip()]
+        crop_sms_en: Dict[str, str] = {}
+        crop_sms_local: Dict[str, str] = {}
+        if crops_list and advisory_en:
+            try:
+                crop_sms_en = await self.generate_crop_sms(
+                    advisory_en, crops_list, "en", station.name,
+                )
+            except Exception as exc:
+                log.warning("crop_sms (en) failed for %s: %s", station.station_id, exc)
+            if station.language == "en":
+                crop_sms_local = dict(crop_sms_en)
+            else:
+                try:
+                    crop_sms_local = await self.generate_crop_sms(
+                        advisory_local or advisory_en,
+                        crops_list,
+                        station.language,
+                        station.name,
+                    )
+                except Exception as exc:
+                    log.warning("crop_sms (%s) failed for %s: %s",
+                                 station.language, station.station_id, exc)
+
+        crop_sms: Dict[str, Dict[str, str]] = {}
+        if crop_sms_en:
+            crop_sms["en"] = crop_sms_en
+        if crop_sms_local:
+            crop_sms["local"] = crop_sms_local
+
         return {
             "advisory_en":    advisory_en,
             "advisory_local": advisory_local,
             "sms_en":         sms_en,
             "sms_local":      sms_local,
+            "crop_sms":       crop_sms or None,
             "language":       station.language,
             "provider":       "rag_claude",
             "retrieval_docs": len(context_docs),
@@ -357,3 +475,40 @@ def _parse_advisory_and_sms(text: str) -> Tuple[str, str]:
     if not advisory and not sms:
         return text.strip(), ""
     return advisory, sms
+
+
+_MD_BOLD = re.compile(r"\*\*([^*]+)\*\*")
+_MD_ITAL = re.compile(r"(?<!\*)\*([^*]+)\*")
+_MD_CODE = re.compile(r"`([^`]+)`")
+_MD_HEAD = re.compile(r"^#{1,6}\s+", re.MULTILINE)
+_MD_BULL = re.compile(r"^\s*[-*]\s+", re.MULTILINE)
+_WS      = re.compile(r"\s+")
+_SENT    = re.compile(r"(?<=[.!?])\s+")
+
+
+def _strip_markdown(text: str) -> str:
+    text = _MD_BOLD.sub(r"\1", text)
+    text = _MD_ITAL.sub(r"\1", text)
+    text = _MD_CODE.sub(r"\1", text)
+    text = _MD_HEAD.sub("", text)
+    text = _MD_BULL.sub("", text)
+    return _WS.sub(" ", text).strip()
+
+
+def _fallback_sms(advisory: str, crop: str, max_len: int = 160) -> str:
+    """Deterministic SMS extractor used when Haiku omits or empties a crop field.
+
+    Picks the first sentence mentioning the crop (case-insensitive), or the
+    first sentence overall if no mention, and truncates to ``max_len``.
+    """
+    cleaned = _strip_markdown(advisory or "")
+    if not cleaned:
+        return ""
+    sentences = [s for s in _SENT.split(cleaned) if s]
+    if not sentences:
+        return cleaned[: max_len - 3] + "..." if len(cleaned) > max_len else cleaned
+    crop_lc = crop.lower()
+    picked = next((s for s in sentences if crop_lc in s.lower()), sentences[0])
+    if len(picked) > max_len:
+        picked = picked[: max_len - 3].rstrip() + "..."
+    return picked

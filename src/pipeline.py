@@ -9,7 +9,7 @@ import json
 import logging
 import uuid
 from datetime import datetime, timezone
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional, Tuple
 
 from rich.console import Console
 
@@ -637,34 +637,62 @@ class WeatherPipeline:
         alert_map = {a["station_id"]: a for a in alerts}
         total = 0
 
-        # Build recipients from farmer registry (covers all 20 stations)
-        recipients = self._build_recipients()
+        # Build recipients from the farmer registry — every farmer in every
+        # station, not one per station. At ~2,000 farmers this drives a
+        # 2,000-row delivery_log per run; each row carries a per-farmer
+        # sms_text produced by template-expanding the station alert's
+        # crop_sms chunks.
+        pairs = self._build_recipients()
 
-        for recipient in recipients:
+        # Console panels are human-readable but we only want a sample at
+        # scale — print the first recipient per station to the terminal
+        # (via MultiChannelDelivery) and short-circuit the rest to a plain
+        # dry-run entry. When live_delivery is on, go through the Twilio
+        # provider for everyone so the real SMS rail handles the send.
+        sampled: set = set()
+
+        for recipient, profile in pairs:
             alert = alert_map.get(recipient.station_id)
             if alert is None:
                 continue
+
             # Resolve the SMS text for this farmer. Featured farmers get a
             # personalized SMS (via the Haiku pass in Step 5); everyone else
-            # reuses the station-level SMS from the Sonnet pass.
+            # uses the station alert's per-crop SMS chunks template-expanded
+            # to their registered crops.
             personalized = (alert.get("_personalized_by_farmer") or {}).get(recipient.phone)
             if personalized:
                 sms_text = (
                     personalized.get("sms_local")
                     or personalized.get("sms_en")
+                    or ""
                 )
             else:
-                sms_text = (
-                    alert.get("sms_local")
-                    or alert.get("sms_en")
-                )
-            logs = await self.delivery.deliver(alert, recipient)
+                sms_text = self._sms_for_farmer(alert, profile, recipient.language)
+
+            sample_this = recipient.station_id not in sampled
+            if sample_this:
+                sampled.add(recipient.station_id)
+
+            if self.config.delivery.live_delivery or sample_this:
+                logs = await self.delivery.deliver(alert, recipient)
+            else:
+                logs = [{
+                    "id":         str(uuid.uuid4()),
+                    "alert_id":   alert.get("id"),
+                    "station_id": alert.get("station_id"),
+                    "channel":    "console",
+                    "recipient":  recipient.phone,
+                    "status":     "dry_run",
+                    "message":    sms_text,
+                }]
+
             for entry in logs:
                 # sms_text is the short-form preview the farmer's 2G phone
                 # would actually receive. Keep the old `message` field for
                 # backward compatibility with existing dashboards, but
-                # prefer the sms_text when it exists so deduped log views
-                # don't render the full markdown body.
+                # prefer the sms_text so deduped log views don't render the
+                # full markdown body.
                 if sms_text:
                     entry["sms_text"] = sms_text
                     entry["message"] = sms_text
@@ -674,33 +702,80 @@ class WeatherPipeline:
         console.print(f"  [green]✓[/green] {total} delivery attempts")
         return total
 
-    def _build_recipients(self) -> List[Recipient]:
-        """Pull one recipient per station from the farmer registry."""
+    def _build_recipients(self) -> List[Tuple[Recipient, Optional[Any]]]:
+        """Return every farmer in the registry paired with their FarmerProfile.
+
+        The profile is needed downstream so per-farmer SMS template expansion
+        can reference ``profile.primary_crops``. Falls back to the hard-coded
+        demo list (with ``None`` profile) if the registry is unavailable.
+        """
         try:
             from src.dpi.simulator import get_registry
             registry = get_registry()
             farmers = registry.list_farmers()
-            # Pick one farmer per station
-            seen_stations: set = set()
-            recipients = []
+            pairs: List[Tuple[Recipient, Optional[Any]]] = []
             for f in farmers:
                 sid = f.get("station", "")
-                if sid and sid not in seen_stations:
-                    seen_stations.add(sid)
-                    profile = registry.lookup_by_phone(f["phone"])
-                    lang = profile.aadhaar.language if profile else "en"
-                    recipients.append(Recipient(
+                if not sid:
+                    continue
+                profile = registry.lookup_by_phone(f["phone"])
+                lang = profile.aadhaar.language if profile else "en"
+                pairs.append((
+                    Recipient(
                         name=f["name"],
                         phone=f["phone"],
                         station_id=sid,
                         language=lang,
-                    ))
-            if recipients:
-                return recipients
+                    ),
+                    profile,
+                ))
+            if pairs:
+                return pairs
         except Exception as e:
             log.warning("Could not load farmer registry for delivery: %s", e)
-        # Fallback to hardcoded demo recipients
-        return DEFAULT_RECIPIENTS
+        return [(r, None) for r in DEFAULT_RECIPIENTS]
+
+    def _sms_for_farmer(
+        self,
+        alert: Dict[str, Any],
+        profile: Optional[Any],
+        language: str,
+    ) -> str:
+        """Template-expand the station alert's crop_sms chunks to one farmer.
+
+        ``crop_sms`` in memory has shape ``{"en": {crop: sms}, "local": {crop: sms}}``.
+        We pick the farmer's language bucket, then concatenate the chunks that
+        match the farmer's registered crops (case-insensitive). Missing data at
+        any level falls through to the station-level sms_local/sms_en.
+        """
+        crop_sms = alert.get("crop_sms")
+        crops = list(profile.primary_crops) if profile is not None else []
+
+        def pick(bucket_key: str) -> str:
+            if not isinstance(crop_sms, dict):
+                return ""
+            bucket = crop_sms.get(bucket_key)
+            if not isinstance(bucket, dict) or not bucket:
+                return ""
+            lc_map = {k.lower(): v for k, v in bucket.items() if v}
+            chunks: List[str] = []
+            for crop in crops:
+                val = lc_map.get(crop.lower())
+                if val and val not in chunks:
+                    chunks.append(val)
+            if not chunks:
+                chunks = [next(iter(lc_map.values()), "")]
+            return " ".join(c for c in chunks if c).strip()
+
+        preferred = "local" if language != "en" else "en"
+        text = pick(preferred)
+        if not text and preferred != "en":
+            text = pick("en")
+        if not text:
+            text = alert.get("sms_local") or alert.get("sms_en") or ""
+        if len(text) > 160:
+            text = text[:157].rstrip() + "..."
+        return text
 
     # ------------------------------------------------------------------
     # Full pipeline run
