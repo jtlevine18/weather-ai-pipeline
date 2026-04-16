@@ -875,29 +875,50 @@ async def forecast_historical(request: Request):
         language="en",
     )
 
+    import asyncio
+
+    ngcm_error = None
     try:
         from src.neuralgcm_client import NeuralGCMClient
         client = NeuralGCMClient(forecast_hours=168)
-        forecasts, meta = await client.get_forecasts_batch(
-            [temp_station], target_date=target_date
+
+        # Run all blocking work (model load + ERA5 fetch + inference) in a
+        # thread executor so _ensure_model() doesn't block the event loop.
+        def _run_sync():
+            client._ensure_model()
+            init_ds, init_time = client._fetch_era5_sync(target_date)
+            output_ds, inference_s = client._run_inference_sync(init_ds, init_time)
+            forecasts = client._extract_station_forecasts(output_ds, [temp_station])
+            return forecasts, str(init_time), round(inference_s, 1)
+
+        loop = asyncio.get_event_loop()
+        forecasts, init_time_str, inference_s = await asyncio.wait_for(
+            loop.run_in_executor(None, _run_sync),
+            timeout=180.0,
         )
         station_forecast = forecasts.get(temp_station.station_id, [])
         return {
             "forecast": station_forecast,
             "model": "neuralgcm",
-            "init_time": meta.init_time,
-            "inference_time_s": meta.inference_time_s,
+            "init_time": init_time_str,
+            "inference_time_s": inference_s,
         }
+    except asyncio.TimeoutError:
+        ngcm_error = "NeuralGCM timed out after 180s"
+        log.warning(ngcm_error)
     except Exception as e:
-        # Fall back to Open-Meteo archive if NeuralGCM unavailable
-        from src.weather_clients import OpenMeteoClient
-        client = OpenMeteoClient()
-        try:
-            forecast = client.get_forecast(float(lat), float(lon), days=7)
-            return {
-                "forecast": forecast,
-                "model": "open_meteo_fallback",
-                "error_detail": str(e),
-            }
-        except Exception as e2:
-            return {"error": f"NeuralGCM: {e}, Open-Meteo: {e2}"}, 500
+        ngcm_error = str(e)
+        log.warning("NeuralGCM failed: %s", e)
+
+    # Fall back to Open-Meteo if NeuralGCM unavailable or timed out
+    from src.weather_clients import OpenMeteoClient
+    omc = OpenMeteoClient()
+    try:
+        forecast = omc.get_forecast(float(lat), float(lon), days=7)
+        return {
+            "forecast": forecast,
+            "model": "open_meteo_fallback",
+            "error_detail": ngcm_error,
+        }
+    except Exception as e2:
+        return {"error": f"NeuralGCM: {ngcm_error}, Open-Meteo: {e2}"}, 500
