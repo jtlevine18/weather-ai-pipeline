@@ -837,3 +837,68 @@ async def webhook_history(request: Request):
     with open(LOG_FILE, "r") as f:
         last_lines = deque(f, maxlen=20)
     return {"events": [json.loads(ln.strip()) for ln in last_lines if ln.strip()]}
+
+
+# ---------------------------------------------------------------------------
+# Historical forecast endpoint for LastMileBench counterfactual evaluation
+# ---------------------------------------------------------------------------
+
+@app.post("/api/forecast_historical")
+@limiter.limit("10/minute")
+async def forecast_historical(request: Request):
+    """Run NeuralGCM on a historical date for a specific lat/lon.
+
+    Used by the LastMileBench weather adapter to test the actual model
+    on historical monsoon anomaly years (2002, 2009, 2014, 2019, etc.).
+
+    Body: {"date": "2019-06-18", "lat": 26.24, "lon": 73.02}
+    Returns: {"forecast": [...], "model": "neuralgcm", "init_time": "..."}
+    """
+    from config import StationConfig
+
+    body = await request.json()
+    target_date = body.get("date")
+    lat = body.get("lat")
+    lon = body.get("lon")
+    if not all([target_date, lat, lon]):
+        return {"error": "date, lat, lon required"}, 400
+
+    # Create a temporary station at the requested location
+    temp_station = StationConfig(
+        station_id=f"bench-{lat:.2f}-{lon:.2f}",
+        name=f"Benchmark ({lat}, {lon})",
+        latitude=float(lat),
+        longitude=float(lon),
+        altitude=100,
+        district="benchmark",
+        state="benchmark",
+        crops=["rice"],
+        language="en",
+    )
+
+    try:
+        from src.neuralgcm_client import NeuralGCMClient
+        client = NeuralGCMClient(forecast_hours=168)
+        forecasts, meta = await client.get_forecasts_batch(
+            [temp_station], target_date=target_date
+        )
+        station_forecast = forecasts.get(temp_station.station_id, [])
+        return {
+            "forecast": station_forecast,
+            "model": "neuralgcm",
+            "init_time": meta.init_time,
+            "inference_time_s": meta.inference_time_s,
+        }
+    except Exception as e:
+        # Fall back to Open-Meteo archive if NeuralGCM unavailable
+        from src.weather_clients import OpenMeteoClient
+        client = OpenMeteoClient()
+        try:
+            forecast = client.get_forecast(float(lat), float(lon), days=7)
+            return {
+                "forecast": forecast,
+                "model": "open_meteo_fallback",
+                "error_detail": str(e),
+            }
+        except Exception as e2:
+            return {"error": f"NeuralGCM: {e}, Open-Meteo: {e2}"}, 500
