@@ -869,10 +869,9 @@ async def forecast_historical(request: Request):
         name=f"Benchmark ({lat}, {lon})",
         lat=float(lat),
         lon=float(lon),
-        altitude=100,
-        district="benchmark",
+        altitude_m=100.0,
         state="benchmark",
-        crops=["rice"],
+        crop_context="rice",
         language="en",
     )
 
