@@ -175,16 +175,17 @@ class NeuralGCMClient:
     # ERA5 initial conditions
     # ------------------------------------------------------------------
 
-    def _fetch_era5_sync(self) -> Tuple[Any, Any]:
-        """Fetch latest ERA5 initial conditions from ARCO Zarr (synchronous).
+    def _fetch_era5_sync(self, target_date: str | None = None) -> Tuple[Any, Any]:
+        """Fetch ERA5 initial conditions from ARCO Zarr (synchronous).
 
         Both pressure-level and surface variables (SST, sea ice) live in the
         same store. We select only the variables the model needs via
         model.input_variables + model.forcing_variables.
 
-        ERA5T (preliminary) data lags ~5 days; the store's time axis extends
-        to 2050 but future slots are empty (all NaN). We search backwards
-        from 5 days ago to find the most recent time with real data.
+        If target_date is provided (ISO format, e.g. "2019-06-18"), fetches
+        initial conditions for that historical date instead of the latest
+        available. Used by the /api/forecast_historical endpoint for
+        LastMileBench counterfactual evaluation.
 
         Returns (xr_dataset, init_time_np64).
         """
@@ -207,26 +208,37 @@ class NeuralGCMClient:
         if len(available) < 4:
             raise ValueError(f"ARCO ERA5 missing critical variables. Found: {available}")
 
-        # Find latest time with actual data — the store extends to 2050 but
-        # future time slots are all NaN. ERA5T lags ~5 days.
-        # Try 5 days ago first, then 6, 7, 8 days ago as fallback.
-        now = np.datetime64("now")
-        test_var = available[0]  # check one pressure-level var
+        # Find ERA5 initial conditions at the target time.
+        test_var = available[0]
         init_time = None
-        for lag_days in range(5, 12):
-            candidate = now - np.timedelta64(lag_days * 24, "h")
-            # Snap to nearest available hour in the store
-            candidate = full_ds.time.sel(time=candidate, method="nearest").values
+
+        if target_date:
+            # Historical mode: snap to the requested date (12:00 UTC)
+            target = np.datetime64(f"{target_date}T12:00")
+            candidate = full_ds.time.sel(time=target, method="nearest").values
             probe = full_ds[test_var].sel(time=candidate).isel(level=0, latitude=360, longitude=720)
             val = float(probe.compute().values)
             if not np.isnan(val):
                 init_time = candidate
-                log.info("Found ERA5 data at lag=%d days, time=%s", lag_days, init_time)
-                break
-            log.info("ERA5 at lag=%d days (%s): NaN, trying older...", lag_days, candidate)
+                log.info("Historical ERA5 at %s (requested %s)", init_time, target_date)
+            else:
+                raise ValueError(f"No valid ERA5 data for {target_date}")
+        else:
+            # Live mode: search backwards from ~5 days ago (ERA5T lag)
+            now = np.datetime64("now")
+            for lag_days in range(5, 12):
+                candidate = now - np.timedelta64(lag_days * 24, "h")
+                candidate = full_ds.time.sel(time=candidate, method="nearest").values
+                probe = full_ds[test_var].sel(time=candidate).isel(level=0, latitude=360, longitude=720)
+                val = float(probe.compute().values)
+                if not np.isnan(val):
+                    init_time = candidate
+                    log.info("Found ERA5 data at lag=%d days, time=%s", lag_days, init_time)
+                    break
+                log.info("ERA5 at lag=%d days (%s): NaN, trying older...", lag_days, candidate)
 
         if init_time is None:
-            raise ValueError("No valid ERA5 data found in the last 12 days")
+            raise ValueError("No valid ERA5 data found")
 
         log.info("Fetching %d variables at %s...", len(available), init_time)
         # Keep time dim as a length-1 slice (regridder and model expect it)
@@ -703,10 +715,13 @@ class NeuralGCMClient:
     async def get_forecasts_batch(
         self,
         stations: List,
+        target_date: str | None = None,
     ) -> Tuple[Dict[str, List[Dict[str, Any]]], NeuralGCMResult]:
         """Run NeuralGCM and return forecasts for all stations.
 
         One inference pass covers all 20 stations (global model).
+        If target_date is provided (ISO format), uses ERA5 initial
+        conditions from that historical date for counterfactual evaluation.
 
         Returns:
             forecasts: Dict[station_id, List[Dict]] — same format as OpenMeteoClient
@@ -724,10 +739,10 @@ class NeuralGCMClient:
         # Load model (first call downloads checkpoint from GCS, ~30s)
         self._ensure_model()
 
-        # Fetch ERA5 initial conditions
+        # Fetch ERA5 initial conditions (historical or latest)
         t0 = time_mod.time()
         init_ds, init_time = await loop.run_in_executor(
-            None, self._fetch_era5_sync
+            None, self._fetch_era5_sync, target_date
         )
         meta.data_fetch_time_s = round(time_mod.time() - t0, 1)
         meta.init_time = str(init_time)
