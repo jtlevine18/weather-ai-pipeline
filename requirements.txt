@@ -12,7 +12,7 @@ scipy==1.14.0
 
 # Weather models (Google DeepMind — requires GPU)
 # GraphCast 0.25° (primary, needs A100 80GB); NeuralGCM 2.8° (fallback, fits L4 48GB)
-dm-graphcast @ git+https://github.com/google-deepmind/graphcast.git
+graphcast @ git+https://github.com/google-deepmind/graphcast.git
 dm-haiku>=0.0.12
 neuralgcm==1.2.2
 jax[cuda12]==0.4.27

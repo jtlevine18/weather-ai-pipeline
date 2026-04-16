@@ -20,11 +20,14 @@ LAPSE_RATE_C_PER_M = 0.0065
 class IDWDownscaler:
     """
     Downscales station forecasts to farmer GPS location using IDW + lapse-rate.
-    NASA POWER provides ~0.5° resolution grid (~55km); IDW gets us to ~5km.
+
+    Preferred grid: GraphCast 0.25° regional subgrid (~28km, from forecast model).
+    Fallback grid: NASA POWER ~0.5° (~55km, from reanalysis — separate data source).
     """
 
     def __init__(self, nasa_client):
         self.nasa_client = nasa_client
+        self.nwp_grid = None  # Set by pipeline from GraphCast regional extraction
 
     async def downscale(
         self,
@@ -36,7 +39,7 @@ class IDWDownscaler:
     ) -> Dict[str, Any]:
         """
         Returns a copy of station_forecast adjusted for the farmer's location.
-        Falls back to station forecast if NASA POWER is unavailable.
+        Uses GraphCast 0.25° grid if available, falls back to NASA POWER.
         """
         result = dict(station_forecast)
         result["farmer_lat"] = farmer_lat
@@ -44,9 +47,17 @@ class IDWDownscaler:
         result["downscaled"]  = False
 
         try:
-            grid = await fetch_nasa_grid(self.nasa_client, farmer_lat, farmer_lon)
+            # Prefer GraphCast 0.25° grid (from forecast model, higher resolution)
+            grid = self.nwp_grid
+            grid_source = "graphcast_0.25"
+
+            # Fall back to NASA POWER if no NWP grid
             if not grid:
-                log.warning("No NASA POWER grid for (%.3f, %.3f) — using station forecast",
+                grid = await fetch_nasa_grid(self.nasa_client, farmer_lat, farmer_lon)
+                grid_source = "nasa_power_0.5"
+
+            if not grid:
+                log.warning("No grid for (%.3f, %.3f) — using station forecast",
                             farmer_lat, farmer_lon)
                 return result
 
@@ -63,8 +74,6 @@ class IDWDownscaler:
             alt_delta    = farmer_alt - station_alt
             lapse_delta  = -LAPSE_RATE_C_PER_M * alt_delta
 
-            # Blend IDW result with lapse-rate correction
-            # Use IDW temperature as the base, then add lapse-rate delta
             downscaled_temp = interp_temp + lapse_delta
 
             result["temperature"]   = round(downscaled_temp, 2)
@@ -72,6 +81,7 @@ class IDWDownscaler:
             result["idw_temp"]      = round(interp_temp, 2)
             result["lapse_delta"]   = round(lapse_delta, 3)
             result["alt_delta_m"]   = round(alt_delta, 1)
+            result["grid_source"]   = grid_source
 
             # Re-classify after downscaling (a 2.5°C change can shift the condition)
             result["condition"] = classify_condition(result)

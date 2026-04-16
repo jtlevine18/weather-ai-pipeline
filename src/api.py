@@ -914,7 +914,7 @@ async def forecast_historical(request: Request):
     from src.weather_clients import OpenMeteoClient
     omc = OpenMeteoClient()
     try:
-        forecast = omc.get_forecast(float(lat), float(lon), days=7)
+        forecast = await omc.get_forecast(float(lat), float(lon), hours=168)
         return {
             "forecast": forecast,
             "model": "open_meteo_fallback",

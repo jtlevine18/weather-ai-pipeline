@@ -349,6 +349,10 @@ class WeatherPipeline:
                     f"inference={nwp_meta.inference_time_s}s | "
                     f"data fetch={nwp_meta.data_fetch_time_s}s"
                 )
+                # Pass GraphCast regional grid to downscaler (replaces NASA POWER)
+                if hasattr(self.neuralgcm, "regional_grid") and self.neuralgcm.regional_grid:
+                    self.downscaler.nwp_grid = self.neuralgcm.regional_grid
+                    console.print(f"  [dim]Regional grid: {len(self.neuralgcm.regional_grid)} points for downscaling[/dim]")
             except Exception as e:
                 log.warning("%s failed, falling back to Open-Meteo: %s", self.nwp_name, e)
                 console.print(f"  [yellow]⚠[/yellow] {self.nwp_name} failed: {e}")

@@ -596,6 +596,101 @@ class GraphCastClient:
         return results
 
     # ------------------------------------------------------------------
+    # Regional grid extraction (for downscaling)
+    # ------------------------------------------------------------------
+
+    def _extract_regional_grid(
+        self,
+        predictions,
+        lat_range: Tuple[float, float] = (7.5, 14.5),
+        lon_range: Tuple[float, float] = (74.5, 81.5),
+    ) -> List[Dict[str, Any]]:
+        """Extract a regional subgrid from GraphCast predictions for downscaling.
+
+        Returns a flat list of {lat, lon, temperature, humidity, rainfall, ...}
+        dicts — one per grid point, using day-0 forecast values. Compatible with
+        IDWDownscaler's grid format (same shape as NASA POWER grid).
+        """
+        import numpy as np
+
+        lat_name = "lat" if "lat" in predictions.dims else "latitude"
+        lon_name = "lon" if "lon" in predictions.dims else "longitude"
+        level_name = "level" if "level" in predictions.dims else "pressure_level"
+
+        # Remove batch dim
+        preds = predictions.isel(batch=0) if "batch" in predictions.dims else predictions
+        # Use first forecast timestep (day 0, 6h out)
+        step = preds.isel(time=0)
+
+        has_2m_temp = "2m_temperature" in step
+        has_temp = "temperature" in step
+        precip_var = next(
+            (v for v in ("total_precipitation_6hr", "total_precipitation")
+             if v in step), None)
+
+        # Select regional box
+        lats = step[lat_name].values
+        lons = step[lon_name].values
+        lat_mask = (lats >= lat_range[0]) & (lats <= lat_range[1])
+        lon_mask = (lons >= lon_range[0]) & (lons <= lon_range[1])
+
+        grid = []
+        for lat_idx in np.where(lat_mask)[0]:
+            for lon_idx in np.where(lon_mask)[0]:
+                lat_val = float(lats[lat_idx])
+                lon_val = float(lons[lon_idx])
+
+                point = step.isel(**{lat_name: lat_idx, lon_name: lon_idx})
+
+                # Temperature
+                temp_c = None
+                if has_2m_temp:
+                    try:
+                        temp_c = round(float(point["2m_temperature"]) - 273.15, 1)
+                    except Exception:
+                        pass
+                if temp_c is None and has_temp:
+                    try:
+                        temp_k = float(point["temperature"].sel(
+                            **{level_name: 1000}, method="nearest"))
+                        temp_c = round(temp_k - 273.15, 1)
+                    except Exception:
+                        pass
+
+                # Humidity
+                rh = None
+                if "specific_humidity" in point and temp_c is not None:
+                    try:
+                        q = float(point["specific_humidity"].sel(
+                            **{level_name: 1000}, method="nearest"))
+                        rh = round(_specific_humidity_to_rh(q, temp_c, 1000.0), 1)
+                    except Exception:
+                        pass
+
+                # Rainfall
+                rainfall = 0.0
+                if precip_var:
+                    try:
+                        pval = float(point[precip_var])
+                        if abs(pval) < 1.0:
+                            pval *= 1000.0
+                        rainfall = round(max(0.0, pval), 1)
+                    except Exception:
+                        pass
+
+                grid.append({
+                    "lat": lat_val,
+                    "lon": lon_val,
+                    "temperature": temp_c,
+                    "humidity": rh,
+                    "rainfall": rainfall,
+                })
+
+        log.info("Regional grid extracted: %d points (%.1f-%.1f°N, %.1f-%.1f°E)",
+                 len(grid), lat_range[0], lat_range[1], lon_range[0], lon_range[1])
+        return grid
+
+    # ------------------------------------------------------------------
     # Public API
     # ------------------------------------------------------------------
 
@@ -628,7 +723,6 @@ class GraphCastClient:
             for lag_days in range(5, 12):
                 candidate = now - np.timedelta64(lag_days * 24, "h")
                 target_date = str(np.datetime_as_string(candidate, unit="D"))
-                # We'll let the ERA5 fetch validate if data exists
                 break
 
         meta.init_time = target_date
@@ -652,6 +746,10 @@ class GraphCastClient:
         # Extract station-level forecasts from global grid
         forecasts = self._extract_station_forecasts(predictions, stations)
         meta.stations_extracted = len(forecasts)
+
+        # Extract regional subgrid for downscaling (Kerala/TN bounding box)
+        # This replaces NASA POWER for temperature interpolation to farmer GPS
+        self.regional_grid = self._extract_regional_grid(predictions)
 
         log.info(
             "GraphCast complete: %d stations, init=%s, inference=%.1fs, fetch=%.1fs",
