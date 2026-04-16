@@ -17,7 +17,7 @@ dm-haiku>=0.0.12
 neuralgcm==1.2.2
 jax[cuda12]==0.4.27
 google-cloud-storage
-gcsfs==2024.2.0
+gcsfs==2026.3.0
 xarray==2024.1.0
 zarr==2.16.0
 numcodecs<0.16
