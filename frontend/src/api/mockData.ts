@@ -272,12 +272,12 @@ export const FORECASTS: Forecast[] = (() => {
         : 62 + (isRainy ? 8 : 0) + Math.round(drift * 2)
       // MOS trained model ~0.85 RMSE, so base confidence high; decay with day
       const confidence = 0.78 + (6 - day) * 0.025 - (s.id === 'TN-09' ? 0.08 : 0)
-      // Rotate models: neuralgcm_mos is the primary, hybrid_mos secondary
+      // Rotate models: graphcast_mos is the primary, hybrid_mos secondary
       const modelIdx = (day + hash(s.id)) % 4
       const model =
-        modelIdx === 0 ? 'neuralgcm_mos'
+        modelIdx === 0 ? 'graphcast_mos'
         : modelIdx === 1 ? 'hybrid_mos'
-        : modelIdx === 2 ? 'neuralgcm_only'
+        : modelIdx === 2 ? 'graphcast_only'
         : 'nwp_only'
       const tMax = +(base.max + drift - (coastal && isRainy ? 1.2 : 0)).toFixed(1)
       const tMin = +(base.min - 0.1 * day).toFixed(1)
@@ -850,9 +850,9 @@ export const EVAL_METRICS: Record<string, any> = {
       temperature: { mae: 0.87, rmse: 1.12 },
     },
     by_model: {
-      neuralgcm_mos: { n: 412, mae: 0.74, rmse: 0.98, bias: 0.08 },
+      graphcast_mos: { n: 412, mae: 0.74, rmse: 0.98, bias: 0.08 },
       hybrid_mos: { n: 341, mae: 0.91, rmse: 1.19, bias: -0.04 },
-      neuralgcm_only: { n: 217, mae: 1.08, rmse: 1.37, bias: 0.17 },
+      graphcast_only: { n: 217, mae: 1.08, rmse: 1.37, bias: 0.17 },
       nwp_only: { n: 178, mae: 1.24, rmse: 1.58, bias: 0.22 },
     },
   },

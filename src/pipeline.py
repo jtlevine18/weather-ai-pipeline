@@ -31,6 +31,7 @@ from src.translation     import get_provider, generate_advisory
 from src.delivery        import MultiChannelDelivery, DEFAULT_RECIPIENTS, DeliveryChannel, Recipient
 from src.models          import RawReading, CleanReading, Forecast
 from src.neuralgcm_client import NeuralGCMClient, is_neuralgcm_available
+from src.graphcast_client import GraphCastClient, is_graphcast_available, get_graphcast_device
 
 log = logging.getLogger(__name__)
 console = Console()
@@ -47,17 +48,26 @@ class WeatherPipeline:
         self.tomorrow_io   = TomorrowIOClient(config.tomorrow_io_key)
         self.open_meteo    = OpenMeteoClient(timezone=config.timezone)
         self.nasa_power    = NASAPowerClient()
-        self.neuralgcm     = None
+        # NWP model priority: GraphCast 0.25° (A100) → NeuralGCM 2.8° (L4) → Open-Meteo
+        self.neuralgcm = None
+        self.nwp_name = "Open-Meteo"
         if not config.neuralgcm.enabled:
-            log.info("NeuralGCM disabled by config (use default or remove --no-neuralgcm)")
-        elif not is_neuralgcm_available():
-            log.warning("NeuralGCM enabled but packages missing — falling back to Open-Meteo")
-        else:
+            log.info("NWP models disabled by config — using Open-Meteo only")
+        elif is_graphcast_available():
+            self.neuralgcm = GraphCastClient(
+                forecast_hours=config.neuralgcm.forecast_hours,
+            )
+            self.nwp_name = "GraphCast 0.25°"
+            log.info("GraphCast ready (0.25° on %s)", get_graphcast_device())
+        elif is_neuralgcm_available():
             self.neuralgcm = NeuralGCMClient(
                 model_name=config.neuralgcm.model_name,
                 forecast_hours=config.neuralgcm.forecast_hours,
             )
+            self.nwp_name = f"NeuralGCM {config.neuralgcm.model_name}"
             log.info("NeuralGCM ready: %s", config.neuralgcm.model_name)
+        else:
+            log.warning("No NWP model available (GraphCast/NeuralGCM) — using Open-Meteo only")
 
         # Processing components
         self.rule_healer   = RuleBasedFallback()
@@ -323,30 +333,27 @@ class WeatherPipeline:
     # ------------------------------------------------------------------
     async def step_forecast(self) -> List[Dict[str, Any]]:
         self._refresh_conn()
-        nwp_label = "NeuralGCM + Open-Meteo fallback" if self.neuralgcm else "Open-Meteo"
+        nwp_label = f"{self.nwp_name} + Open-Meteo fallback" if self.neuralgcm else "Open-Meteo"
         console.print(f"[bold blue]Step 3:[/bold blue] Running MOS forecasts via {nwp_label}...")
 
-        # --- Try NeuralGCM batch (one inference → all 20 stations) ---
-        neuralgcm_nwp: Dict[str, List[Dict[str, Any]]] = {}
-        neuralgcm_meta = None
+        # --- Try primary NWP batch (one inference → all 20 stations) ---
+        nwp_batch: Dict[str, List[Dict[str, Any]]] = {}
+        nwp_meta = None
         if self.neuralgcm:
             try:
-                from src.neuralgcm_client import get_neuralgcm_device
-                device = get_neuralgcm_device()
-                console.print(f"  [dim]NeuralGCM: {self.neuralgcm.model_name} on {device}[/dim]")
-
-                neuralgcm_nwp, neuralgcm_meta = await self.neuralgcm.get_forecasts_batch(STATIONS)
+                console.print(f"  [dim]{self.nwp_name}: {self.neuralgcm.model_name}[/dim]")
+                nwp_batch, nwp_meta = await self.neuralgcm.get_forecasts_batch(STATIONS)
                 console.print(
-                    f"  [green]✓[/green] NeuralGCM: {neuralgcm_meta.stations_extracted} stations | "
-                    f"init={neuralgcm_meta.init_time[:19]} | "
-                    f"inference={neuralgcm_meta.inference_time_s}s | "
-                    f"data fetch={neuralgcm_meta.data_fetch_time_s}s"
+                    f"  [green]✓[/green] {self.nwp_name}: {nwp_meta.stations_extracted} stations | "
+                    f"init={nwp_meta.init_time[:19]} | "
+                    f"inference={nwp_meta.inference_time_s}s | "
+                    f"data fetch={nwp_meta.data_fetch_time_s}s"
                 )
             except Exception as e:
-                log.warning("NeuralGCM failed, falling back to Open-Meteo: %s", e)
-                console.print(f"  [yellow]⚠[/yellow] NeuralGCM failed: {e}")
+                log.warning("%s failed, falling back to Open-Meteo: %s", self.nwp_name, e)
+                console.print(f"  [yellow]⚠[/yellow] {self.nwp_name} failed: {e}")
                 console.print("  [dim]Falling back to Open-Meteo for all stations[/dim]")
-                neuralgcm_nwp = {}
+                nwp_batch = {}
 
         # --- Build per-station forecast tasks ---
         forecasts = []
@@ -354,8 +361,8 @@ class WeatherPipeline:
         for station in STATIONS:
             obs = get_latest_clean_for_station(self.conn, station.station_id)
             history = get_clean_history_for_station(self.conn, station.station_id)
-            # Use NeuralGCM NWP if available for this station, else Open-Meteo
-            precomputed = neuralgcm_nwp.get(station.station_id)
+            # Use primary NWP if available for this station, else Open-Meteo
+            precomputed = nwp_batch.get(station.station_id)
             all_tasks.append((station, run_forecast_step(
                 station, obs, self.open_meteo,
                 self.forecast_model, self.persistence,
@@ -392,12 +399,12 @@ class WeatherPipeline:
                 mu = fc.get("model_used", "")
                 if "mos" in mu:
                     mos_count += 1
-                if fc.get("nwp_source") == "neuralgcm":
+                if fc.get("nwp_source") in ("neuralgcm", "graphcast"):
                     ngcm_count += 1
 
         n_stations = len(set(f["station_id"] for f in forecasts))
         n_days = max((f.get("forecast_day", 0) for f in forecasts), default=0) + 1 if forecasts else 0
-        nwp_summary = f"{ngcm_count} NeuralGCM + {len(forecasts)-ngcm_count} Open-Meteo" if ngcm_count else f"{len(forecasts)} Open-Meteo"
+        nwp_summary = f"{ngcm_count} {self.nwp_name} + {len(forecasts)-ngcm_count} Open-Meteo" if ngcm_count else f"{len(forecasts)} Open-Meteo"
         console.print(
             f"  [green]✓[/green] {len(forecasts)} daily forecasts ({n_stations} stations × {n_days} days) | {mos_count} MOS | NWP: {nwp_summary}"
         )

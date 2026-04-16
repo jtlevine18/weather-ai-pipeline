@@ -10,9 +10,13 @@ scikit-learn==1.5.0
 numpy==2.0.0
 scipy==1.14.0
 
-# NeuralGCM (Google DeepMind neural weather model — requires GPU)
+# Weather models (Google DeepMind — requires GPU)
+# GraphCast 0.25° (primary, needs A100 80GB); NeuralGCM 2.8° (fallback, fits L4 48GB)
+dm-graphcast @ git+https://github.com/google-deepmind/graphcast.git
+dm-haiku>=0.0.12
 neuralgcm==1.2.2
 jax[cuda12]==0.4.27
+google-cloud-storage
 gcsfs==2024.2.0
 xarray==2024.1.0
 zarr==2.16.0

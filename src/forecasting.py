@@ -445,8 +445,10 @@ async def run_forecast_step(
 
     # Determine NWP source for model_used labeling
     nwp_source = "open_meteo"
-    if nwp_forecasts and nwp_forecasts[0].get("source") == "neuralgcm":
-        nwp_source = "neuralgcm"
+    if nwp_forecasts:
+        src = nwp_forecasts[0].get("source", "")
+        if src in ("neuralgcm", "graphcast"):
+            nwp_source = src
 
     # Persistence fallback — only day 0
     if not nwp_forecasts:
@@ -490,11 +492,11 @@ async def run_forecast_step(
         )
 
         # Tag NWP source
-        if nwp_source == "neuralgcm":
+        if nwp_source in ("neuralgcm", "graphcast"):
             if forecast.get("model_used") == "hybrid_mos":
-                forecast["model_used"] = "neuralgcm_mos"
+                forecast["model_used"] = f"{nwp_source}_mos"
             elif forecast.get("model_used") == "nwp_only":
-                forecast["model_used"] = "neuralgcm_only"
+                forecast["model_used"] = f"{nwp_source}_only"
         forecast["nwp_source"] = nwp_source
 
         # Confidence decay: MOS trained on day-0 residuals, less accurate further out

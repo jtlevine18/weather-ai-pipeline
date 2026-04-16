@@ -26,6 +26,8 @@ const CONDITION_COLOR: Record<string, string> = {
 }
 
 const MODEL_LABEL: Record<string, string> = {
+  graphcast_mos: 'GraphCast + local correction',
+  graphcast_only: 'GraphCast (raw)',
   neuralgcm_mos: 'Neural + local correction',
   neuralgcm_only: 'Neural (raw)',
   hybrid_mos: 'Standard + local correction',
@@ -45,6 +47,8 @@ const CONDITION_LABEL: Record<string, string> = {
 }
 
 const MODEL_COLOR: Record<string, string> = {
+  graphcast_mos: '#2d5b7d',
+  graphcast_only: '#2d5b7d',
   neuralgcm_mos: '#2d5b7d',
   neuralgcm_only: '#2d5b7d',
   hybrid_mos: '#606373',

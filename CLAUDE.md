@@ -48,7 +48,7 @@ Each API has exactly ONE job — no source is shared between stages:
 ```
 IMD Scraper + imdlib → Step 1 Ingest     (real station obs, fallback: synthetic)
 Tomorrow.io          → Step 2 Heal        (cross-validation reference)
-NeuralGCM / Open-Meteo → Step 3 Forecast (NeuralGCM 1.4° on GPU, fallback: Open-Meteo API)
+GraphCast / NeuralGCM / Open-Meteo → Step 3 Forecast (GraphCast 0.25° on A100, fallback: NeuralGCM 2.8° or Open-Meteo API)
 NASA POWER           → Step 4 Downscale   (0.5° spatial grid → farmer GPS)
 Claude API           → Step 5 Translate   (RAG advisory + Tamil/Malayalam)
 ```
@@ -59,14 +59,14 @@ Claude API           → Step 5 Translate   (RAG advisory + Tamil/Malayalam)
 |---|---|---|
 | 1 Ingest | `raw_telemetry` | Real IMD station data (scraper → imdlib → synthetic fallback) |
 | 2 Heal | `clean_telemetry` + `healing_log` | Claude Sonnet agentic healer (5 tools: station metadata, historical normals, Tomorrow.io reference, neighboring stations, seasonal context) with rule-based fallback |
-| 3 Forecast | `forecasts` | NeuralGCM 1.4° on GPU (ERA5 init, single batch for all configured stations) → XGBoost MOS correction; fallback: Open-Meteo GFS/ECMWF API |
+| 3 Forecast | `forecasts` | GraphCast 0.25° on A100 (ERA5 init, single batch for all stations) → XGBoost MOS correction; fallback: NeuralGCM 2.8° or Open-Meteo API |
 | 4 Downscale | `forecasts` (updated) | NASA POWER IDW interpolation + lapse-rate elevation correction |
 | 5 Translate | `agricultural_alerts` | Hybrid RAG (FAISS+BM25) + Claude advisory + translation |
 | 6 Deliver | `delivery_log` | Console SMS (Twilio dry-run) |
 
 ### Parallelization
 - Step 2 Heal: Tomorrow.io fetched in batches of 10 with 0.2s sleep
-- Step 3 Forecast: NeuralGCM runs once globally (all configured stations from one inference); Open-Meteo fallback fetched in a single batch
+- Step 3 Forecast: GraphCast (or NeuralGCM fallback) runs once globally (all configured stations from one inference); Open-Meteo fallback fetched in a single batch
 - Step 4 Downscale: all configured stations downscaled in parallel via `asyncio.gather()`
 - Step 5 Translate: all advisories generated in parallel via `asyncio.gather()`
 
@@ -76,8 +76,9 @@ Quality score measures **accuracy of compared fields only** (how well IMD temp/r
 ### Degradation chain (independent, never cascades)
 - Claude healing agent unavailable → rule-based fallback (identical output, no reasoning logged)
 - IMD scraper down → imdlib gridded (T-1 day) → synthetic fallback
-- NeuralGCM unavailable (no GPU/package) → Open-Meteo API fallback
-- NWP unavailable (both NeuralGCM + Open-Meteo) → persistence model (last obs + diurnal adjustment)
+- GraphCast unavailable (no A100/package) → NeuralGCM 2.8° fallback (fits L4 48GB)
+- NeuralGCM also unavailable → Open-Meteo API fallback
+- NWP unavailable (all three) → persistence model (last obs + diurnal adjustment)
 - XGBoost not trained → raw NWP passthrough
 - Claude down → rule-based template advisories
 - Tomorrow.io down → cross-validate against NASA POWER; if both down, assign quality by data completeness
@@ -122,7 +123,8 @@ weather AI 2/
 │   ├── healing.py             # HealingAgent (Claude Sonnet tool-use agentic healer, 5 tools, 24-entry seasonal context) + RuleBasedFallback (quality score = accuracy of compared fields only, no fill penalty)
 │   ├── ingestion.py           # IMD scraper + imdlib gridded + synthetic fallback
 │   ├── weather_clients.py     # Tomorrow.io, Open-Meteo, NASA POWER, IMD JSON API + imdlib clients
-│   ├── neuralgcm_client.py   # NeuralGCM 1.4° forecaster (JAX/GPU, ERA5 init, station extraction)
+│   ├── graphcast_client.py    # GraphCast 0.25° forecaster (JAX/A100, ERA5 init, station extraction)
+│   ├── neuralgcm_client.py   # NeuralGCM 2.8° forecaster (JAX/GPU, ERA5 init, fallback)
 │   ├── forecasting.py         # HybridNWPModel: NWP + XGBoost MOS + persistence fallback
 │   ├── downscaling/           # IDW spatial interpolation + lapse-rate
 │   │   ├── __init__.py        # IDWDownscaler
@@ -251,19 +253,20 @@ Crop contexts: verified per-district from state agriculture department data.
 
 **Architecture:** MOS (Model Output Statistics) — same approach used by national weather services.
 
-- **NWP primary: NeuralGCM 1.4°** (Google DeepMind's neural GCM, runs on GPU via JAX)
+- **NWP primary: GraphCast 0.25°** (Google DeepMind's graph neural network, Science 2023)
+  - 0.25° resolution (~28km) — resolves Kerala precipitation (NeuralGCM at 2.8° could not)
   - Initial conditions: ERA5 reanalysis from ARCO Zarr (free, ~5-day lag via ERA5T)
   - Single inference pass produces global forecast → extract all configured stations
-  - Matches ECMWF-HRES accuracy for 1-5 day forecasts
-  - Requires GPU (L4/T4 on HF Spaces), enabled via `--neuralgcm` flag
-- **NWP fallback: Open-Meteo** (GFS/ECMWF via free API, no GPU needed)
+  - Requires A100 80GB GPU on HF Spaces
+- **NWP fallback 1: NeuralGCM 2.8°** (Google DeepMind's neural GCM, fits L4 48GB)
+- **NWP fallback 2: Open-Meteo** (GFS/ECMWF via free API, no GPU needed)
 - **XGBoost MOS correction:** trained on residual between NWP and observations
 - **12-feature vector:** `nwp_temp`, `nwp_rainfall`, `humidity`, `wind_speed`, `pressure`, `station_altitude`, `soil_moisture`, `rolling_6h_error`, `recent_temp_trend`, `hour_sin`, `hour_cos`, `doy_sin`
 - **Soil moisture proxy:** NASA POWER `PRECTOTCORR` (mm/day) / 20, capped at 1.0
 - **Rolling error tracking:** per-station 6h error window, updated after each prediction
 - **Fallback:** persistence model (last obs + diurnal adjustment)
 - **Formula:** `Final = NWP_Forecast + XGBoost_Correction(features)`
-- **model_used values:** `neuralgcm_mos`, `neuralgcm_only`, `hybrid_mos`, `nwp_only`, `persistence`
+- **model_used values:** `graphcast_mos`, `graphcast_only`, `neuralgcm_mos`, `neuralgcm_only`, `hybrid_mos`, `nwp_only`, `persistence`
 - **DVC pipeline:** `scripts/export_training_data.py` → `scripts/train_mos.py` → `models/hybrid_mos.json`
 
 ---
@@ -388,7 +391,7 @@ NASA POWER 5x5 grid (~0.5 deg radius around station) → IDW interpolation to fa
 | `ANTHROPIC_API_KEY` | Claude healing agent + advisory generation + translation | Pay-per-use (~$0.27/run: ~$0.15 healing + ~$0.12 advisory) |
 | `TOMORROW_IO_API_KEY` | Anomaly healing cross-validation | 500 calls/day free |
 
-NASA POWER, Open-Meteo, NeuralGCM (model checkpoints on GCS), ERA5 ARCO Zarr, IMD city weather (scraping), and imdlib are fully free, no key needed.
+NASA POWER, Open-Meteo, GraphCast/NeuralGCM (model checkpoints on GCS), ERA5 ARCO Zarr, IMD city weather (scraping), and imdlib are fully free, no key needed.
 
 | `DATABASE_URL` | PostgreSQL (Neon) connection | Required (no default) |
 
@@ -418,7 +421,7 @@ Weather 2 now follows the same pattern as Market Intelligence and Climate Risk E
 - The Space's `Dockerfile` runs `uvicorn src.api:app` on port 7860. It serves a pipeline tracker page at `/` with a manual **Run Pipeline** button, a `/health` endpoint, and `/api/pipeline/trigger` + `/api/pipeline/status` that the weekly GitHub Action polls. The pipeline does NOT auto-run on Space wake-up — it's triggered explicitly.
 - The Space includes the full main-repo tree (`COPY . .` in the Dockerfile). `frontend/`, `tests/`, `streamlit_app/`, etc. are copied in but unused at runtime — only `src/`, `config.py`, `stations.json`, and `requirements.txt` are read by `src.api:app`. Total tracked size is ~2 MB, so image bloat is negligible.
 - Scheduled weekly via GitHub Action; sleeps between runs to save compute
-- Optional L4 GPU for NeuralGCM (falls back to Open-Meteo without GPU)
+- A100 80GB GPU for GraphCast (falls back to NeuralGCM on L4, then Open-Meteo without GPU)
 - **Env vars (Space secrets — set these before pushing):** `DATABASE_URL`, `ANTHROPIC_API_KEY`, `TOMORROW_IO_API_KEY`, `JWT_SECRET_KEY` (required if `ENV=production`), `WEBHOOK_SECRET` (only if webhook receiver is wired in), optional `ALLOWED_ORIGINS`
 - **Hardware:** set explicitly in *Settings → Variables and secrets → Hardware* — it does not persist across Space rebuilds automatically
 - **Retired:** `jtlevine/ai-weather-pipeline` (without `-runner`) was the original pipeline-runner Space and has been deleted. Do not reference it in code, docs, or git remotes. The stale `origin` and `hf-api` remotes that used to point at retired Spaces have been removed.
@@ -450,14 +453,17 @@ The main repo now has two remotes: `github` (Vercel source of truth) and `hf-run
 ## Tech Stack
 
 - **Python 3.11+**, **PostgreSQL** (Neon hosted) + **psycopg2-binary**
-- **neuralgcm** + **jax[cuda12]** (Google DeepMind neural weather model on GPU)
+- **dm-graphcast** + **dm-haiku** (Google DeepMind GraphCast 0.25° on A100)
+- **neuralgcm** (Google DeepMind NeuralGCM 2.8° fallback on L4)
+- **jax[cuda12]** (GPU backend for both weather models)
 - **anthropic** (Claude API — advisory generation + translation)
 - **xgboost** + **scikit-learn** (MOS correction model)
 - **faiss-cpu** + **sentence-transformers** + **rank-bm25** (RAG retrieval)
 - **langchain-huggingface** + **datasets** (index building)
 - **pydantic** v2 (data contracts at stage boundaries)
 - **httpx** (async HTTP for weather APIs)
-- **gcsfs** + **xarray** + **zarr** (ERA5 data access for NeuralGCM)
+- **gcsfs** + **xarray** + **zarr** (ERA5 data access for GraphCast/NeuralGCM)
+- **google-cloud-storage** (GraphCast checkpoint + normalization stats download)
 - **beautifulsoup4** + **imdlib** (IMD data scraping + gridded backup)
 - **streamlit** + **pydeck** (dashboard)
 - **dagster** (orchestration — alternative to linear pipeline)
@@ -491,7 +497,7 @@ This pipeline is designed to be forked and adapted. See [REBUILD.md](REBUILD.md)
 ### Globally portable files (no changes needed)
 
 - `src/pipeline.py` — Generic orchestrator
-- `src/forecasting.py` — NeuralGCM + XGBoost MOS (timezone now configurable)
+- `src/forecasting.py` — GraphCast/NeuralGCM + XGBoost MOS (timezone now configurable)
 - `src/weather_clients.py` — OpenMeteo (global), NASA POWER (global), Tomorrow.io (global)
 - `src/downscaling/` — IDW + lapse-rate math (universal)
 - `src/translation/rag_provider.py` — FAISS+BM25 hybrid RAG (language-agnostic)
