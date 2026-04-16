@@ -867,8 +867,8 @@ async def forecast_historical(request: Request):
     temp_station = StationConfig(
         station_id=f"bench-{lat:.2f}-{lon:.2f}",
         name=f"Benchmark ({lat}, {lon})",
-        latitude=float(lat),
-        longitude=float(lon),
+        lat=float(lat),
+        lon=float(lon),
         altitude=100,
         district="benchmark",
         state="benchmark",
