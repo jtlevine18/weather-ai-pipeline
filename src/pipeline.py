@@ -48,12 +48,12 @@ class WeatherPipeline:
         self.open_meteo    = OpenMeteoClient(timezone=config.timezone)
         self.nasa_power    = NASAPowerClient()
         # NWP model: GraphCast 0.25° on A100 → Open-Meteo fallback
-        self.neuralgcm = None  # backward-compat attribute name
+        self.nwp_client = None
         self.nwp_name = "Open-Meteo"
         if not config.neuralgcm.enabled:
             log.info("NWP model disabled by config — using Open-Meteo only")
         elif is_graphcast_available():
-            self.neuralgcm = GraphCastClient(
+            self.nwp_client = GraphCastClient(
                 forecast_hours=config.neuralgcm.forecast_hours,
             )
             self.nwp_name = "GraphCast 0.25°"
@@ -325,16 +325,16 @@ class WeatherPipeline:
     # ------------------------------------------------------------------
     async def step_forecast(self) -> List[Dict[str, Any]]:
         self._refresh_conn()
-        nwp_label = f"{self.nwp_name} + Open-Meteo fallback" if self.neuralgcm else "Open-Meteo"
+        nwp_label = f"{self.nwp_name} + Open-Meteo fallback" if self.nwp_client else "Open-Meteo"
         console.print(f"[bold blue]Step 3:[/bold blue] Running MOS forecasts via {nwp_label}...")
 
         # --- Try primary NWP batch (one inference → all 20 stations) ---
         nwp_batch: Dict[str, List[Dict[str, Any]]] = {}
         nwp_meta = None
-        if self.neuralgcm:
+        if self.nwp_client:
             try:
-                console.print(f"  [dim]{self.nwp_name}: {self.neuralgcm.model_name}[/dim]")
-                nwp_batch, nwp_meta = await self.neuralgcm.get_forecasts_batch(STATIONS)
+                console.print(f"  [dim]{self.nwp_name}: {self.nwp_client.model_name}[/dim]")
+                nwp_batch, nwp_meta = await self.nwp_client.get_forecasts_batch(STATIONS)
                 console.print(
                     f"  [green]✓[/green] {self.nwp_name}: {nwp_meta.stations_extracted} stations | "
                     f"init={nwp_meta.init_time[:19]} | "
@@ -342,9 +342,9 @@ class WeatherPipeline:
                     f"data fetch={nwp_meta.data_fetch_time_s}s"
                 )
                 # Pass GraphCast regional grid to downscaler (replaces NASA POWER)
-                if hasattr(self.neuralgcm, "regional_grid") and self.neuralgcm.regional_grid:
-                    self.downscaler.nwp_grid = self.neuralgcm.regional_grid
-                    console.print(f"  [dim]Regional grid: {len(self.neuralgcm.regional_grid)} points for downscaling[/dim]")
+                if nwp_meta and nwp_meta.regional_grid:
+                    self.downscaler.nwp_grid = nwp_meta.regional_grid
+                    console.print(f"  [dim]Regional grid: {len(nwp_meta.regional_grid)} points for downscaling[/dim]")
             except Exception as e:
                 log.warning("%s failed, falling back to Open-Meteo: %s", self.nwp_name, e)
                 console.print(f"  [yellow]⚠[/yellow] {self.nwp_name} failed: {e}")

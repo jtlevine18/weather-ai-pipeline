@@ -26,6 +26,12 @@ import time as time_mod
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional, Tuple
 
+# Set XLA memory flags before any JAX import — on-demand allocation
+# instead of 90% upfront reservation. Must happen at module level
+# because is_graphcast_available() triggers JAX init before _ensure_model().
+os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
+os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.95")
+
 log = logging.getLogger(__name__)
 
 
@@ -43,6 +49,7 @@ class GraphCastResult:
     data_fetch_time_s: float = 0.0
     stations_extracted: int = 0
     grid_shape: str = ""
+    regional_grid: list = None  # Kerala/TN subgrid for downscaling
 
 
 # ---------------------------------------------------------------------------
@@ -162,9 +169,6 @@ class GraphCastClient:
         if self._params is not None:
             return
 
-        os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
-        os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.95")
-
         import dataclasses as _dc
         import functools
         import haiku as hk
@@ -184,7 +188,6 @@ class GraphCastClient:
         gcs_client = storage.Client.create_anonymous_client()
         gcs_bucket = gcs_client.get_bucket(GCS_BUCKET)
 
-        # Load checkpoint
         ckpt_blob = f"{GCS_PREFIX}params/{MODEL_NAME}"
         log.info("Downloading checkpoint: %s", ckpt_blob)
         with gcs_bucket.blob(ckpt_blob).open("rb") as f:
@@ -195,7 +198,6 @@ class GraphCastClient:
         self._task_config = ckpt.task_config
         log.info("Checkpoint loaded: %s", self._model_config)
 
-        # Load normalization statistics
         with gcs_bucket.blob(f"{GCS_PREFIX}stats/diffs_stddev_by_level.nc").open("rb") as f:
             import xarray
             self._diffs_stddev = xarray.load_dataset(f).compute()
@@ -726,10 +728,8 @@ class GraphCastClient:
         # Determine the forecast date
         if target_date is None:
             now = np.datetime64("now")
-            for lag_days in range(5, 12):
-                candidate = now - np.timedelta64(lag_days * 24, "h")
-                target_date = str(np.datetime_as_string(candidate, unit="D"))
-                break
+            candidate = now - np.timedelta64(5 * 24, "h")  # ERA5 ~5-day lag
+            target_date = str(np.datetime_as_string(candidate, unit="D"))
 
         meta.init_time = target_date
 
@@ -754,8 +754,7 @@ class GraphCastClient:
         meta.stations_extracted = len(forecasts)
 
         # Extract regional subgrid for downscaling (Kerala/TN bounding box)
-        # This replaces NASA POWER for temperature interpolation to farmer GPS
-        self.regional_grid = self._extract_regional_grid(predictions)
+        meta.regional_grid = self._extract_regional_grid(predictions)
 
         log.info(
             "GraphCast complete: %d stations, init=%s, inference=%.1fs, fetch=%.1fs",
