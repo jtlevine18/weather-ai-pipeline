@@ -30,7 +30,6 @@ from src.downscaling     import IDWDownscaler
 from src.translation     import get_provider, generate_advisory
 from src.delivery        import MultiChannelDelivery, DEFAULT_RECIPIENTS, DeliveryChannel, Recipient
 from src.models          import RawReading, CleanReading, Forecast
-from src.neuralgcm_client import NeuralGCMClient, is_neuralgcm_available
 from src.graphcast_client import GraphCastClient, is_graphcast_available, get_graphcast_device
 
 log = logging.getLogger(__name__)
@@ -48,26 +47,19 @@ class WeatherPipeline:
         self.tomorrow_io   = TomorrowIOClient(config.tomorrow_io_key)
         self.open_meteo    = OpenMeteoClient(timezone=config.timezone)
         self.nasa_power    = NASAPowerClient()
-        # NWP model priority: GraphCast 0.25° (A100) → NeuralGCM 2.8° (L4) → Open-Meteo
-        self.neuralgcm = None
+        # NWP model: GraphCast 0.25° on A100 → Open-Meteo fallback
+        self.neuralgcm = None  # backward-compat attribute name
         self.nwp_name = "Open-Meteo"
         if not config.neuralgcm.enabled:
-            log.info("NWP models disabled by config — using Open-Meteo only")
+            log.info("NWP model disabled by config — using Open-Meteo only")
         elif is_graphcast_available():
             self.neuralgcm = GraphCastClient(
                 forecast_hours=config.neuralgcm.forecast_hours,
             )
             self.nwp_name = "GraphCast 0.25°"
             log.info("GraphCast ready (0.25° on %s)", get_graphcast_device())
-        elif is_neuralgcm_available():
-            self.neuralgcm = NeuralGCMClient(
-                model_name=config.neuralgcm.model_name,
-                forecast_hours=config.neuralgcm.forecast_hours,
-            )
-            self.nwp_name = f"NeuralGCM {config.neuralgcm.model_name}"
-            log.info("NeuralGCM ready: %s", config.neuralgcm.model_name)
         else:
-            log.warning("No NWP model available (GraphCast/NeuralGCM) — using Open-Meteo only")
+            log.warning("GraphCast unavailable — using Open-Meteo only")
 
         # Processing components
         self.rule_healer   = RuleBasedFallback()

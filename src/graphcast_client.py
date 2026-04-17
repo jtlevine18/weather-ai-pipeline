@@ -449,6 +449,7 @@ class GraphCastClient:
         self,
         predictions,
         stations: List,
+        init_time: str = "",
     ) -> Dict[str, List[Dict[str, Any]]]:
         """Extract surface weather at each station from GraphCast's global output.
 
@@ -479,13 +480,18 @@ class GraphCastClient:
         if "batch" in predictions.dims:
             predictions = predictions.isel(batch=0)
 
-        # Get actual datetimes
+        # Get actual datetimes — predictions may only have lead-time deltas,
+        # not calendar timestamps. Reconstruct from init_time + deltas.
+        actual_times = None
         if "datetime" in predictions.coords:
             actual_times = predictions.datetime.values
             if actual_times.ndim > 1:
                 actual_times = actual_times[0]
-        else:
-            actual_times = None
+        if actual_times is None and init_time:
+            # Reconstruct absolute timestamps from init_time + lead-time deltas
+            t_init = np.datetime64(f"{init_time}T06:00")  # t0 = 06:00 UTC
+            time_deltas = predictions.time.values
+            actual_times = np.array([t_init + td for td in time_deltas])
 
         for station in stations:
             try:
@@ -744,7 +750,7 @@ class GraphCastClient:
             pass
 
         # Extract station-level forecasts from global grid
-        forecasts = self._extract_station_forecasts(predictions, stations)
+        forecasts = self._extract_station_forecasts(predictions, stations, init_time=target_date)
         meta.stations_extracted = len(forecasts)
 
         # Extract regional subgrid for downscaling (Kerala/TN bounding box)
