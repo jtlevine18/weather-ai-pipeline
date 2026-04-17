@@ -51,5 +51,5 @@ passlib[bcrypt]==1.7.0
 # Production
 slowapi==0.1.9
 prometheus-fastapi-instrumentator==7.0.0
-python-json-logger==2.0.7
+python-json-logger==4.1.0
 tenacity==8.2.3
