@@ -58,9 +58,9 @@ const MODEL_COLOR: Record<string, string> = {
 
 const DEGRADATION_TIERS = [
   { tier: 'Tier 1', name: 'AI weather model + local correction', sub: 'primary', color: '#2d5b7d',
-    desc: 'NeuralGCM \u2014 Google DeepMind\u2019s open neural weather model \u2014 produces a global forecast, then a statistical model trained on twelve years of station history applies a per-station local correction.' },
+    desc: 'GraphCast \u2014 Google DeepMind\u2019s open neural weather model at 0.25\u00b0 resolution \u2014 produces a global forecast, then a statistical model trained on twelve years of station history applies a per-station local correction.' },
   { tier: 'Tier 2', name: 'Standard weather model + local correction', sub: 'fallback', color: '#606373',
-    desc: 'Open-Meteo\u2019s traditional weather models when NeuralGCM is unavailable, with the same local correction applied.' },
+    desc: 'Open-Meteo\u2019s traditional weather models when the neural model is unavailable, with the same local correction applied.' },
   { tier: 'Tier 3', name: 'Last known reading', sub: 'emergency', color: '#c71f48',
     desc: 'The most recent observation with a time-of-day adjustment. No corrections applied.' },
 ]
@@ -120,9 +120,12 @@ export default function Forecasts() {
   const mosStatus = useMosStatus()
   const mosModelTrained = mosStatus.data?.trained ?? false
   const nwpSource = allForecasts.length > 0
-    ? (allForecasts.some(f => getModel(f).includes('neuralgcm')) ? 'NeuralGCM' : 'Open-Meteo')
+    ? (allForecasts.some(f => getModel(f).includes('graphcast'))
+        ? 'GraphCast'
+        : allForecasts.some(f => getModel(f).includes('neuralgcm'))
+          ? 'NeuralGCM'
+          : 'Open-Meteo')
     : '--'
-  const hasNeuralGCM = allForecasts.some(f => getModel(f).includes('neuralgcm'))
 
   // Conditions & models for filter dropdowns
   const conditions = useMemo(() => {

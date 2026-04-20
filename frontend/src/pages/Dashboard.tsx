@@ -414,13 +414,12 @@ function PipelineHero() {
       {/* Step row */}
       <div
         data-tour="stage-cards"
-        className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-2 relative"
+        className="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-2 relative"
       >
-        {/* connector line animated on mount */}
+        {/* horizontal connector — desktop only */}
         <div
-          className="hidden md:block"
+          className="hidden md:block absolute z-0"
           style={{
-            position: 'absolute',
             top: '20px',
             left: '3%',
             right: '3%',
@@ -429,7 +428,20 @@ function PipelineHero() {
             transform: mounted ? 'scaleX(1)' : 'scaleX(0)',
             transformOrigin: 'left center',
             transition: 'transform 800ms ease-out',
-            zIndex: 0,
+          }}
+        />
+        {/* vertical connector — mobile only */}
+        <div
+          className="md:hidden absolute z-0"
+          style={{
+            top: '6px',
+            bottom: '6px',
+            left: '5.5px',
+            width: '1px',
+            background: '#e8e5e1',
+            transform: mounted ? 'scaleY(1)' : 'scaleY(0)',
+            transformOrigin: 'top center',
+            transition: 'transform 800ms ease-out',
           }}
         />
         {HERO_STEPS.map((s, i) => {
@@ -443,21 +455,10 @@ function PipelineHero() {
                 setSelected(i)
                 setLocked(true)
               }}
-              style={{
-                position: 'relative',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-start',
-                gap: '10px',
-                padding: '0 0 6px 0',
-                background: 'none',
-                border: 'none',
-                cursor: 'pointer',
-                textAlign: 'left',
-                zIndex: 1,
-              }}
+              className="relative z-[1] flex flex-row md:flex-col items-start gap-3 md:gap-[10px] text-left cursor-pointer bg-transparent border-0 p-0 pb-[6px]"
             >
               <div
+                className="shrink-0 relative mt-[4px] md:mt-[14px]"
                 style={{
                   width: '12px',
                   height: '12px',
@@ -466,8 +467,6 @@ function PipelineHero() {
                   border: isActive
                     ? '1px solid #2d5b7d'
                     : '1px solid #c4bfb6',
-                  marginTop: '14px',
-                  position: 'relative',
                 }}
               >
                 {isActive && (
@@ -481,6 +480,7 @@ function PipelineHero() {
                   />
                 )}
               </div>
+              <div className="flex flex-col gap-[4px] md:contents min-w-0">
               <div
                 style={{
                   fontFamily: '"Source Serif 4", Georgia, serif',
@@ -514,6 +514,7 @@ function PipelineHero() {
                 }}
               >
                 {s.short}
+              </div>
               </div>
             </button>
           )

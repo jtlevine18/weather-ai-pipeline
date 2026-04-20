@@ -186,7 +186,7 @@ export function ChatWidget() {
         onClick={() => setOpen(true)}
         aria-label="Open farmer advisor chat"
         title="Ask the model"
-        className="fixed bottom-8 left-8 z-[1000]"
+        className="hidden lg:block fixed bottom-8 left-8 z-[1000]"
         style={{
           background: 'none',
           border: 'none',
@@ -206,12 +206,8 @@ export function ChatWidget() {
 
   return (
     <div
-      className="chat-widget-container fixed bottom-6 right-6 z-[1000] flex flex-col overflow-hidden"
+      className="chat-widget-container fixed inset-0 lg:inset-auto lg:bottom-6 lg:right-6 z-[1000] flex flex-col overflow-hidden lg:w-[420px] lg:h-[540px] lg:max-w-[calc(100vw-48px)] lg:max-h-[calc(100vh-48px)]"
       style={{
-        width: '420px',
-        maxWidth: 'calc(100vw - 48px)',
-        height: '540px',
-        maxHeight: 'calc(100vh - 48px)',
         background: '#ffffff',
         border: '1px solid #e8e5e1',
         borderRadius: '4px',
