@@ -68,7 +68,6 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 _DEFAULT_ALLOWED_ORIGINS = [
     "https://jtlevine-ai-weather-pipeline-runner.hf.space",
     "https://weather-forecast.jeff-levine.com",
-    "https://weather-ai-pipeline.vercel.app",
 ]
 _allowed_origins_env = os.getenv("ALLOWED_ORIGINS", "").strip()
 if _allowed_origins_env:

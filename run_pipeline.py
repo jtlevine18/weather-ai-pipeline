@@ -36,7 +36,7 @@ def parse_args():
     )
     parser.add_argument("--live-delivery", action="store_true",
                         help="Actually send SMS/WhatsApp (default: dry-run)")
-parser.add_argument("--step", type=int, choices=range(1, 7),
+    parser.add_argument("--step", type=int, choices=range(1, 7),
                         metavar="N", help="Run only step N (1-6)")
     parser.add_argument("--source", choices=["real", "synthetic"],
                         default="real",
