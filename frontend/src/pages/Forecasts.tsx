@@ -190,10 +190,8 @@ export default function Forecasts() {
       {/* 5 Metrics */}
       <div
         data-tour="forecasts-metrics"
+        className="grid grid-cols-2 md:grid-cols-5 gap-6 md:gap-8"
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(5, 1fr)',
-          gap: '32px',
           borderTop: '1px solid #e8e5e1',
           paddingTop: '28px',
         }}
@@ -368,7 +366,7 @@ export default function Forecasts() {
               maxWidth: '780px',
             }}
           >
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '32px' }}>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-6 sm:gap-8">
               <div>
                 <div className="eyebrow">Forecasting</div>
                 <div style={{ fontSize: '14px', color: '#1b1e2d', marginTop: '8px', lineHeight: 1.5 }}>

@@ -414,15 +414,11 @@ function PipelineHero() {
       {/* Step row */}
       <div
         data-tour="stage-cards"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${HERO_STEPS.length}, 1fr)`,
-          gap: '8px',
-          position: 'relative',
-        }}
+        className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-2 relative"
       >
         {/* connector line animated on mount */}
         <div
+          className="hidden md:block"
           style={{
             position: 'absolute',
             top: '20px',
@@ -442,6 +438,7 @@ function PipelineHero() {
             <button
               key={s.num}
               onMouseEnter={() => !locked && setSelected(i)}
+              onFocus={() => !locked && setSelected(i)}
               onClick={() => {
                 setSelected(i)
                 setLocked(true)
@@ -526,13 +523,11 @@ function PipelineHero() {
       {/* Detail + output panel */}
       <div
         key={step.num}
-        className="animate-fade-in"
+        className="animate-fade-in grid grid-cols-1 md:[grid-template-columns:minmax(0,1fr)_minmax(0,1.1fr)]"
         style={{
           marginTop: '24px',
           paddingTop: '20px',
           borderTop: '1px solid #e8e5e1',
-          display: 'grid',
-          gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.1fr)',
           columnGap: '32px',
           rowGap: '14px',
           alignItems: 'start',
@@ -639,10 +634,8 @@ export default function Dashboard() {
 
       {/* KPI row */}
       <div
+        className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8"
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '32px',
           borderTop: '1px solid #e8e5e1',
           paddingTop: '20px',
         }}

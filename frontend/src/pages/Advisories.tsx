@@ -202,10 +202,8 @@ export default function Advisories() {
       {/* Hero metrics — 4 real counts from this week's run */}
       <div
         data-tour="advisories-metrics"
+        className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8"
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '32px',
           borderTop: '1px solid #e8e5e1',
           paddingTop: '28px',
         }}
@@ -406,10 +404,8 @@ function AdvisoryCard({
               return (
                 <div
                   key={crop}
+                  className="grid grid-cols-[80px_1fr_auto] sm:grid-cols-[120px_1fr_auto] gap-3 sm:gap-4"
                   style={{
-                    display: 'grid',
-                    gridTemplateColumns: '120px 1fr auto',
-                    gap: '16px',
                     alignItems: 'start',
                     fontSize: '12px',
                     lineHeight: 1.5,

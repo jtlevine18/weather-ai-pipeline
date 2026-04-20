@@ -33,9 +33,10 @@ export function ForecastStrip({ forecasts }: Props) {
 
   return (
     <div
+      className="overflow-x-auto"
       style={{
         display: 'grid',
-        gridTemplateColumns: `repeat(${forecasts.length}, 1fr)`,
+        gridTemplateColumns: `repeat(${forecasts.length}, minmax(120px, 1fr))`,
         gap: '0',
         borderTop: '1px solid #e8e5e1',
         borderBottom: '1px solid #e8e5e1',

@@ -1072,10 +1072,8 @@ export default function Stations() {
       {/* Metric row */}
       <div
         data-tour="stations-metrics"
+        className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8"
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, 1fr)',
-          gap: '32px',
           borderTop: '1px solid #e8e5e1',
           paddingTop: '28px',
         }}

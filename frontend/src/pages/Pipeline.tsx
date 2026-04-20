@@ -36,10 +36,8 @@ function HowItWorksSection() {
   return (
     <div>
       <div
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 lg:gap-7"
         style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-          gap: '28px',
           borderTop: '1px solid #e8e5e1',
           paddingTop: '18px',
         }}
@@ -653,13 +651,7 @@ function ScalingCostPanel() {
   return (
     <div style={{ marginTop: '32px' }}>
       <div className="section-header">What it costs to run at pilot scale</div>
-      <div
-        style={{
-          display: 'grid',
-          gridTemplateColumns: 'repeat(3, 1fr)',
-          gap: '32px',
-        }}
-      >
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8">
         {TIERS.map(tier => (
           <div
             key={tier.label}
@@ -817,10 +809,12 @@ export default function Pipeline() {
           {/* Run history table */}
           <div className="space-y-4">
             <div
+              className={
+                (failedRuns + runList.filter(r => r.status === 'partial').length) > 0
+                  ? 'grid grid-cols-2 sm:grid-cols-3 gap-6 sm:gap-8'
+                  : 'grid grid-cols-2 gap-6 sm:gap-8'
+              }
               style={{
-                display: 'grid',
-                gridTemplateColumns: `repeat(${(failedRuns + runList.filter(r => r.status === 'partial').length) > 0 ? 3 : 2}, 1fr)`,
-                gap: '32px',
                 borderTop: '1px solid #e8e5e1',
                 paddingTop: '20px',
                 marginTop: '16px',
