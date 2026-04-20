@@ -515,7 +515,6 @@ function PipelineHero() {
 
       <div style={{ height: '24px' }} />
 
-      {/* Mobile: 2-col — pipeline timeline on left, description + output on right */}
       <style>{`
         @keyframes pulse-dot {
           0%, 100% { opacity: 1; transform: scale(1); }
@@ -556,10 +555,8 @@ function PipelineHero() {
         }
       `}</style>
       <div
-        data-tour="stage-cards"
         className="md:hidden grid grid-cols-[5fr_7fr] gap-4 items-start"
       >
-        {/* left col: step timeline (dots + short subtitle) */}
         <div className="relative flex flex-col gap-4">
           <div
             className="absolute z-0"
@@ -643,7 +640,6 @@ function PipelineHero() {
             )
           })}
         </div>
-        {/* right col: description on top, output card below */}
         <div key={step.num} className="animate-fade-in flex flex-col gap-3">
           <div>
             <div className="eyebrow" style={{ fontSize: '10px', marginBottom: '4px', color: '#2d5b7d' }}>
@@ -675,7 +671,6 @@ function PipelineHero() {
         </div>
       </div>
 
-      {/* Desktop: horizontal step row */}
       <div
         data-tour="stage-cards"
         className="hidden md:grid md:grid-cols-5 gap-2 relative"
@@ -769,10 +764,9 @@ function PipelineHero() {
         })}
       </div>
 
-      {/* Desktop: detail + output panel below */}
       <div
         key={step.num}
-        className="animate-fade-in hidden md:grid md:[grid-template-columns:minmax(0,1fr)_minmax(0,1.1fr)]"
+        className="animate-fade-in hidden md:grid md:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]"
         style={{
           marginTop: '24px',
           paddingTop: '20px',
