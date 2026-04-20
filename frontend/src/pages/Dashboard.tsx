@@ -43,7 +43,7 @@ const HERO_STEPS = [
     num: 3,
     name: 'Forecast',
     short: "Open neural model, tuned to each farmer's plot",
-    body: "Google DeepMind's NeuralGCM — an open, state-of-the-art neural weather model anyone can run on a personal computer — produces a seven-day global forecast. Each station's twelve-year observation history is then used to correct for local bias, and satellite grids interpolate the result to each farmer's exact GPS coordinates with an elevation adjustment.",
+    body: "Google DeepMind's GraphCast — an open neural weather model running at 0.25° (~28km) resolution — produces a seven-day global forecast. Each station's twelve-year observation history is then used to correct for local bias, and satellite grids interpolate the result to each farmer's exact GPS coordinates with an elevation adjustment.",
     outputType: 'forecast' as const,
   },
   {
@@ -411,28 +411,14 @@ function PipelineHero() {
 
       <div style={{ height: '24px' }} />
 
-      {/* Step row */}
+      {/* Mobile: 2-col pipeline (left) + output (right) with body inline on active card */}
       <div
         data-tour="stage-cards"
-        className="grid grid-cols-1 md:grid-cols-5 gap-4 md:gap-2 relative"
+        className="md:hidden grid grid-cols-[1fr_1fr] gap-3 items-start relative"
       >
-        {/* horizontal connector — desktop only */}
+        {/* vertical connector */}
         <div
-          className="hidden md:block absolute z-0"
-          style={{
-            top: '20px',
-            left: '3%',
-            right: '3%',
-            height: '1px',
-            background: '#e8e5e1',
-            transform: mounted ? 'scaleX(1)' : 'scaleX(0)',
-            transformOrigin: 'left center',
-            transition: 'transform 800ms ease-out',
-          }}
-        />
-        {/* vertical connector — mobile only */}
-        <div
-          className="md:hidden absolute z-0"
+          className="absolute z-0"
           style={{
             top: '6px',
             bottom: '6px',
@@ -441,6 +427,113 @@ function PipelineHero() {
             background: '#e8e5e1',
             transform: mounted ? 'scaleY(1)' : 'scaleY(0)',
             transformOrigin: 'top center',
+            transition: 'transform 800ms ease-out',
+          }}
+        />
+        {/* left col: step timeline */}
+        <div className="flex flex-col gap-4">
+          {HERO_STEPS.map((s, i) => {
+            const isActive = i === selected
+            return (
+              <button
+                key={s.num}
+                onClick={() => {
+                  setSelected(i)
+                  setLocked(true)
+                }}
+                className="relative z-[1] flex flex-row items-start gap-3 text-left cursor-pointer bg-transparent border-0 p-0 pb-[6px]"
+              >
+                <div
+                  className="shrink-0 relative mt-[4px]"
+                  style={{
+                    width: '12px',
+                    height: '12px',
+                    borderRadius: '50%',
+                    background: '#ffffff',
+                    border: isActive ? '1px solid #2d5b7d' : '1px solid #c4bfb6',
+                  }}
+                >
+                  {isActive && (
+                    <div
+                      style={{
+                        position: 'absolute',
+                        inset: '2px',
+                        background: '#2d5b7d',
+                        borderRadius: '50%',
+                      }}
+                    />
+                  )}
+                </div>
+                <div className="flex flex-col gap-[4px] min-w-0">
+                  <div
+                    style={{
+                      fontFamily: '"Source Serif 4", Georgia, serif',
+                      fontSize: '12px',
+                      color: '#8d909e',
+                      fontVariantNumeric: 'tabular-nums',
+                    }}
+                  >
+                    {String(s.num).padStart(2, '0')}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: '"Source Serif 4", Georgia, serif',
+                      fontSize: '17px',
+                      lineHeight: '22px',
+                      color: isActive ? '#1b1e2d' : '#606373',
+                      letterSpacing: '-0.005em',
+                    }}
+                  >
+                    {s.name}
+                  </div>
+                  <div
+                    style={{
+                      fontFamily: '"Space Grotesk", system-ui, sans-serif',
+                      fontSize: '11px',
+                      lineHeight: 1.45,
+                      color: isActive ? '#606373' : '#8d909e',
+                    }}
+                  >
+                    {isActive ? s.body : s.short}
+                  </div>
+                </div>
+              </button>
+            )
+          })}
+        </div>
+        {/* right col: sticky output card for the active step */}
+        <div className="sticky top-4">
+          <div
+            style={{
+              backgroundColor: '#fcfaf7',
+              border: '1px solid #e8e5e1',
+              borderLeft: '2px solid #2d5b7d',
+              borderRadius: '4px',
+              padding: '12px 14px',
+              maxHeight: 'calc(100vh - 100px)',
+              overflow: 'hidden',
+            }}
+          >
+            <StepOutput outputType={step.outputType} />
+          </div>
+        </div>
+      </div>
+
+      {/* Desktop: horizontal step row */}
+      <div
+        data-tour="stage-cards"
+        className="hidden md:grid md:grid-cols-5 gap-2 relative"
+      >
+        <div
+          className="absolute z-0"
+          style={{
+            top: '20px',
+            left: '3%',
+            right: '3%',
+            height: '1px',
+            background: '#e8e5e1',
+            transform: mounted ? 'scaleX(1)' : 'scaleX(0)',
+            transformOrigin: 'left center',
             transition: 'transform 800ms ease-out',
           }}
         />
@@ -455,18 +548,16 @@ function PipelineHero() {
                 setSelected(i)
                 setLocked(true)
               }}
-              className="relative z-[1] flex flex-row md:flex-col items-start gap-3 md:gap-[10px] text-left cursor-pointer bg-transparent border-0 p-0 pb-[6px]"
+              className="relative z-[1] flex flex-col items-start gap-[10px] text-left cursor-pointer bg-transparent border-0 p-0 pb-[6px]"
             >
               <div
-                className="shrink-0 relative mt-[4px] md:mt-[14px]"
+                className="shrink-0 relative mt-[14px]"
                 style={{
                   width: '12px',
                   height: '12px',
                   borderRadius: '50%',
                   background: '#ffffff',
-                  border: isActive
-                    ? '1px solid #2d5b7d'
-                    : '1px solid #c4bfb6',
+                  border: isActive ? '1px solid #2d5b7d' : '1px solid #c4bfb6',
                 }}
               >
                 {isActive && (
@@ -480,7 +571,6 @@ function PipelineHero() {
                   />
                 )}
               </div>
-              <div className="flex flex-col gap-[4px] md:contents min-w-0">
               <div
                 style={{
                   fontFamily: '"Source Serif 4", Georgia, serif',
@@ -515,16 +605,15 @@ function PipelineHero() {
               >
                 {s.short}
               </div>
-              </div>
             </button>
           )
         })}
       </div>
 
-      {/* Detail + output panel */}
+      {/* Desktop: detail + output panel below */}
       <div
         key={step.num}
-        className="animate-fade-in grid grid-cols-1 md:[grid-template-columns:minmax(0,1fr)_minmax(0,1.1fr)]"
+        className="animate-fade-in hidden md:grid md:[grid-template-columns:minmax(0,1fr)_minmax(0,1.1fr)]"
         style={{
           marginTop: '24px',
           paddingTop: '20px',

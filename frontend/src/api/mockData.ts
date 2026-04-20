@@ -509,11 +509,11 @@ export const HEALING_RECORDS: HealingRecord[] = [
     station_id: 'TN-09',
     assessment: 'filled',
     reasoning:
-      'Station last reported 73 minutes ago, exceeding the 45-minute freshness threshold. Fell back to the NeuralGCM surface hourly grid for this timestep. Confidence reduced accordingly.',
+      'Station last reported 73 minutes ago, exceeding the 45-minute freshness threshold. Fell back to the backup neural-model surface grid for this timestep. Confidence reduced accordingly.',
     corrections: '{"temperature": 33.9, "humidity": 67}',
     original_values: '{"temperature": 34.4, "humidity": 66}',
     quality_score: 0.90,
-    tools_used: 'neuralgcm_surface',
+    tools_used: 'backup_surface_grid',
     model: 'claude-sonnet-4-5',
     tokens_in: 703,
     tokens_out: 221,
@@ -754,7 +754,7 @@ export const PIPELINE_RUNS: PipelineRun[] = (() => {
     const errDetail = isFailure
       ? i === 4
         ? 'IMD scraper timeout after 180s on station TN-09'
-        : 'NeuralGCM inference OOM — falling back to hybrid_mos model'
+        : 'GraphCast inference OOM — falling back to NeuralGCM'
       : isPartial
         ? 'Translation step timed out on 3 Tamil advisories'
         : undefined
