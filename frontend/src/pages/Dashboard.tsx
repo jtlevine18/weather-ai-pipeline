@@ -64,7 +64,7 @@ const HERO_STEPS = [
 
 // ── Pipeline hero ──────────────────────────────────────────
 
-function StepOutput({ outputType }: { outputType: typeof HERO_STEPS[number]['outputType'] }) {
+function StepOutput({ outputType, compact = false }: { outputType: typeof HERO_STEPS[number]['outputType'], compact?: boolean }) {
   const clean = useTelemetryClean(20)
   const healing = useHealingLog(20)
   const forecasts = useForecasts(500)
@@ -83,6 +83,110 @@ function StepOutput({ outputType }: { outputType: typeof HERO_STEPS[number]['out
     fontSize: '13px',
     lineHeight: 1.6,
     color: '#606373',
+  }
+
+  // Compact (mobile) — one big stat per card
+  if (compact) {
+    if (outputType === 'readings') {
+      const top = (clean.data ?? [])[0]
+      return (
+        <div style={panelStyle}>
+          <div className="eyebrow" style={{ fontSize: '10px', marginBottom: '6px' }}>
+            <span className="live-dot" /> Latest reading
+          </div>
+          <div style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: '13px', color: '#1b1e2d', marginBottom: '2px' }}>
+            {stationNameById[top?.station_id ?? ''] ?? top?.station_id ?? '—'}
+          </div>
+          <div style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: '24px', color: '#1b1e2d', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+            {top?.temperature?.toFixed(1) ?? '—'}<span style={{ fontSize: '14px', color: '#8d909e' }}>°C</span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#8d909e', marginTop: '6px' }}>
+            {top?.humidity ?? '—'}% humidity · {(top?.rainfall ?? 0).toFixed(1)}mm
+          </div>
+        </div>
+      )
+    }
+    if (outputType === 'healing') {
+      const heal =
+        (healing.data ?? []).find((h) => h.field === 'temperature' || h.field === 'temperature_c') ??
+        (healing.data ?? [])[0]
+      const raw = typeof heal?.original_value === 'number' ? heal.original_value.toFixed(1) : (heal?.original_value ?? '48.2')
+      const healed = typeof heal?.healed_value === 'number' ? heal.healed_value.toFixed(1) : (heal?.healed_value ?? '29.1')
+      return (
+        <div style={panelStyle}>
+          <div className="eyebrow" style={{ fontSize: '10px', marginBottom: '6px' }}>
+            <span className="live-dot" /> Latest repair
+          </div>
+          <div style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: '20px', color: '#1b1e2d', lineHeight: 1.2, fontVariantNumeric: 'tabular-nums' }}>
+            <span style={{ color: '#c71f48' }}>{raw}°</span>{' → '}<span style={{ color: '#2d5b7d' }}>{healed}°</span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#8d909e', marginTop: '6px' }}>
+            {heal?.station_id ?? '—'} · cross-checked before forecast
+          </div>
+        </div>
+      )
+    }
+    if (outputType === 'forecast') {
+      const all = forecasts.data ?? []
+      const f = all[0]
+      return (
+        <div style={panelStyle}>
+          <div className="eyebrow" style={{ fontSize: '10px', marginBottom: '6px' }}>
+            <span className="live-dot" /> 7-day forecast
+          </div>
+          <div style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: '13px', color: '#1b1e2d', marginBottom: '2px' }}>
+            {f?.station_name ?? stationNameById[f?.station_id ?? ''] ?? f?.station_id ?? '—'}
+          </div>
+          <div style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: '24px', color: '#1b1e2d', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+            {f?.temperature?.toFixed(0) ?? '—'}<span style={{ fontSize: '14px', color: '#8d909e' }}>°C</span>
+          </div>
+          <div style={{ fontSize: '11px', color: '#8d909e', marginTop: '6px' }}>
+            Day 1 · {(f?.rainfall ?? 0).toFixed(1)}mm expected
+          </div>
+        </div>
+      )
+    }
+    if (outputType === 'advisory') {
+      const alert = (alerts.data ?? []).find((a) => a.advisory_local || a.advisory_en)
+      const preview = (text: string | undefined, maxLen: number): string => {
+        if (!text) return ''
+        const stripped = text.replace(/^#+\s+.*$/gm, '').replace(/\*\*(.*?)\*\*/g, '$1').replace(/\*(.*?)\*/g, '$1').replace(/\s+/g, ' ').trim()
+        return stripped.length <= maxLen ? stripped : stripped.slice(0, maxLen).replace(/\s+\S*$/, '') + '…'
+      }
+      const lang = alert?.language === 'ml' ? 'Malayalam' : alert?.language === 'ta' ? 'Tamil' : alert?.language ?? '—'
+      return (
+        <div style={panelStyle}>
+          <div className="eyebrow" style={{ fontSize: '10px', marginBottom: '6px' }}>
+            <span className="live-dot" /> Latest advisory
+          </div>
+          <p style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: '12px', lineHeight: 1.5, color: '#1b1e2d', margin: 0 }}>
+            {preview(alert?.advisory_local || alert?.advisory_en, 110)}
+          </p>
+          <div style={{ fontSize: '11px', color: '#8d909e', marginTop: '6px' }}>
+            {alert?.station_name ?? alert?.station_id ?? 'Farmer'} · {lang}
+          </div>
+        </div>
+      )
+    }
+    if (outputType === 'delivery') {
+      const d = (deliveries.data ?? []).find((x) => x.status === 'sent') ?? (deliveries.data ?? [])[0]
+      const ts = d?.delivered_at ?? d?.created_at ?? ''
+      const totalSent = (deliveries.data ?? []).filter((x) => x.status === 'sent').length
+      return (
+        <div style={panelStyle}>
+          <div className="eyebrow" style={{ fontSize: '10px', marginBottom: '6px' }}>
+            <span className="live-dot" /> Messages delivered
+          </div>
+          <div style={{ fontFamily: '"Source Serif 4", Georgia, serif', fontSize: '24px', color: '#1b1e2d', fontVariantNumeric: 'tabular-nums', lineHeight: 1.1 }}>
+            {totalSent}
+          </div>
+          <div style={{ fontSize: '11px', color: '#8d909e', marginTop: '6px' }}>
+            latest · {d?.station_name ?? d?.station_id ?? '—'} · {(ts.slice(11, 16) || '14:23')} IST
+          </div>
+        </div>
+      )
+    }
+    return null
   }
 
   if (outputType === 'readings') {
@@ -412,9 +516,25 @@ function PipelineHero() {
       <div style={{ height: '24px' }} />
 
       {/* Mobile: 2-col — pipeline timeline on left, description + output on right */}
+      <style>{`
+        @keyframes pulse-dot {
+          0%, 100% { opacity: 1; transform: scale(1); }
+          50% { opacity: 0.35; transform: scale(0.85); }
+        }
+        .live-dot {
+          display: inline-block;
+          width: 6px;
+          height: 6px;
+          border-radius: 50%;
+          background: #2d5b7d;
+          margin-right: 6px;
+          vertical-align: 1px;
+          animation: pulse-dot 1.8s ease-in-out infinite;
+        }
+      `}</style>
       <div
         data-tour="stage-cards"
-        className="md:hidden grid grid-cols-[1fr_1fr] gap-4 items-start"
+        className="md:hidden grid grid-cols-[5fr_7fr] gap-4 items-start"
       >
         {/* left col: step timeline (dots + short subtitle) */}
         <div className="relative flex flex-col gap-4">
@@ -503,7 +623,7 @@ function PipelineHero() {
         {/* right col: description on top, output card below */}
         <div key={step.num} className="animate-fade-in flex flex-col gap-3">
           <div>
-            <div className="eyebrow" style={{ fontSize: '10px', marginBottom: '4px' }}>
+            <div className="eyebrow" style={{ fontSize: '10px', marginBottom: '4px', color: '#2d5b7d' }}>
               Step {String(step.num).padStart(2, '0')} · {step.name}
             </div>
             <p
@@ -523,11 +643,11 @@ function PipelineHero() {
               border: '1px solid #e8e5e1',
               borderLeft: '2px solid #2d5b7d',
               borderRadius: '4px',
-              padding: '12px 14px',
+              padding: '14px 16px',
               overflow: 'hidden',
             }}
           >
-            <StepOutput outputType={step.outputType} />
+            <StepOutput outputType={step.outputType} compact />
           </div>
         </div>
       </div>
