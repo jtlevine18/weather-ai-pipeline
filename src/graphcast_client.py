@@ -465,48 +465,56 @@ class GraphCastClient:
             if "batch" in preds.dims:
                 preds = preds.isel(batch=0)
             ntimes = int(preds.sizes["time"])
-            log.info("DEBUG-UNITS: predictions vars=%s  ntimes=%d", list(preds.data_vars), ntimes)
-            for var in ("2m_temperature", "10m_u_component_of_wind",
-                        "10m_v_component_of_wind", "specific_humidity",
-                        "total_precipitation_6hr"):
+            print(f"DEBUG-UNITS: predictions vars={list(preds.data_vars)} ntimes={ntimes}", flush=True)
+            target_vars = (
+                "2m_temperature", "10m_u_component_of_wind",
+                "10m_v_component_of_wind", "specific_humidity",
+                "total_precipitation_6hr",
+            )
+            for var in target_vars:
                 if var not in preds.data_vars:
-                    log.info("DEBUG-UNITS: %s MISSING", var)
+                    print(f"DEBUG-UNITS: {var} MISSING", flush=True)
                     continue
                 for tag, t_idx in (("t0", 0), ("tlast", ntimes - 1)):
                     try:
                         arr = preds[var].isel(time=t_idx).values
                         mn = float(_np.nanmin(arr)); mx = float(_np.nanmax(arr))
                         me = float(_np.nanmean(arr)); std = float(_np.nanstd(arr))
-                        log.info(
-                            "DEBUG-UNITS: %-30s %-5s  min=%.4g  max=%.4g  mean=%.4g  std=%.4g  shape=%s",
-                            var, tag, mn, mx, me, std, arr.shape,
+                        print(
+                            f"DEBUG-UNITS: {var:<30} {tag:<5} "
+                            f"min={mn:.4g} max={mx:.4g} mean={me:.4g} std={std:.4g} shape={arr.shape}",
+                            flush=True,
                         )
                     except Exception as _e:  # noqa: BLE001
-                        log.info("DEBUG-UNITS: %s %s failed: %s", var, tag, _e)
-            # Log normalization stats for the same variables
+                        print(f"DEBUG-UNITS: {var} {tag} failed: {_e}", flush=True)
+            # Normalization stats for the same variables
             stats = self._mean_by_level
             if stats is not None:
-                for var in ("2m_temperature", "10m_u_component_of_wind",
-                            "10m_v_component_of_wind", "specific_humidity",
-                            "total_precipitation_6hr"):
+                for var in target_vars:
                     if var in stats.data_vars:
                         try:
                             val = stats[var].values
-                            log.info("DEBUG-UNITS: mean_by_level[%s] min=%.4g max=%.4g mean=%.4g shape=%s",
-                                     var, float(_np.nanmin(val)), float(_np.nanmax(val)),
-                                     float(_np.nanmean(val)), val.shape)
+                            print(
+                                f"DEBUG-UNITS: mean_by_level[{var}] "
+                                f"min={float(_np.nanmin(val)):.4g} max={float(_np.nanmax(val)):.4g} "
+                                f"mean={float(_np.nanmean(val)):.4g} shape={val.shape}",
+                                flush=True,
+                            )
                         except Exception as _e:  # noqa: BLE001
-                            log.info("DEBUG-UNITS: mean_by_level[%s] failed: %s", var, _e)
-            # Log the ERA5 input 2m_temperature distribution (confirms ERA5 units)
+                            print(f"DEBUG-UNITS: mean_by_level[{var}] failed: {_e}", flush=True)
+            # ERA5 input 2m_temperature distribution (confirms ERA5 units)
             try:
                 t2m_in = inputs["2m_temperature"].values
-                log.info("DEBUG-UNITS: inputs[2m_temperature]  min=%.4g  max=%.4g  mean=%.4g  shape=%s",
-                         float(_np.nanmin(t2m_in)), float(_np.nanmax(t2m_in)),
-                         float(_np.nanmean(t2m_in)), t2m_in.shape)
+                print(
+                    f"DEBUG-UNITS: inputs[2m_temperature] "
+                    f"min={float(_np.nanmin(t2m_in)):.4g} max={float(_np.nanmax(t2m_in)):.4g} "
+                    f"mean={float(_np.nanmean(t2m_in)):.4g} shape={t2m_in.shape}",
+                    flush=True,
+                )
             except Exception as _e:  # noqa: BLE001
-                log.info("DEBUG-UNITS: inputs 2m_temp failed: %s", _e)
+                print(f"DEBUG-UNITS: inputs 2m_temp failed: {_e}", flush=True)
         except Exception as _exc:  # noqa: BLE001
-            log.warning("DEBUG-UNITS: block failed: %s", _exc)
+            print(f"DEBUG-UNITS: block failed: {_exc}", flush=True)
         # --- END DEBUG-UNITS ---
 
         return predictions, inference_s, fetch_s
