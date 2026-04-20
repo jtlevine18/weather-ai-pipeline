@@ -629,12 +629,13 @@ class NeuralGCMClient:
                     temp_c = None
                     if has_temp:
                         try:
-                            temp_k = float(
+                            raw = float(
                                 step["temperature"].sel(
                                     **{level_name: target_level}, method="nearest"
                                 )
                             )
-                            temp_c = round(temp_k - 273.15, 1)
+                            # Auto-detect K vs °C (see graphcast_client._to_celsius)
+                            temp_c = round(raw - 273.15 if raw > 150 else raw, 1)
                         except Exception:
                             pass
 

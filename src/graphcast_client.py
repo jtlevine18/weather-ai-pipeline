@@ -70,6 +70,18 @@ FORECAST_STEPS = 28  # 7 days × 4 steps/day at 6h intervals
 # Unit conversion helpers (shared with neuralgcm_client.py)
 # ---------------------------------------------------------------------------
 
+def _to_celsius(val: float) -> float:
+    """Convert a 2m-temperature scalar to Celsius, auto-detecting the scale.
+
+    ARCO ERA5 + GraphCast canonically emit Kelvin (values ~200–320). If an
+    upstream pack/denormalizer delivers Celsius by mistake (values ~−80–60),
+    pass through. Earth surface temperatures never overlap at the 150
+    threshold — Kelvin is always above it, Celsius always below.
+    """
+    v = float(val)
+    return round(v - 273.15 if v > 150 else v, 1)
+
+
 def _specific_humidity_to_rh(q_kg_kg: float, temp_c: float, pressure_hpa: float) -> float:
     """Convert specific humidity (kg/kg) to relative humidity (%)."""
     if temp_c < -40 or q_kg_kg <= 0:
@@ -524,18 +536,19 @@ class GraphCastClient:
                     else:
                         ts_str = str(step.time.values)
 
-                    # Temperature (K → °C) — prefer 2m_temperature
+                    # Temperature — prefer 2m_temperature. Auto-detect K vs °C
+                    # per _to_celsius (defensive: observed -271°C outputs were
+                    # the model yielding Celsius where we assumed Kelvin).
                     temp_c = None
                     if has_2m_temp:
                         try:
-                            temp_c = round(float(step["2m_temperature"]) - 273.15, 1)
+                            temp_c = _to_celsius(step["2m_temperature"])
                         except Exception:
                             pass
                     if temp_c is None and has_temp:
                         try:
-                            temp_k = float(step["temperature"].sel(
+                            temp_c = _to_celsius(step["temperature"].sel(
                                 **{level_name: target_level}, method="nearest"))
-                            temp_c = round(temp_k - 273.15, 1)
                         except Exception:
                             pass
 
@@ -650,18 +663,17 @@ class GraphCastClient:
 
                 point = step.isel(**{lat_name: lat_idx, lon_name: lon_idx})
 
-                # Temperature
+                # Temperature (auto K/°C detection via _to_celsius)
                 temp_c = None
                 if has_2m_temp:
                     try:
-                        temp_c = round(float(point["2m_temperature"]) - 273.15, 1)
+                        temp_c = _to_celsius(point["2m_temperature"])
                     except Exception:
                         pass
                 if temp_c is None and has_temp:
                     try:
-                        temp_k = float(point["temperature"].sel(
+                        temp_c = _to_celsius(point["temperature"].sel(
                             **{level_name: 1000}, method="nearest"))
-                        temp_c = round(temp_k - 273.15, 1)
                     except Exception:
                         pass
 
