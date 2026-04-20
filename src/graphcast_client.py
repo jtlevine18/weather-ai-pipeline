@@ -453,6 +453,62 @@ class GraphCastClient:
         inference_s = time_mod.time() - t1
         log.info("GraphCast inference completed in %.1fs", inference_s)
 
+        # --- DEBUG-UNITS: one-shot diagnostics of raw model output ---
+        # Captures global min/max/mean of each output variable at the first
+        # and last lead-time, plus ERA5 input distribution for 2m_temperature.
+        # Purpose: localise the temp/wind/humidity drift bug (day-6 temps
+        # ~68°C, wind ~150 km/h, RH=0) that the K→C auto-detect patch
+        # only masked on day 0. Remove once root cause is fixed.
+        try:
+            import numpy as _np
+            preds = predictions
+            if "batch" in preds.dims:
+                preds = preds.isel(batch=0)
+            ntimes = int(preds.sizes["time"])
+            log.info("DEBUG-UNITS: predictions vars=%s  ntimes=%d", list(preds.data_vars), ntimes)
+            for var in ("2m_temperature", "10m_u_component_of_wind",
+                        "10m_v_component_of_wind", "specific_humidity",
+                        "total_precipitation_6hr"):
+                if var not in preds.data_vars:
+                    log.info("DEBUG-UNITS: %s MISSING", var)
+                    continue
+                for tag, t_idx in (("t0", 0), ("tlast", ntimes - 1)):
+                    try:
+                        arr = preds[var].isel(time=t_idx).values
+                        mn = float(_np.nanmin(arr)); mx = float(_np.nanmax(arr))
+                        me = float(_np.nanmean(arr)); std = float(_np.nanstd(arr))
+                        log.info(
+                            "DEBUG-UNITS: %-30s %-5s  min=%.4g  max=%.4g  mean=%.4g  std=%.4g  shape=%s",
+                            var, tag, mn, mx, me, std, arr.shape,
+                        )
+                    except Exception as _e:  # noqa: BLE001
+                        log.info("DEBUG-UNITS: %s %s failed: %s", var, tag, _e)
+            # Log normalization stats for the same variables
+            stats = self._mean_by_level
+            if stats is not None:
+                for var in ("2m_temperature", "10m_u_component_of_wind",
+                            "10m_v_component_of_wind", "specific_humidity",
+                            "total_precipitation_6hr"):
+                    if var in stats.data_vars:
+                        try:
+                            val = stats[var].values
+                            log.info("DEBUG-UNITS: mean_by_level[%s] min=%.4g max=%.4g mean=%.4g shape=%s",
+                                     var, float(_np.nanmin(val)), float(_np.nanmax(val)),
+                                     float(_np.nanmean(val)), val.shape)
+                        except Exception as _e:  # noqa: BLE001
+                            log.info("DEBUG-UNITS: mean_by_level[%s] failed: %s", var, _e)
+            # Log the ERA5 input 2m_temperature distribution (confirms ERA5 units)
+            try:
+                t2m_in = inputs["2m_temperature"].values
+                log.info("DEBUG-UNITS: inputs[2m_temperature]  min=%.4g  max=%.4g  mean=%.4g  shape=%s",
+                         float(_np.nanmin(t2m_in)), float(_np.nanmax(t2m_in)),
+                         float(_np.nanmean(t2m_in)), t2m_in.shape)
+            except Exception as _e:  # noqa: BLE001
+                log.info("DEBUG-UNITS: inputs 2m_temp failed: %s", _e)
+        except Exception as _exc:  # noqa: BLE001
+            log.warning("DEBUG-UNITS: block failed: %s", _exc)
+        # --- END DEBUG-UNITS ---
+
         return predictions, inference_s, fetch_s
 
     # ------------------------------------------------------------------
