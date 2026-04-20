@@ -195,7 +195,7 @@ function StepOutput({ outputType, compact = false }: { outputType: typeof HERO_S
     return (
       <div style={panelStyle}>
         <div className="eyebrow" style={{ marginBottom: '8px' }}>
-          Latest readings · pulled 02:17 IST
+          <span className="live-dot" />Latest readings · pulled 02:17 IST
         </div>
         <div
           style={{
@@ -269,7 +269,7 @@ function StepOutput({ outputType, compact = false }: { outputType: typeof HERO_S
     return (
       <div style={panelStyle}>
         <div className="eyebrow" style={{ marginBottom: '10px' }}>
-          Repair · {heal.station_id} {stationName}
+          <span className="live-dot" />Repair · {heal.station_id} {stationName}
           {ts && ` · ${ts.slice(11, 16)} IST`}
         </div>
         <p
@@ -308,7 +308,7 @@ function StepOutput({ outputType, compact = false }: { outputType: typeof HERO_S
     return (
       <div style={panelStyle}>
         <div className="eyebrow" style={{ marginBottom: '8px' }}>
-          Forecast · {stationName} · locally tuned
+          <span className="live-dot" />Forecast · {stationName} · locally tuned
         </div>
         <div
           style={{
@@ -384,7 +384,7 @@ function StepOutput({ outputType, compact = false }: { outputType: typeof HERO_S
     return (
       <div style={{ ...panelStyle, minWidth: 0 }}>
         <div className="eyebrow" style={{ marginBottom: '10px' }}>
-          Advisory · {alert.station_name ?? alert.station_id ?? 'Farmer'} ·{' '}
+          <span className="live-dot" />Advisory · {alert.station_name ?? alert.station_id ?? 'Farmer'} ·{' '}
           {alert.language === 'ml' ? 'Malayalam' : alert.language === 'ta' ? 'Tamil' : alert.language}
         </div>
         {localPreview && (
@@ -446,7 +446,7 @@ function StepOutput({ outputType, compact = false }: { outputType: typeof HERO_S
     return (
       <div style={panelStyle}>
         <div className="eyebrow" style={{ marginBottom: '10px' }}>
-          Delivery log · {d.station_name ?? d.station_id ?? '—'}
+          <span className="live-dot" />Delivery log · {d.station_name ?? d.station_id ?? '—'}
         </div>
         <div
           style={{
@@ -530,6 +530,29 @@ function PipelineHero() {
           margin-right: 6px;
           vertical-align: 1px;
           animation: pulse-dot 1.8s ease-in-out infinite;
+        }
+        .hero-step-btn .step-name {
+          color: #606373;
+          transition: color 0.15s ease;
+        }
+        .hero-step-btn:hover .step-name {
+          color: #2d5b7d;
+        }
+        .hero-step-btn--active .step-name {
+          color: #2d5b7d;
+        }
+        .hero-step-btn--active .step-underline {
+          transform: scaleX(1);
+        }
+        .step-underline {
+          display: block;
+          height: 2px;
+          width: 24px;
+          background: #2d5b7d;
+          transform: scaleX(0);
+          transform-origin: left center;
+          transition: transform 0.25s ease;
+          margin-top: 4px;
         }
       `}</style>
       <div
@@ -681,13 +704,13 @@ function PipelineHero() {
                 setSelected(i)
                 setLocked(true)
               }}
-              className="relative z-[1] flex flex-col items-start gap-[10px] text-left cursor-pointer bg-transparent border-0 p-0 pb-[6px]"
+              className={`hero-step-btn ${isActive ? 'hero-step-btn--active' : ''} relative z-[1] flex flex-col items-start gap-[10px] text-left cursor-pointer bg-transparent border-0 p-0 pb-[6px]`}
             >
               <div
                 className="shrink-0 relative mt-[14px]"
                 style={{
-                  width: '12px',
-                  height: '12px',
+                  width: '14px',
+                  height: '14px',
                   borderRadius: '50%',
                   background: '#ffffff',
                   border: isActive ? '1px solid #2d5b7d' : '1px solid #c4bfb6',
@@ -715,17 +738,20 @@ function PipelineHero() {
               >
                 {String(s.num).padStart(2, '0')}
               </div>
-              <div
-                style={{
-                  fontFamily: '"Source Serif 4", Georgia, serif',
-                  fontSize: '20px',
-                  lineHeight: '26px',
-                  fontWeight: 400,
-                  color: isActive ? '#1b1e2d' : '#606373',
-                  letterSpacing: '-0.005em',
-                }}
-              >
-                {s.name}
+              <div>
+                <div
+                  className="step-name"
+                  style={{
+                    fontFamily: '"Source Serif 4", Georgia, serif',
+                    fontSize: '20px',
+                    lineHeight: '26px',
+                    fontWeight: 400,
+                    letterSpacing: '-0.005em',
+                  }}
+                >
+                  {s.name}
+                </div>
+                <span className="step-underline" />
               </div>
               <div
                 style={{
