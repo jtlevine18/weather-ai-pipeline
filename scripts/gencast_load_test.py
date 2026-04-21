@@ -115,9 +115,13 @@ def _load_checkpoint():
     log.info("available gencast checkpoints (%d):\n  %s", len(blobs), "\n  ".join(blobs))
     if not blobs:
         raise RuntimeError("no blobs under gs://dm_graphcast/gencast/params/")
+    # Phase 0 fallback: 0.25° operational OOMed on single A100 (80GB) during
+    # rollout. Try 1.0° Mini first to validate the code path end-to-end at a
+    # smaller footprint; upgrade back to 0.25° once the model fits (or we
+    # find a memory-optimization knob).
     ckpt_name = next(
-        (b for b in blobs if "0p25" in b and "operational" in b.lower()),
-        next((b for b in blobs if "0p25" in b), blobs[0]),
+        (b for b in blobs if "1p0" in b and "mini" in b.lower()),
+        next((b for b in blobs if "0p25" in b and "operational" in b.lower()), blobs[0]),
     )
     log.info("selected checkpoint: %s", ckpt_name)
     with bucket.blob(ckpt_name).open("rb") as f:
