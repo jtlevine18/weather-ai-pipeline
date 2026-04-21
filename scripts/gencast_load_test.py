@@ -284,6 +284,14 @@ def _prepare_era5_inputs(ckpt, target_date: dt.date):
     if rename_map:
         ds = ds.rename(rename_map)
 
+    # GenCast's samplers_utils._infer_latitude_spacing requires monotonic lat;
+    # ERA5 is stored descending (90 → -90) which usually stays monotonic, but
+    # some upstream concat/sel paths shuffle it. Sort ascending to be safe.
+    if "lat" in ds.dims:
+        ds = ds.sortby("lat")
+    if "lon" in ds.dims:
+        ds = ds.sortby("lon")
+
     actual_times = ds.time.values
     t_init = actual_times[0]
     lead_times = actual_times - t_init
