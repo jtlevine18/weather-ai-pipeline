@@ -311,6 +311,21 @@ def _prepare_era5_inputs(ckpt, target_date: dt.date):
     if "lon" in ds.dims:
         ds = ds.sortby("lon")
 
+    # Coarsen to match the model's native grid resolution. 0.25°-resolution
+    # ERA5 feeding a 1.0° model blows up the mesh2grid decoder's grid-side
+    # buffer by 16× (observed: 17.8 GB for f32[1,3114720,1536] where 3114720
+    # = 3 × 721 × 1440). Downsample before extract when CHECKPOINT_MATCH
+    # targets a 1.0° checkpoint.
+    if "1p0" in CHECKPOINT_MATCH.lower() or "1.0" in CHECKPOINT_MATCH:
+        new_lat = np.arange(-90.0, 90.0 + 0.5, 1.0)  # 181 points
+        new_lon = np.arange(0.0, 360.0, 1.0)         # 360 points
+        log.info("coarsening ERA5 inputs to 1.0° for 1p0 checkpoint "
+                 "(%d → %d lat, %d → %d lon)",
+                 ds.sizes["lat"], len(new_lat),
+                 ds.sizes["lon"], len(new_lon))
+        ds = ds.interp(lat=new_lat, lon=new_lon)
+        log.info("post-coarsen grid: lat=%d lon=%d", ds.sizes["lat"], ds.sizes["lon"])
+
     actual_times = ds.time.values
     t_init = actual_times[0]
     lead_times = actual_times - t_init
