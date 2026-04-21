@@ -308,11 +308,11 @@ def _prepare_era5_inputs(ckpt, target_date: dt.date):
             dims=["batch", "time", "lat", "lon"],
         )
 
-    # GenCast is a single-step diffusion model: each forward call predicts
-    # ONE 12h step. Multi-step rollout (full 168h) is handled externally by
-    # rollout.chunked_prediction_generator_multiple_runs and is a Phase 1
-    # concern. For Phase 0 we just need to prove one forward pass works.
-    target_lead_times = f"{NATIVE_STEP_H}h"
+    # GenCast is single-step; the full 168h rollout is driven externally by
+    # rollout.chunked_prediction_generator_multiple_runs with
+    # num_steps_per_chunk=1. Pass the full target range so the generator has
+    # the complete template — it slices to one step at a time internally.
+    target_lead_times = slice(f"{NATIVE_STEP_H}h", f"{N_STEPS * NATIVE_STEP_H}h")
     inputs, targets, forcings = data_utils.extract_inputs_targets_forcings(
         ds, target_lead_times=target_lead_times, **_dc.asdict(tc),
     )
@@ -326,9 +326,15 @@ def _prepare_era5_inputs(ckpt, target_date: dt.date):
 
 @phase("sampler_build")
 def _build_sampler(ckpt, stats):
+    """Build jit+pmap'd forward function per DeepMind's gencast_demo_cloud_vm.ipynb.
+
+    Ensemble parallelism is across `jax.local_devices()` via xarray_jax.pmap;
+    each device holds a full copy of the model and runs one ensemble member.
+    The rollout generator (invoked in _run_forecast) drives multi-step rollout.
+    """
     import haiku as hk
     import jax
-    from graphcast import gencast, nan_cleaning, normalization
+    from graphcast import gencast, nan_cleaning, normalization, xarray_jax
 
     denoiser_cfg = ckpt.denoiser_architecture_config
     if hasattr(denoiser_cfg, "sparse_transformer_config"):
@@ -359,55 +365,68 @@ def _build_sampler(ckpt, stats):
 
     @hk.transform_with_state
     def run_forward(inputs, targets_template, forcings):
-        return _wrap()(inputs, targets_template=targets_template, forcings=forcings)
+        predictor = _wrap()
+        return predictor(inputs, targets_template=targets_template, forcings=forcings)
 
-    def _apply(rng, inputs, targets_template, forcings):
-        preds, _ = run_forward.apply(ckpt.params, {}, rng, inputs, targets_template, forcings)
-        return preds
-
-    return jax.jit(_apply)
-
-
-@phase("single_member")
-def _single_member(sampler_fn, inputs, targets, forcings):
-    import jax
-    import numpy as np
-
-    t0 = time.time()
-    preds = sampler_fn(
-        jax.random.PRNGKey(0),
-        inputs,
-        targets * np.nan,
-        forcings,
+    run_forward_jitted = jax.jit(
+        lambda rng, i, t, f: run_forward.apply(ckpt.params, {}, rng, i, t, f)[0]
     )
-    jax.block_until_ready(preds)
-    elapsed = time.time() - t0
-    log.info("single-member forecast: %.1fs for %d steps @ %dh", elapsed, N_STEPS, NATIVE_STEP_H)
-    log.info("prediction dims: %s", dict(preds.dims) if hasattr(preds, "dims") else "?")
-    return preds, elapsed
+    run_forward_pmap = xarray_jax.pmap(run_forward_jitted, dim="sample")
+    log.info("pmap'd forward ready across %d devices", len(jax.local_devices()))
+    return run_forward_pmap
 
 
-@phase("ensemble_5")
-def _ensemble(sampler_fn, inputs, targets, forcings, n: int = ENSEMBLE_SIZE):
+@phase("rollout")
+def _run_rollout(sampler_pmap, inputs, targets, forcings):
+    """Drive GenCast via rollout.chunked_prediction_generator_multiple_runs.
+
+    Matches DeepMind's gencast_demo_cloud_vm.ipynb pattern: N ensemble members
+    are distributed across jax.local_devices() via pmap (one member per
+    device), and the generator yields one 12h step at a time for the full
+    168h horizon. Total forward passes = N_STEPS × ceil(N / num_devices).
+    """
     import jax
     import numpy as np
+    from graphcast import rollout
 
-    keys = jax.random.split(jax.random.PRNGKey(42), n)
-    per_member_times = []
-    t_wall = time.time()
-    members = []
-    for i, key in enumerate(keys):
-        tm = time.time()
-        preds = sampler_fn(key, inputs, targets * np.nan, forcings)
-        jax.block_until_ready(preds)
-        elapsed = time.time() - tm
-        per_member_times.append(elapsed)
-        members.append(preds)
-        log.info("  member %d/%d: %.1fs", i + 1, n, elapsed)
-    wall = time.time() - t_wall
-    log.info("ensemble (%d members): wall=%.1fs per_member_mean=%.1fs",
-             n, wall, sum(per_member_times) / len(per_member_times))
-    return members, wall
+    devices = jax.local_devices()
+    n_devices = len(devices)
+    # Start conservative — one sample per device, matching DeepMind's contract
+    # (num_ensemble_members must be a multiple of num_devices). On 4× A100 this
+    # is 4 samples in parallel; each device holds one full copy of the model.
+    n_samples = n_devices
+    log.info("rolling out %d samples across %d devices (1 sample/device)",
+             n_samples, n_devices)
+
+    rng_root = jax.random.PRNGKey(0)
+    rngs = np.stack([jax.random.fold_in(rng_root, i) for i in range(n_samples)], axis=0)
+
+    t_start = time.time()
+    chunks = []
+    for i, chunk in enumerate(rollout.chunked_prediction_generator_multiple_runs(
+        predictor_fn=sampler_pmap,
+        rngs=rngs,
+        inputs=inputs,
+        targets_template=targets * np.nan,
+        forcings=forcings,
+        num_steps_per_chunk=1,
+        num_samples=n_samples,
+        pmap_devices=devices,
+    )):
+        step_elapsed = time.time() - t_start
+        log.info("  chunk %d: cumulative=%.1fs dims=%s",
+                 i + 1, step_elapsed,
+                 dict(chunk.dims) if hasattr(chunk, "dims") else "?")
+        chunks.append(chunk)
+        log_memory(f"rollout:chunk{i+1}")
+    wall = time.time() - t_start
+
+    log.info("rollout complete: %d chunks across %d samples in %.1fs",
+             len(chunks), n_samples, wall)
+    per_step = wall / max(len(chunks), 1)
+    log.info("per-step wall: %.1fs (projection for 20-member @ 4 devices: %.1fs)",
+             per_step, per_step * N_STEPS * (20 / n_samples))
+    return chunks, wall
 
 
 def main() -> int:
@@ -431,39 +450,35 @@ def main() -> int:
         log.info("SUMMARY: infra probe FAIL")
         return 1
 
-    single_elapsed = None
+    rollout_wall = None
     try:
-        _, single_elapsed = _single_member(sampler_fn, inputs, targets, forcings)
+        chunks, rollout_wall = _run_rollout(sampler_fn, inputs, targets, forcings)
     except Exception:
-        log.exception("single-member inference failed")
-        log.info("SUMMARY: infra OK, inference FAIL")
+        log.exception("rollout failed")
+        log.info("SUMMARY: infra OK, rollout FAIL")
         return 2
 
-    ens_wall = None
-    try:
-        _, ens_wall = _ensemble(sampler_fn, inputs, targets, forcings, ENSEMBLE_SIZE)
-    except Exception:
-        log.exception("ensemble failed — single-member OK, ensemble path needs work")
-
+    import jax
+    n_devices = len(jax.local_devices())
     peak_ram = peak_host_rss_gb()
     log.info("#" * 60)
     log.info("SUMMARY")
-    log.info("  peak host RSS  : %.1f GB  (gate: <%.0f GB)", peak_ram, PEAK_RAM_GATE_GB)
-    log.info("  single-member  : %.1f s   (warn>%.0fs, fail>%.0fs)",
-             single_elapsed, SINGLE_MEMBER_WARN_S, SINGLE_MEMBER_FAIL_S)
-    if ens_wall is not None:
-        log.info("  5-member wall  : %.1f s   (projection for 20-member: %.1fs)",
-                 ens_wall, ens_wall * (20 / ENSEMBLE_SIZE))
+    log.info("  peak host RSS    : %.1f GB  (gate: <%.0f GB)", peak_ram, PEAK_RAM_GATE_GB)
+    log.info("  rollout wall     : %.1f s for %d samples × %d steps",
+             rollout_wall, n_devices, N_STEPS)
+    log.info("  per-step-per-%d  : %.1f s", n_devices, rollout_wall / N_STEPS)
+    log.info("  full 20-member projection: %.1f s",
+             rollout_wall * (20 / n_devices))
     log.info("#" * 60)
 
     if peak_ram >= PEAK_RAM_GATE_GB:
         log.error("GATE FAIL: host RSS ≥ %.0f GB → divert to Path C", PEAK_RAM_GATE_GB)
         return 3
-    if single_elapsed > SINGLE_MEMBER_FAIL_S:
-        log.error("GATE FAIL: single-member > %.0fs → drop ensemble or try 1.0°", SINGLE_MEMBER_FAIL_S)
+    if rollout_wall > SINGLE_MEMBER_FAIL_S * 2:
+        log.error("GATE FAIL: rollout > %.0fs → too slow for weekly pipeline", SINGLE_MEMBER_FAIL_S * 2)
         return 4
-    if single_elapsed > SINGLE_MEMBER_WARN_S:
-        log.warning("GATE SLOW: single-member > %.0fs — plan for smaller ensemble in Phase 1",
+    if rollout_wall > SINGLE_MEMBER_WARN_S:
+        log.warning("GATE SLOW: rollout > %.0fs — consider smaller ensemble in Phase 1",
                     SINGLE_MEMBER_WARN_S)
     log.info("GATE PASS — green light Phase 1")
     return 0
