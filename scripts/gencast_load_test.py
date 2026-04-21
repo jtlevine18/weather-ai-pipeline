@@ -36,7 +36,8 @@ from pathlib import Path
 os.environ.setdefault("XLA_PYTHON_CLIENT_PREALLOCATE", "false")
 os.environ.setdefault("XLA_PYTHON_CLIENT_MEM_FRACTION", "0.95")
 
-LOG_PATH = Path("/tmp/gencast_load.log")
+LABEL = os.environ.get("GENCAST_LABEL", "default")
+LOG_PATH = Path(os.environ.get("GENCAST_LOG_PATH", "/tmp/gencast_load.log"))
 TARGET_DATE = dt.date.today() - dt.timedelta(days=7)
 FORECAST_HORIZON_H = 168
 NATIVE_STEP_H = 12
@@ -46,10 +47,17 @@ PEAK_RAM_GATE_GB = 500.0
 SINGLE_MEMBER_WARN_S = 300.0
 SINGLE_MEMBER_FAIL_S = 600.0
 
+# Configurable via env — the batch driver below sets these per-subprocess.
+CHECKPOINT_MATCH = os.environ.get("GENCAST_CHECKPOINT_MATCH", "")  # e.g. "Operational", "<2019"
+MASK_TYPE = os.environ.get("GENCAST_MASK_TYPE", "full")            # "full" | "lazy" | ...
+NOISE_LEVELS = os.environ.get("GENCAST_NOISE_LEVELS")              # None or int
+
+# Append when a batch driver sets the same log path; truncate in single-run mode.
+_log_mode = "a" if os.environ.get("GENCAST_APPEND_LOG") else "w"
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler(LOG_PATH, mode="w")],
+    format="%(asctime)s %(levelname)s " + f"[{LABEL}] " + "%(message)s",
+    handlers=[logging.StreamHandler(sys.stdout), logging.FileHandler(LOG_PATH, mode=_log_mode)],
 )
 log = logging.getLogger("gencast_load")
 
@@ -115,14 +123,21 @@ def _load_checkpoint():
     log.info("available gencast checkpoints (%d):\n  %s", len(blobs), "\n  ".join(blobs))
     if not blobs:
         raise RuntimeError("no blobs under gs://dm_graphcast/gencast/params/")
-    # Phase 0 fallback: 0.25° operational OOMed on single A100 (80GB) during
-    # rollout. Try 1.0° Mini first to validate the code path end-to-end at a
-    # smaller footprint; upgrade back to 0.25° once the model fits (or we
-    # find a memory-optimization knob).
-    ckpt_name = next(
-        (b for b in blobs if "1p0" in b and "mini" in b.lower()),
-        next((b for b in blobs if "0p25" in b and "operational" in b.lower()), blobs[0]),
-    )
+    # Checkpoint selection is env-driven so the batch driver can cycle
+    # through configs without code edits. Match-first-wins on substring.
+    if CHECKPOINT_MATCH:
+        matches = [b for b in blobs if CHECKPOINT_MATCH.lower() in b.lower()]
+        if not matches:
+            raise RuntimeError(
+                f"GENCAST_CHECKPOINT_MATCH={CHECKPOINT_MATCH!r} matched no blobs. Available:\n  "
+                + "\n  ".join(blobs)
+            )
+        ckpt_name = matches[0]
+    else:
+        ckpt_name = next(
+            (b for b in blobs if "0p25" in b and "operational" in b.lower()),
+            blobs[0],
+        )
     log.info("selected checkpoint: %s", ckpt_name)
     with bucket.blob(ckpt_name).open("rb") as f:
         ckpt = checkpoint.load(f, gencast.CheckPoint)
@@ -343,8 +358,19 @@ def _build_sampler(ckpt, stats):
     denoiser_cfg = ckpt.denoiser_architecture_config
     if hasattr(denoiser_cfg, "sparse_transformer_config"):
         denoiser_cfg.sparse_transformer_config.attention_type = "triblockdiag_mha"
-        denoiser_cfg.sparse_transformer_config.mask_type = "full"
-        log.info("denoiser attention → triblockdiag_mha / full (GPU mode)")
+        denoiser_cfg.sparse_transformer_config.mask_type = MASK_TYPE
+        log.info("denoiser attention → triblockdiag_mha / %s (GPU mode)", MASK_TYPE)
+
+    if NOISE_LEVELS and hasattr(ckpt, "sampler_config"):
+        try:
+            n = int(NOISE_LEVELS)
+            # sampler_config is a frozen dataclass in some versions; mutate
+            # via __dict__ to bypass the guard.
+            old = getattr(ckpt.sampler_config, "num_noise_levels", None)
+            object.__setattr__(ckpt.sampler_config, "num_noise_levels", n)
+            log.info("sampler num_noise_levels: %s → %s", old, n)
+        except Exception as exc:
+            log.warning("failed to override num_noise_levels: %s", exc)
 
     def _wrap():
         p = gencast.GenCast(

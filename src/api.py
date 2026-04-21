@@ -837,7 +837,10 @@ _gencast_load_state = {"running": False, "started_at": None, "finished_at": None
 @app.post("/api/gencast/load-test")
 @limiter.limit("2/minute")
 async def gencast_load_test_run(request: Request):
-    """Kick off scripts/gencast_load_test.py in a subprocess. Test Space only."""
+    """Run Phase 0 batch: 3 GenCast 0.25° variants in sequence.
+
+    Body (optional): {"mode": "batch"|"single"}. Defaults to batch.
+    """
     import subprocess
     import sys as _sys
     import threading
@@ -846,6 +849,15 @@ async def gencast_load_test_run(request: Request):
     if _gencast_load_state["running"]:
         return {"status": "already_running", "state": _gencast_load_state}
 
+    try:
+        body = await request.json()
+    except Exception:
+        body = {}
+    mode = body.get("mode", "batch")
+    script = "scripts/gencast_load_batch.py" if mode == "batch" else "scripts/gencast_load_test.py"
+    _gencast_load_state["mode"] = mode
+    _gencast_load_state["script"] = script
+
     def _run():
         _gencast_load_state["running"] = True
         _gencast_load_state["started_at"] = _dt.utcnow().isoformat()
@@ -853,8 +865,8 @@ async def gencast_load_test_run(request: Request):
         _gencast_load_state["returncode"] = None
         try:
             proc = subprocess.run(
-                [_sys.executable, "scripts/gencast_load_test.py"],
-                capture_output=False, timeout=60 * 60,
+                [_sys.executable, script],
+                capture_output=False, timeout=60 * 90,
             )
             _gencast_load_state["returncode"] = proc.returncode
         except subprocess.TimeoutExpired:
@@ -867,7 +879,7 @@ async def gencast_load_test_run(request: Request):
             _gencast_load_state["running"] = False
 
     threading.Thread(target=_run, daemon=True).start()
-    return {"status": "started"}
+    return {"status": "started", "mode": mode, "script": script}
 
 
 @app.get("/api/gencast/load-test/status")
@@ -877,13 +889,23 @@ def gencast_load_test_status():
 
 @app.get("/api/gencast/load-test/log")
 def gencast_load_test_log():
-    """Return the tail of /tmp/gencast_load.log (last 500 lines)."""
+    """Return the tail of /tmp/gencast_load.log (last 2000 lines — batch can fill fast)."""
     path = "/tmp/gencast_load.log"
     if not os.path.exists(path):
         return {"log": "", "exists": False}
     with open(path, "r") as f:
-        lines = deque(f, maxlen=500)
+        lines = deque(f, maxlen=2000)
     return {"log": "".join(lines), "exists": True, "lines": len(lines)}
+
+
+@app.get("/api/gencast/load-test/summary")
+def gencast_batch_summary():
+    """Return the batch summary file if it exists."""
+    path = "/tmp/gencast_batch_summary.log"
+    if not os.path.exists(path):
+        return {"summary": "", "exists": False}
+    with open(path, "r") as f:
+        return {"summary": f.read(), "exists": True}
 
 
 @app.get("/webhook/history")
