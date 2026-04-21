@@ -387,6 +387,15 @@ def _run_rollout(sampler_pmap, inputs, targets, forcings):
     """
     import jax
     import numpy as np
+
+    # graphcast/rollout.py uses jax.P and jax.NamedSharding which are
+    # top-level aliases added in JAX 0.4.30+. Our pin is 0.4.27 so backfill
+    # them to their canonical locations before importing rollout.
+    if not hasattr(jax, "P"):
+        jax.P = jax.sharding.PartitionSpec
+    if not hasattr(jax, "NamedSharding"):
+        jax.NamedSharding = jax.sharding.NamedSharding
+
     from graphcast import rollout
 
     devices = jax.local_devices()
