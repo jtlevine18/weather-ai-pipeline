@@ -1,7 +1,7 @@
 # Weather AI 2 — Kerala & Tamil Nadu Farming Pipeline
 
 ## Project Vision
-Self-healing, AI-powered weather forecasting for smallholder farmers in Kerala and Tamil Nadu. The pipeline ingests real station data from IMD (India Meteorological Department) with imdlib gridded backup, heals anomalies, generates MOS-corrected forecasts, downscales to farmer GPS coordinates, produces bilingual (Tamil/Malayalam) agricultural advisories via RAG + Claude, and delivers via SMS.
+Self-healing, AI-powered weather forecasting for smallholder farmers in Kerala and Tamil Nadu. The pipeline ingests real station data from IMD (India Meteorological Department) with imdlib gridded backup, heals anomalies, runs a hybrid forecast stack (deterministic GraphCast 0.25° for point forecasts + probabilistic GenCast 1.0° for rainfall exceedance probabilities), downscales to farmer GPS coordinates, produces bilingual (Tamil/Malayalam) agricultural advisories via RAG + Claude, and delivers via SMS.
 
 ---
 
@@ -48,7 +48,7 @@ Each API has exactly ONE job — no source is shared between stages:
 ```
 IMD Scraper + imdlib → Step 1 Ingest     (real station obs, fallback: synthetic)
 Tomorrow.io          → Step 2 Heal        (cross-validation reference)
-GraphCast / NeuralGCM / Open-Meteo → Step 3 Forecast (GraphCast 0.25° on A100, fallback: NeuralGCM 2.8° or Open-Meteo API)
+GraphCast 0.25° (primary, scalar) + GenCast 1.0° (overlay, ensemble) → Step 3 Forecast (both on 4× A100; fallback: NeuralGCM 2.8° or Open-Meteo API)
 NASA POWER           → Step 4 Downscale   (0.5° spatial grid → farmer GPS)
 Claude API           → Step 5 Translate   (RAG advisory + Tamil/Malayalam)
 ```
@@ -59,14 +59,14 @@ Claude API           → Step 5 Translate   (RAG advisory + Tamil/Malayalam)
 |---|---|---|
 | 1 Ingest | `raw_telemetry` | Real IMD station data (scraper → imdlib → synthetic fallback) |
 | 2 Heal | `clean_telemetry` + `healing_log` | Claude Sonnet agentic healer (5 tools: station metadata, historical normals, Tomorrow.io reference, neighboring stations, seasonal context) with rule-based fallback |
-| 3 Forecast | `forecasts` | GraphCast 0.25° on A100 (ERA5 init, single batch for all stations) → XGBoost MOS correction; fallback: NeuralGCM 2.8° or Open-Meteo API |
+| 3 Forecast | `forecasts`, `forecast_ensembles` | GraphCast 0.25° (scalar: temp/wind/humidity/rainfall) + GenCast 1.0° overlay (20-member ensemble → `rain_p10/p50/p90`, `rain_prob_1mm/5mm/15mm`); both on 4× A100; fallback: NeuralGCM or Open-Meteo |
 | 4 Downscale | `forecasts` (updated) | NASA POWER IDW interpolation + lapse-rate elevation correction |
 | 5 Translate | `agricultural_alerts` | Hybrid RAG (FAISS+BM25) + Claude advisory + translation |
 | 6 Deliver | `delivery_log` | Console SMS (Twilio dry-run) |
 
 ### Parallelization
 - Step 2 Heal: Tomorrow.io fetched in batches of 10 with 0.2s sleep
-- Step 3 Forecast: GraphCast (or NeuralGCM fallback) runs once globally (all configured stations from one inference); Open-Meteo fallback fetched in a single batch
+- Step 3 Forecast: GraphCast 0.25° runs once globally (one inference for all configured stations) and writes scalar forecast rows; GenCast 1.0° ensemble then runs as a second pass on the same 4× A100 Space (3 pmap batches × 4 members = 12 total, ~6 min first-run with JIT, ~2 min warm), enriches the same forecast rows with probability columns. GenCast failure is swallowed — pipeline still completes with NULL probability columns.
 - Step 4 Downscale: all configured stations downscaled in parallel via `asyncio.gather()`
 - Step 5 Translate: all advisories generated in parallel via `asyncio.gather()`
 
@@ -76,10 +76,11 @@ Quality score measures **accuracy of compared fields only** (how well IMD temp/r
 ### Degradation chain (independent, never cascades)
 - Claude healing agent unavailable → rule-based fallback (identical output, no reasoning logged)
 - IMD scraper down → imdlib gridded (T-1 day) → synthetic fallback
+- GenCast unavailable (import/OOM/rollout error) → skip probabilistic overlay, leave `rain_prob_*` columns NULL; GraphCast scalars still deliver
 - GraphCast unavailable (no A100/package) → NeuralGCM 2.8° fallback (fits L4 48GB)
 - NeuralGCM also unavailable → Open-Meteo API fallback
 - NWP unavailable (all three) → persistence model (last obs + diurnal adjustment)
-- XGBoost not trained → raw NWP passthrough
+- XGBoost MOS (legacy) → currently disabled; raw NWP passthrough. See `docs/mos-retrain-plan.md` for re-enable plan.
 - Claude down → rule-based template advisories
 - Tomorrow.io down → cross-validate against NASA POWER; if both down, assign quality by data completeness
 - NASA POWER down (heal) → quality score reflects missing cross-validation
@@ -124,8 +125,9 @@ weather AI 2/
 │   ├── ingestion.py           # IMD scraper + imdlib gridded + synthetic fallback
 │   ├── weather_clients.py     # Tomorrow.io, Open-Meteo, NASA POWER, IMD JSON API + imdlib clients
 │   ├── graphcast_client.py    # GraphCast 0.25° forecaster (JAX/A100, ERA5 init, station extraction)
+│   ├── gencast_client.py      # GenCast 1.0° probabilistic forecaster (JAX/4× A100, ensemble via pmap, 12h step, rainfall quantiles + P(rain>X))
 │   ├── neuralgcm_client.py   # NeuralGCM 2.8° forecaster (JAX/GPU, ERA5 init, fallback)
-│   ├── forecasting.py         # HybridNWPModel: NWP + XGBoost MOS + persistence fallback
+│   ├── forecasting.py         # HybridNWPModel: NWP + (legacy XGBoost MOS, currently disabled) + persistence fallback + probability-aware classify_condition
 │   ├── downscaling/           # IDW spatial interpolation + lapse-rate
 │   │   ├── __init__.py        # IDWDownscaler
 │   │   ├── interpolation.py   # haversine, IDW, lapse-rate math
@@ -232,7 +234,8 @@ Crop contexts: verified per-district from state agriculture department data.
 | `raw_telemetry` | telemetry | Real IMD station readings (or synthetic with injected faults) |
 | `clean_telemetry` | telemetry | AI-healed or rule-based cross-validated readings with quality scores |
 | `healing_log` | telemetry | Per-reading AI agent assessments: reasoning, corrections, tools used, tokens, latency |
-| `forecasts` | forecasts | MOS-corrected forecasts (station + farmer-level) |
+| `forecasts` | forecasts | Per-station daily forecasts — GraphCast scalars (temp/rainfall/humidity/wind) + GenCast overlay columns (`rain_p10/p50/p90`, `rain_prob_1mm/5mm/15mm`, `ensemble_size`, `nwp_model_version`) |
+| `forecast_ensembles` | forecasts | Per-member raw rainfall for each `forecasts` row (20 rows per parent), used for LMB decision-regret analysis |
 | `agricultural_alerts` | alerts | Bilingual advisories (advisory_en + advisory_local) |
 | `delivery_log` | delivery | SMS delivery records |
 | `delivery_metrics` | delivery | Per-station delivery aggregates per run |
@@ -251,23 +254,27 @@ Crop contexts: verified per-district from state agriculture department data.
 
 ## Forecasting Model
 
-**Architecture:** MOS (Model Output Statistics) — same approach used by national weather services.
+**Architecture:** Hybrid HRES + ENS pattern, mirroring ECMWF / NOAA / UKMet operational practice. Deterministic point forecast for temp/wind/humidity/rainfall-amount comes from GraphCast 0.25°; probabilistic rainfall (quantiles + exceedance probabilities) comes from a GenCast 1.0° 20-member ensemble on the same Space. See `docs/gencast-integration-plan-v2.md` for the scientific motivation and Phase 0 findings.
 
-- **NWP primary: GraphCast 0.25°** (Google DeepMind's graph neural network, Science 2023)
-  - 0.25° resolution (~28km) — resolves Kerala precipitation (NeuralGCM at 2.8° could not)
-  - Initial conditions: ERA5 reanalysis from ARCO Zarr (free, ~5-day lag via ERA5T)
-  - Single inference pass produces global forecast → extract all configured stations
-  - Requires A100 80GB GPU on HF Spaces
-- **NWP fallback 1: NeuralGCM 2.8°** (Google DeepMind's neural GCM, fits L4 48GB)
-- **NWP fallback 2: Open-Meteo** (GFS/ECMWF via free API, no GPU needed)
-- **XGBoost MOS correction:** trained on residual between NWP and observations
-- **12-feature vector:** `nwp_temp`, `nwp_rainfall`, `humidity`, `wind_speed`, `pressure`, `station_altitude`, `soil_moisture`, `rolling_6h_error`, `recent_temp_trend`, `hour_sin`, `hour_cos`, `doy_sin`
-- **Soil moisture proxy:** NASA POWER `PRECTOTCORR` (mm/day) / 20, capped at 1.0
-- **Rolling error tracking:** per-station 6h error window, updated after each prediction
-- **Fallback:** persistence model (last obs + diurnal adjustment)
-- **Formula:** `Final = NWP_Forecast + XGBoost_Correction(features)`
-- **model_used values:** `graphcast_mos`, `graphcast_only`, `neuralgcm_mos`, `neuralgcm_only`, `hybrid_mos`, `nwp_only`, `persistence`
-- **DVC pipeline:** `scripts/export_training_data.py` → `scripts/train_mos.py` → `models/hybrid_mos.json`
+- **NWP primary (scalar): GraphCast 0.25°** (Google DeepMind, Science 2023)
+  - 0.25° resolution (~28km) — resolves Kerala precipitation at station scale
+  - ERA5 init from ARCO Zarr (free, ~5-day lag via ERA5T)
+  - Single inference pass, all configured stations extracted
+  - Runs on 4× A100 tier alongside GenCast; one A100 holds the model
+- **NWP primary (probabilistic): GenCast 1.0°** (Google DeepMind, Nature 2024)
+  - 1.0° Full checkpoint (`gencast/params/GenCast 1p0deg <2019.npz`)
+  - 12-member default ensemble (configurable via `GENCAST_ENSEMBLE_SIZE` env var, typically 12 for smoke / 20 for prod)
+  - Diffusion sampler via `xarray_jax.pmap(dim="sample")` — 4 members per pmap batch across 4 A100s
+  - ERA5 coarsened to 1.0° before inference (avoids the 0.25° mesh2grid OOM from Phase 0)
+  - Native 12h timestep; 24–48h rainfall window extracted for advisory use
+  - Typical wall time: ~6 min first-run (JIT compile dominates), ~2 min warm
+  - License: CC BY-NC-SA 4.0 on weights (non-commercial use only) — state on any public page
+- **NWP fallback 1: NeuralGCM 2.8°** (fits L4 48GB) — used if GraphCast fails
+- **NWP fallback 2: Open-Meteo** (GFS/ECMWF API, no GPU)
+- **Persistence fallback:** last obs + diurnal adjustment if NWP unavailable
+- **XGBoost MOS (legacy):** currently disabled (the per-station-per-run retrain produced a broken bias offset; see `docs/mos-retrain-plan.md` for the proposed re-enable path following MI's pattern). `model_used='nwp_only'` unless/until retrain lands.
+- **Advisory classifier:** `classify_condition` in `src/forecasting.py` prefers probabilistic inputs when available (`rain_prob_15mm > 0.5` → heavy_rain, `rain_prob_5mm > 0.5` → moderate_rain); falls back to point thresholds otherwise.
+- **model_used values:** `graphcast_only` (scalar path), `gencast_1p0_full` or `gencast_1p0_mini` (probabilistic overlay), `neuralgcm_only`, `persistence`
 
 ---
 
@@ -421,7 +428,7 @@ Weather 2 now follows the same pattern as Market Intelligence and Climate Risk E
 - The Space's `Dockerfile` runs `uvicorn src.api:app` on port 7860. It serves a pipeline tracker page at `/` with a manual **Run Pipeline** button, a `/health` endpoint, and `/api/pipeline/trigger` + `/api/pipeline/status` that the weekly GitHub Action polls. The pipeline does NOT auto-run on Space wake-up — it's triggered explicitly.
 - The Space includes the full main-repo tree (`COPY . .` in the Dockerfile). `frontend/`, `tests/`, `streamlit_app/`, etc. are copied in but unused at runtime — only `src/`, `config.py`, `stations.json`, and `requirements.txt` are read by `src.api:app`. Total tracked size is ~2 MB, so image bloat is negligible.
 - Scheduled weekly via GitHub Action; sleeps between runs to save compute
-- A100 80GB GPU for GraphCast (falls back to NeuralGCM on L4, then Open-Meteo without GPU)
+- **4× A100 80GB tier** (~$10/hr, paused between runs): holds GraphCast + GenCast simultaneously. Host RAM ~568 GB (required for GenCast JIT compile). Fallback chain kicks in if NWP stack unavailable: NeuralGCM on L4 → Open-Meteo without GPU.
 - **Env vars (Space secrets — set these before pushing):** `DATABASE_URL`, `ANTHROPIC_API_KEY`, `TOMORROW_IO_API_KEY`, `JWT_SECRET_KEY` (required if `ENV=production`), `WEBHOOK_SECRET` (only if webhook receiver is wired in), optional `ALLOWED_ORIGINS`
 - **Hardware:** set explicitly in *Settings → Variables and secrets → Hardware* — it does not persist across Space rebuilds automatically
 - **Retired:** `jtlevine/ai-weather-pipeline` (without `-runner`) was the original pipeline-runner Space and has been deleted. Do not reference it in code, docs, or git remotes. The stale `origin` and `hf-api` remotes that used to point at retired Spaces have been removed.
