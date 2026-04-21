@@ -452,6 +452,11 @@ class WeatherPipeline:
         nwp_model_version = getattr(metadata, "model_used", None) or "gencast_1p0"
         ensemble_size = getattr(metadata, "ensemble_size", self.config.gencast.ensemble_size)
 
+        # The conn was acquired at the start of step 1 and has been idle through
+        # GraphCast (~5 min) + GenCast rollout (~5-10 min). Neon kills idle
+        # connections after ~5 min — refresh before attempting writes.
+        self._refresh_conn()
+
         # GenCast returns one probabilistic block per station. Apply it to every
         # daily forecast for that station (GenCast is a 24-48h rainfall total;
         # we attach the same block to all days so downstream classify_condition
