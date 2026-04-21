@@ -827,6 +827,65 @@ async def run_evals(request: Request):
     return {"status": "triggered", "scripts": len(eval_scripts)}
 
 
+# ---------------------------------------------------------------------------
+# GenCast Phase 0 load test (test Space only)
+# ---------------------------------------------------------------------------
+
+_gencast_load_state = {"running": False, "started_at": None, "finished_at": None, "returncode": None}
+
+
+@app.post("/api/gencast/load-test")
+@limiter.limit("2/minute")
+async def gencast_load_test_run(request: Request):
+    """Kick off scripts/gencast_load_test.py in a subprocess. Test Space only."""
+    import subprocess
+    import sys as _sys
+    import threading
+    from datetime import datetime as _dt
+
+    if _gencast_load_state["running"]:
+        return {"status": "already_running", "state": _gencast_load_state}
+
+    def _run():
+        _gencast_load_state["running"] = True
+        _gencast_load_state["started_at"] = _dt.utcnow().isoformat()
+        _gencast_load_state["finished_at"] = None
+        _gencast_load_state["returncode"] = None
+        try:
+            proc = subprocess.run(
+                [_sys.executable, "scripts/gencast_load_test.py"],
+                capture_output=False, timeout=60 * 60,
+            )
+            _gencast_load_state["returncode"] = proc.returncode
+        except subprocess.TimeoutExpired:
+            _gencast_load_state["returncode"] = -1
+        except Exception as exc:
+            logging.getLogger(__name__).exception("gencast load test failed to spawn")
+            _gencast_load_state["returncode"] = -2
+        finally:
+            _gencast_load_state["finished_at"] = _dt.utcnow().isoformat()
+            _gencast_load_state["running"] = False
+
+    threading.Thread(target=_run, daemon=True).start()
+    return {"status": "started"}
+
+
+@app.get("/api/gencast/load-test/status")
+def gencast_load_test_status():
+    return _gencast_load_state
+
+
+@app.get("/api/gencast/load-test/log")
+def gencast_load_test_log():
+    """Return the tail of /tmp/gencast_load.log (last 500 lines)."""
+    path = "/tmp/gencast_load.log"
+    if not os.path.exists(path):
+        return {"log": "", "exists": False}
+    with open(path, "r") as f:
+        lines = deque(f, maxlen=500)
+    return {"log": "".join(lines), "exists": True, "lines": len(lines)}
+
+
 @app.get("/webhook/history")
 @limiter.limit("30/minute")
 async def webhook_history(request: Request):
