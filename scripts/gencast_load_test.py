@@ -396,6 +396,25 @@ def _run_rollout(sampler_pmap, inputs, targets, forcings):
     if not hasattr(jax, "NamedSharding"):
         jax.NamedSharding = jax.sharding.NamedSharding
 
+    # graphcast/rollout.py does `xarray.Dataset(inputs)` where `inputs` is
+    # already a Dataset. xarray <=2024.9 silently copied; xarray >=2024.10
+    # raises TypeError. Restore the old silent-copy behavior so we don't
+    # have to edit the library.
+    import xarray
+    _orig_ds_init = xarray.Dataset.__init__
+
+    def _compat_ds_init(self, data_vars=None, coords=None, attrs=None):
+        if isinstance(data_vars, xarray.Dataset):
+            src = data_vars
+            data_vars = dict(src.data_vars)
+            if coords is None:
+                coords = dict(src.coords)
+            if attrs is None:
+                attrs = dict(src.attrs)
+        _orig_ds_init(self, data_vars, coords, attrs)
+
+    xarray.Dataset.__init__ = _compat_ds_init
+
     from graphcast import rollout
 
     devices = jax.local_devices()
