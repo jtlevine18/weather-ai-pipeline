@@ -331,6 +331,34 @@ class GraphCastClient:
                  len(dynamic_available), len(input_times))
         ds_input = full_ds[dynamic_available].sel(time=input_times, **level_sel).compute()
 
+        # Guard: if critical surface inputs are all-NaN for these timesteps, the
+        # requested init sits past the ARCO Zarr's population horizon (typically
+        # ~5-7 day lag). Raise so the caller falls through to NeuralGCM/Open-Meteo
+        # instead of GraphCast silently running on zero-filled inputs — previously
+        # this propagated as ~-271°C day-0 temps and ~+44°C day-6 drift across
+        # every station.
+        critical_surface = ("2m_temperature", "10m_u_component_of_wind",
+                            "10m_v_component_of_wind", "mean_sea_level_pressure")
+        for var in critical_surface:
+            if var in ds_input and bool(ds_input[var].isnull().all().item()):
+                raise RuntimeError(
+                    f"ERA5 input {var} is all-NaN at {target_date} "
+                    f"(input timesteps {input_times}); ARCO Zarr likely "
+                    f"not yet populated — use an older init date or fall "
+                    f"back to NeuralGCM/Open-Meteo"
+                )
+
+        # Fill residual NaN on input timesteps only — must happen BEFORE concat
+        # with the zero-filled forecast timesteps, otherwise the fill mean gets
+        # dominated by zeros and the input silently becomes zero too.
+        for var in ds_input.data_vars:
+            if ds_input[var].isnull().any():
+                mean_val = float(ds_input[var].mean(skipna=True).values)
+                if np.isnan(mean_val):
+                    ds_input[var] = ds_input[var].fillna(0.0)
+                else:
+                    ds_input[var] = ds_input[var].fillna(mean_val)
+
         # Stage 2: Forecast timesteps (28) with only forcing vars (surface, no levels)
         # Heavy vars get NaN'd in targets anyway
         log.info("Fetching %d forcing vars at %d forecast timesteps...",
@@ -371,14 +399,11 @@ class GraphCastClient:
                 )
                 log.info("Created zero placeholder for missing static var %s", svar)
 
-        # Fill NaN
+        # Residual NaN fill on the concatenated dataset (input-fill already ran
+        # above on ds_input; this only catches static vars and any stragglers).
         for var in ds.data_vars:
             if ds[var].isnull().any():
-                mean_val = float(ds[var].mean(skipna=True).values)
-                if np.isnan(mean_val):
-                    ds[var] = ds[var].fillna(0.0)
-                else:
-                    ds[var] = ds[var].fillna(mean_val)
+                ds[var] = ds[var].fillna(0.0)
 
         # Rename dims to match GraphCast expectations
         rename_map = {}
@@ -452,70 +477,6 @@ class GraphCastClient:
         )
         inference_s = time_mod.time() - t1
         log.info("GraphCast inference completed in %.1fs", inference_s)
-
-        # --- DEBUG-UNITS: one-shot diagnostics of raw model output ---
-        # Captures global min/max/mean of each output variable at the first
-        # and last lead-time, plus ERA5 input distribution for 2m_temperature.
-        # Purpose: localise the temp/wind/humidity drift bug (day-6 temps
-        # ~68°C, wind ~150 km/h, RH=0) that the K→C auto-detect patch
-        # only masked on day 0. Remove once root cause is fixed.
-        try:
-            import numpy as _np
-            preds = predictions
-            if "batch" in preds.dims:
-                preds = preds.isel(batch=0)
-            ntimes = int(preds.sizes["time"])
-            print(f"DEBUG-UNITS: predictions vars={list(preds.data_vars)} ntimes={ntimes}", flush=True)
-            target_vars = (
-                "2m_temperature", "10m_u_component_of_wind",
-                "10m_v_component_of_wind", "specific_humidity",
-                "total_precipitation_6hr",
-            )
-            for var in target_vars:
-                if var not in preds.data_vars:
-                    print(f"DEBUG-UNITS: {var} MISSING", flush=True)
-                    continue
-                for tag, t_idx in (("t0", 0), ("tlast", ntimes - 1)):
-                    try:
-                        arr = preds[var].isel(time=t_idx).values
-                        mn = float(_np.nanmin(arr)); mx = float(_np.nanmax(arr))
-                        me = float(_np.nanmean(arr)); std = float(_np.nanstd(arr))
-                        print(
-                            f"DEBUG-UNITS: {var:<30} {tag:<5} "
-                            f"min={mn:.4g} max={mx:.4g} mean={me:.4g} std={std:.4g} shape={arr.shape}",
-                            flush=True,
-                        )
-                    except Exception as _e:  # noqa: BLE001
-                        print(f"DEBUG-UNITS: {var} {tag} failed: {_e}", flush=True)
-            # Normalization stats for the same variables
-            stats = self._mean_by_level
-            if stats is not None:
-                for var in target_vars:
-                    if var in stats.data_vars:
-                        try:
-                            val = stats[var].values
-                            print(
-                                f"DEBUG-UNITS: mean_by_level[{var}] "
-                                f"min={float(_np.nanmin(val)):.4g} max={float(_np.nanmax(val)):.4g} "
-                                f"mean={float(_np.nanmean(val)):.4g} shape={val.shape}",
-                                flush=True,
-                            )
-                        except Exception as _e:  # noqa: BLE001
-                            print(f"DEBUG-UNITS: mean_by_level[{var}] failed: {_e}", flush=True)
-            # ERA5 input 2m_temperature distribution (confirms ERA5 units)
-            try:
-                t2m_in = inputs["2m_temperature"].values
-                print(
-                    f"DEBUG-UNITS: inputs[2m_temperature] "
-                    f"min={float(_np.nanmin(t2m_in)):.4g} max={float(_np.nanmax(t2m_in)):.4g} "
-                    f"mean={float(_np.nanmean(t2m_in)):.4g} shape={t2m_in.shape}",
-                    flush=True,
-                )
-            except Exception as _e:  # noqa: BLE001
-                print(f"DEBUG-UNITS: inputs 2m_temp failed: {_e}", flush=True)
-        except Exception as _exc:  # noqa: BLE001
-            print(f"DEBUG-UNITS: block failed: {_exc}", flush=True)
-        # --- END DEBUG-UNITS ---
 
         return predictions, inference_s, fetch_s
 
