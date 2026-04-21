@@ -232,8 +232,18 @@ def _prepare_era5_inputs(ckpt, target_date: dt.date):
             mean_val = float(ds_input[var].mean(skipna=True).values)
             ds_input[var] = ds_input[var].fillna(0.0 if np.isnan(mean_val) else mean_val)
 
-    log.info("fetching %d forcing vars × %d forecast timesteps", len(forcing_available), len(forecast_times))
-    ds_forecast_forcing = full_ds[forcing_available].sel(time=forecast_times).compute()
+    if forcing_available:
+        log.info("fetching %d forcing vars × %d forecast timesteps",
+                 len(forcing_available), len(forecast_times))
+        ds_forecast_forcing = full_ds[forcing_available].sel(time=forecast_times).compute()
+    else:
+        # GenCast forcings (year_progress_sin/cos, day_progress_sin/cos) are
+        # time-derived and not stored in ERA5. Start with just a time-indexed
+        # empty dataset; the heavy-var zero-fill loop below adds the rest, and
+        # `data_utils.extract_inputs_targets_forcings` derives the time
+        # forcings from the `datetime` coord we assign later.
+        log.info("no real forcing vars in ERA5 — GenCast forcings are time-derived")
+        ds_forecast_forcing = xarray.Dataset(coords={"time": np.asarray(forecast_times)})
 
     for var in heavy_available:
         template = ds_input[var].isel(time=0)
