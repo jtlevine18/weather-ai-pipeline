@@ -80,7 +80,7 @@ Quality score measures **accuracy of compared fields only** (how well IMD temp/r
 - GraphCast unavailable (no A100/package) → NeuralGCM 2.8° fallback (fits L4 48GB)
 - NeuralGCM also unavailable → Open-Meteo API fallback
 - NWP unavailable (all three) → persistence model (last obs + diurnal adjustment)
-- XGBoost MOS (legacy) → currently disabled; raw NWP passthrough. See `docs/mos-retrain-plan.md` for re-enable plan.
+- XGBoost MOS (legacy) → removed; raw NWP passthrough. Superseded by GenCast ensemble output.
 - Claude down → rule-based template advisories
 - Tomorrow.io down → cross-validate against NASA POWER; if both down, assign quality by data completeness
 - NASA POWER down (heal) → quality score reflects missing cross-validation
@@ -272,7 +272,7 @@ Crop contexts: verified per-district from state agriculture department data.
 - **NWP fallback 1: NeuralGCM 2.8°** (fits L4 48GB) — used if GraphCast fails
 - **NWP fallback 2: Open-Meteo** (GFS/ECMWF API, no GPU)
 - **Persistence fallback:** last obs + diurnal adjustment if NWP unavailable
-- **XGBoost MOS (legacy):** currently disabled (the per-station-per-run retrain produced a broken bias offset; see `docs/mos-retrain-plan.md` for the proposed re-enable path following MI's pattern). `model_used='nwp_only'` unless/until retrain lands.
+- **XGBoost MOS (legacy):** removed. The per-station-per-run retrain loop produced a broken bias offset that made forecasts worse. GenCast's 20-member ensemble provides the per-event rainfall uncertainty MOS was supposed to deliver.
 - **Advisory classifier:** `classify_condition` in `src/forecasting.py` prefers probabilistic inputs when available (`rain_prob_15mm > 0.5` → heavy_rain, `rain_prob_5mm > 0.5` → moderate_rain); falls back to point thresholds otherwise.
 - **model_used values:** `graphcast_only` (scalar path), `gencast_1p0_full` or `gencast_1p0_mini` (probabilistic overlay), `neuralgcm_only`, `persistence`
 
