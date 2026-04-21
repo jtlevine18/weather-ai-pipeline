@@ -679,6 +679,17 @@ class GenCastClient:
                       "keys=%s", list(preds.data_vars))
             return results
 
+        # Temperature for validation experiment: extract 2m_temperature for all
+        # 14 forecast steps (the full 7 days) per member. Compared offline
+        # against GraphCast raw temps + NASA POWER ground truth to decide
+        # whether to extract GenCast temps production-side. Missing var → we
+        # just skip temp — rainfall extraction still proceeds.
+        temp_var = next(
+            (v for v in ("2m_temperature", "t2m", "temperature_2m")
+             if v in preds), None,
+        )
+        temp_full = preds[temp_var] if temp_var is not None else None
+
         lon_values = preds[lon_name].values
         uses_360 = float(lon_values.max()) > 180.0
 
@@ -737,6 +748,24 @@ class GenCastClient:
                     "rain_prob_15mm": round(prob_15mm, 3),
                     "rainfall_ensemble": [round(x, 3) for x in ensemble_list],
                 }
+
+                if temp_full is not None:
+                    try:
+                        temp_point = temp_full.interp(
+                            **{lat_name: float(station.lat), lon_name: stn_lon},
+                        )
+                        # Align to (time, sample) regardless of input ordering.
+                        if "time" in temp_point.dims and "sample" in temp_point.dims:
+                            temp_point = temp_point.transpose("time", "sample")
+                        temp_k = np.asarray(temp_point.values, dtype=np.float32)
+                        temp_c = np.clip(temp_k - 273.15, -50.0, 60.0)
+                        results[station.station_id]["temperature_by_step"] = [
+                            [round(float(v), 2) for v in step_arr]
+                            for step_arr in temp_c
+                        ]
+                    except Exception as temp_exc:
+                        log.warning("GenCast temp extract failed for %s: %s",
+                                    station.station_id, temp_exc)
             except Exception as exc:
                 log.warning("GenCast station extract failed for %s: %s",
                             station.station_id, exc)

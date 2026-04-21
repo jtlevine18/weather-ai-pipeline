@@ -299,6 +299,28 @@ CREATE TABLE IF NOT EXISTS forecast_ensembles (
     rainfall    DOUBLE PRECISION,
     PRIMARY KEY (forecast_id, member_idx)
 );
+
+-- Scratch table for the GenCast temperature validation experiment.
+-- Records per-station × per-step × per-member GenCast 2m_temperature so we
+-- can compare against GraphCast raw temps + NASA POWER ground truth and
+-- decide whether to surface GenCast temps production-side. Safe to DROP
+-- after the experiment concludes.
+CREATE TABLE IF NOT EXISTS gencast_temp_validation (
+    id              VARCHAR PRIMARY KEY,
+    pipeline_run_id VARCHAR,
+    station_id      VARCHAR NOT NULL,
+    station_lat     DOUBLE PRECISION,
+    station_lon     DOUBLE PRECISION,
+    target_date     VARCHAR,
+    forecast_day    INTEGER,
+    time_step_idx   INTEGER NOT NULL,
+    member_idx      INTEGER NOT NULL,
+    temperature_c   DOUBLE PRECISION,
+    model_version   VARCHAR,
+    created_at      TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_gencast_temp_val_station_day
+    ON gencast_temp_validation (station_id, forecast_day);
 """
 
 
@@ -341,6 +363,7 @@ from src.database.forecasts import (  # noqa: E402, F401
     get_recent_forecasts,
     get_forecast_actuals,
     insert_forecast_ensemble,
+    insert_gencast_temp_validation,
     update_forecast_downscaled,
     update_forecast_probabilistic,
 )

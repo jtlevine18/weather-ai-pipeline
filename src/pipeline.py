@@ -22,6 +22,7 @@ from src.database import (init_db, insert_clean_telemetry, insert_forecast,
                             get_latest_clean_for_station,
                             get_clean_history_for_station,
                             insert_forecast_ensemble,
+                            insert_gencast_temp_validation,
                             update_forecast_downscaled,
                             update_forecast_probabilistic)
 from src.ingestion       import ingest_all_stations
@@ -508,6 +509,48 @@ class WeatherPipeline:
             f"  [green]✓[/green] GenCast: {n_updated} forecast rows enriched | "
             f"ensemble={ensemble_size} | model={nwp_model_version}"
         )
+
+        # Scratch: GenCast temperature validation rows. Records per-station
+        # per-step per-member 2m_temperature so we can compare against
+        # GraphCast raw temps + NASA POWER ground truth offline. Decides
+        # whether to replace NASA POWER downscaling with GenCast temps.
+        station_lookup = {s.station_id: s for s in STATIONS}
+        target_date_str = getattr(metadata, "target_date", None)
+        temp_rows: List[Dict[str, Any]] = []
+        for station_id, block in per_station.items():
+            temp_by_step = block.get("temperature_by_step")
+            if not temp_by_step:
+                continue
+            stn = station_lookup.get(station_id) or station_lookup.get(str(station_id))
+            stn_lat = getattr(stn, "lat", None) if stn else None
+            stn_lon = getattr(stn, "lon", None) if stn else None
+            for step_idx, member_vals in enumerate(temp_by_step):
+                for member_idx, temp_c in enumerate(member_vals):
+                    if temp_c is None:
+                        continue
+                    temp_rows.append({
+                        "id": f"{target_date_str}_{station_id}_{step_idx}_{member_idx}",
+                        "pipeline_run_id": self.run_id,
+                        "station_id": station_id,
+                        "station_lat": stn_lat,
+                        "station_lon": stn_lon,
+                        "target_date": target_date_str,
+                        "forecast_day": step_idx // 2,
+                        "time_step_idx": step_idx,
+                        "member_idx": member_idx,
+                        "temperature_c": float(temp_c),
+                        "model_version": nwp_model_version,
+                    })
+        if temp_rows:
+            try:
+                insert_gencast_temp_validation(self.conn, temp_rows)
+                log.info("GenCast temp validation: wrote %d rows (scratch)",
+                          len(temp_rows))
+                console.print(
+                    f"  [dim]GenCast temp validation: {len(temp_rows)} rows → scratch table[/dim]"
+                )
+            except Exception as exc:
+                log.warning("GenCast temp validation write failed: %s", exc)
 
         # Expose metadata so api.py can surface it on /api/pipeline/status.
         # rollout_wall_s is the single number we want to capture off the

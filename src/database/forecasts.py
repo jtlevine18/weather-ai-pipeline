@@ -138,3 +138,28 @@ def get_forecast_actuals(conn: Any,
     ).fetchall()
     actuals = _rows_to_dicts(conn, rows2)
     return forecasts, actuals
+
+
+def insert_gencast_temp_validation(
+    conn: Any, rows: Iterable[Dict[str, Any]]
+) -> None:
+    """Bulk-insert GenCast temperature validation rows (scratch experiment).
+
+    One row per (station, time_step, member). Idempotent — the row id is
+    ``{target_date}_{station_id}_{step_idx}_{member_idx}`` so re-running the
+    same pipeline against the same target_date is a no-op.
+    """
+    for row in rows:
+        conn.execute(
+            """INSERT INTO gencast_temp_validation
+               (id, pipeline_run_id, station_id, station_lat, station_lon,
+                target_date, forecast_day, time_step_idx, member_idx,
+                temperature_c, model_version)
+               VALUES (?,?,?,?,?,?,?,?,?,?,?)
+               ON CONFLICT (id) DO NOTHING""",
+            [row["id"], row.get("pipeline_run_id"), row["station_id"],
+             row.get("station_lat"), row.get("station_lon"),
+             row.get("target_date"), row.get("forecast_day"),
+             row["time_step_idx"], row["member_idx"],
+             row.get("temperature_c"), row.get("model_version")],
+        )
