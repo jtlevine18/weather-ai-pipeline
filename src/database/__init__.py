@@ -341,6 +341,7 @@ from src.database.forecasts import (  # noqa: E402, F401
     get_recent_forecasts,
     get_forecast_actuals,
     insert_forecast_ensemble,
+    update_forecast_downscaled,
     update_forecast_probabilistic,
 )
 from src.database.alerts import (  # noqa: E402, F401

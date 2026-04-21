@@ -22,6 +22,7 @@ from src.database import (init_db, insert_clean_telemetry, insert_forecast,
                             get_latest_clean_for_station,
                             get_clean_history_for_station,
                             insert_forecast_ensemble,
+                            update_forecast_downscaled,
                             update_forecast_probabilistic)
 from src.ingestion       import ingest_all_stations
 from src.weather_clients import TomorrowIOClient, OpenMeteoClient, NASAPowerClient
@@ -591,6 +592,18 @@ class WeatherPipeline:
             if adj["idw_temp"] is not None and adj["lapse_delta"] is not None:
                 result["temperature"] = round(adj["idw_temp"] + adj["lapse_delta"], 2)
                 result["condition"] = classify_condition(result)
+                # Persist the downscaled value back to Neon so the Vercel
+                # frontend / LMB consumers read the climate-corrected number,
+                # not the raw GraphCast NWP temp (which is cold-biased at
+                # 6-12 day lead and undershoots daily peaks due to sparse 6h
+                # sampling). The forecast row was inserted in step_forecast
+                # with the raw value; this UPDATE supersedes it.
+                try:
+                    update_forecast_downscaled(
+                        self.conn, fc["id"], result["temperature"], result["condition"],
+                    )
+                except Exception as exc:
+                    log.warning("Downscale persistence failed for %s: %s", fc["id"], exc)
             downscaled.append(result)
 
         n_ds = sum(1 for f in downscaled if f.get("downscaled"))
