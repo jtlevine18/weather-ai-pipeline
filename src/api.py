@@ -716,17 +716,28 @@ async def trigger_pipeline(request: Request):
             pipeline = WeatherPipeline(cfg)
             _install_progress_tracking(pipeline)
             asyncio.run(pipeline.run())
-            _pipeline_status["last_result"] = {
+            result = {
                 "status": "ok",
                 "duration_s": round(_time.time() - start, 1),
             }
+            gencast_meta = getattr(pipeline, "_last_gencast_meta", None)
+            if gencast_meta:
+                result["gencast"] = gencast_meta
+            _pipeline_status["last_result"] = result
         except Exception as exc:
             logging.getLogger(__name__).exception("Triggered pipeline failed")
-            _pipeline_status["last_result"] = {
+            result = {
                 "status": "failed",
                 "error": str(exc)[:500],
                 "duration_s": round(_time.time() - start, 1),
             }
+            try:
+                gencast_meta = getattr(pipeline, "_last_gencast_meta", None)
+                if gencast_meta:
+                    result["gencast"] = gencast_meta
+            except Exception:
+                pass
+            _pipeline_status["last_result"] = result
         finally:
             _pipeline_status["last_run"] = _dt.utcnow().isoformat()
             _pipeline_status["running"] = False

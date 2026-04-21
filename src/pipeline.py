@@ -503,6 +503,19 @@ class WeatherPipeline:
             f"ensemble={ensemble_size} | model={nwp_model_version}"
         )
 
+        # Expose metadata so api.py can surface it on /api/pipeline/status.
+        # rollout_wall_s is the single number we want to capture off the
+        # smoke test to extrapolate cost.
+        self._last_gencast_meta = {
+            "model_used": nwp_model_version,
+            "ensemble_size": ensemble_size,
+            "rollout_wall_s": getattr(metadata, "rollout_wall_s", None),
+            "checkpoint_name": getattr(metadata, "checkpoint_name", None),
+            "target_date": getattr(metadata, "target_date", None),
+            "members_per_batch": getattr(metadata, "members_per_batch", None),
+            "n_stations_enriched": n_updated,
+        }
+
     # ------------------------------------------------------------------
     # Step 4: Downscale
     # ------------------------------------------------------------------

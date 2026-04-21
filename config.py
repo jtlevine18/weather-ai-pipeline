@@ -69,9 +69,15 @@ class DPIConfig:
 
 @dataclass
 class GenCastConfig:
-    enabled: bool = True
-    ensemble_size: int = 20
-    checkpoint_match: str = "1p0deg <2019"  # fallback: "1p0deg Mini"
+    enabled: bool = field(
+        default_factory=lambda: os.getenv("GENCAST_ENABLED", "true").lower() not in ("false", "0", "no")
+    )
+    ensemble_size: int = field(
+        default_factory=lambda: int(os.getenv("GENCAST_ENSEMBLE_SIZE", "20"))
+    )
+    checkpoint_match: str = field(
+        default_factory=lambda: os.getenv("GENCAST_CHECKPOINT_MATCH", "1p0deg <2019")
+    )
     probability_thresholds_mm: tuple = (1.0, 5.0, 15.0)
 
 
