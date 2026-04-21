@@ -29,21 +29,37 @@ SUMMARY = Path("/tmp/gencast_batch_summary.log")
 SCRIPT = Path(__file__).parent / "gencast_load_test.py"
 
 VARIANTS = [
+    # Singles on 0.25° Operational
     {
-        "GENCAST_LABEL": "A_lazy_mask",
+        "GENCAST_LABEL": "A_lazy",
         "GENCAST_CHECKPOINT_MATCH": "Operational",
         "GENCAST_MASK_TYPE": "lazy",
     },
     {
-        "GENCAST_LABEL": "B_fewer_noise",
+        "GENCAST_LABEL": "B_noise8",
         "GENCAST_CHECKPOINT_MATCH": "Operational",
         "GENCAST_MASK_TYPE": "full",
         "GENCAST_NOISE_LEVELS": "8",
     },
+    # Operational + both knobs (A+B)
     {
-        "GENCAST_LABEL": "C_older_checkpoint",
+        "GENCAST_LABEL": "AB_lazy_noise8",
+        "GENCAST_CHECKPOINT_MATCH": "Operational",
+        "GENCAST_MASK_TYPE": "lazy",
+        "GENCAST_NOISE_LEVELS": "8",
+    },
+    # Older 0.25° checkpoint alone (C)
+    {
+        "GENCAST_LABEL": "C_older",
         "GENCAST_CHECKPOINT_MATCH": "0p25deg <2019",
         "GENCAST_MASK_TYPE": "full",
+    },
+    # Kitchen sink: older checkpoint + both knobs (A+B+C)
+    {
+        "GENCAST_LABEL": "ABC_kitchen_sink",
+        "GENCAST_CHECKPOINT_MATCH": "0p25deg <2019",
+        "GENCAST_MASK_TYPE": "lazy",
+        "GENCAST_NOISE_LEVELS": "8",
     },
 ]
 
