@@ -20,7 +20,9 @@ from src.database import (init_db, insert_clean_telemetry, insert_forecast,
                             insert_personalized_advisory,
                             start_pipeline_run, finish_pipeline_run,
                             get_latest_clean_for_station,
-                            get_clean_history_for_station)
+                            get_clean_history_for_station,
+                            insert_forecast_ensemble,
+                            update_forecast_probabilistic)
 from src.ingestion       import ingest_all_stations
 from src.weather_clients import TomorrowIOClient, OpenMeteoClient, NASAPowerClient
 from src.healing         import RuleBasedFallback, HealingAgent
@@ -404,9 +406,102 @@ class WeatherPipeline:
         console.print(
             f"  [green]✓[/green] {len(forecasts)} daily forecasts ({n_stations} stations × {n_days} days) | {mos_count} MOS | NWP: {nwp_summary}"
         )
+
+        # --- GenCast 1.0° probabilistic overlay (additive, optional) ---
+        # Runs after GraphCast has inserted the scalar columns. On success we
+        # UPDATE the rain_p*/rain_prob_* columns and write ensemble children.
+        # On any failure we warn + continue — those columns stay NULL and the
+        # pipeline step still reports success. Matches the degradation chain.
+        if forecasts and self.config.gencast.enabled:
+            await self._run_gencast_overlay(forecasts)
+
         # Validate stage output
         forecasts = [Forecast(**f).model_dump() for f in forecasts]
         return forecasts
+
+    async def _run_gencast_overlay(self, forecasts: List[Dict[str, Any]]) -> None:
+        """Run GenCast 1.0° ensemble and enrich existing forecast rows.
+
+        Mutates ``forecasts`` in-place to attach rain_prob_5mm (so downstream
+        classify_condition can use it) and writes the probabilistic columns +
+        ensemble children to the database. All failures are swallowed with a
+        warning — this is additive and must never fail step_forecast.
+        """
+        try:
+            from src.gencast_client import GenCastClient, is_gencast_available
+        except Exception as exc:
+            log.warning("GenCast import failed — skipping probabilistic overlay: %s", exc)
+            return
+
+        if not is_gencast_available():
+            log.info("GenCast unavailable — skipping probabilistic overlay")
+            return
+
+        console.print(f"  [dim]GenCast 1.0°: {self.config.gencast.ensemble_size}-member ensemble[/dim]")
+        try:
+            client = GenCastClient(
+                ensemble_size=self.config.gencast.ensemble_size,
+                checkpoint_match=self.config.gencast.checkpoint_match,
+            )
+            per_station, metadata = await client.forecast(STATIONS, target_date=None)
+        except Exception as exc:
+            log.warning("GenCast rollout failed — leaving rain_prob_* columns NULL: %s", exc)
+            console.print(f"  [yellow]⚠[/yellow] GenCast failed: {exc}")
+            return
+
+        nwp_model_version = getattr(metadata, "model_used", None) or "gencast_1p0"
+        ensemble_size = getattr(metadata, "ensemble_size", self.config.gencast.ensemble_size)
+
+        # GenCast returns one probabilistic block per station. Apply it to every
+        # daily forecast for that station (GenCast is a 24-48h rainfall total;
+        # we attach the same block to all days so downstream classify_condition
+        # can read rain_prob_5mm). A finer-grained per-day GenCast rollout is a
+        # future refinement — out of scope for Phase 2.
+        n_updated = 0
+        for fc in forecasts:
+            block = per_station.get(fc["station_id"]) or per_station.get(str(fc["station_id"]))
+            if not block:
+                continue
+
+            # Attach to the in-memory dict so classify_condition downstream
+            # (step_downscale) can see the probability.
+            fc["rain_p10"] = block.get("rain_p10")
+            fc["rain_p50"] = block.get("rain_p50")
+            fc["rain_p90"] = block.get("rain_p90")
+            fc["rain_prob_1mm"] = block.get("rain_prob_1mm")
+            fc["rain_prob_5mm"] = block.get("rain_prob_5mm")
+            fc["rain_prob_15mm"] = block.get("rain_prob_15mm")
+            fc["ensemble_size"] = ensemble_size
+            fc["nwp_model_version"] = nwp_model_version
+
+            try:
+                update_forecast_probabilistic(
+                    self.conn,
+                    fc["id"],
+                    rain_p10=block.get("rain_p10"),
+                    rain_p50=block.get("rain_p50"),
+                    rain_p90=block.get("rain_p90"),
+                    rain_prob_1mm=block.get("rain_prob_1mm"),
+                    rain_prob_5mm=block.get("rain_prob_5mm"),
+                    rain_prob_15mm=block.get("rain_prob_15mm"),
+                    ensemble_size=ensemble_size,
+                    nwp_model_version=nwp_model_version,
+                )
+                members = block.get("rainfall_ensemble") or []
+                if members:
+                    insert_forecast_ensemble(
+                        self.conn,
+                        fc["id"],
+                        [(idx, float(val)) for idx, val in enumerate(members)],
+                    )
+                n_updated += 1
+            except Exception as exc:
+                log.warning("GenCast persistence failed for %s: %s", fc["id"], exc)
+
+        console.print(
+            f"  [green]✓[/green] GenCast: {n_updated} forecast rows enriched | "
+            f"ensemble={ensemble_size} | model={nwp_model_version}"
+        )
 
     # ------------------------------------------------------------------
     # Step 4: Downscale

@@ -25,6 +25,13 @@ def classify_condition(forecast: Dict[str, Any]) -> str:
     rh     = forecast.get("humidity", 60.0) or 60.0
     rain   = forecast.get("rainfall", 0.0) or 0.0
     wind   = forecast.get("wind_speed", 5.0) or 5.0
+    prob_5mm = forecast.get("rain_prob_5mm")
+
+    # GenCast probability gate: P(rain>5mm) >= 0.5 means the ensemble majority
+    # clears the farmer-actionable threshold → classify as rainy even if the
+    # deterministic point rainfall is under 5mm. Falls back to raw thresholds.
+    if prob_5mm is not None and prob_5mm >= 0.5:
+        return "heavy_rain" if rain > 15.0 else "moderate_rain"
 
     if rain > 15.0:
         return "heavy_rain"

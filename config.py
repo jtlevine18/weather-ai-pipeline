@@ -68,11 +68,20 @@ class DPIConfig:
 
 
 @dataclass
+class GenCastConfig:
+    enabled: bool = True
+    ensemble_size: int = 20
+    checkpoint_match: str = "1p0deg <2019"  # fallback: "1p0deg Mini"
+    probability_thresholds_mm: tuple = (1.0, 5.0, 15.0)
+
+
+@dataclass
 class PipelineConfig:
     weather: WeatherDataConfig = field(default_factory=WeatherDataConfig)
     delivery: DeliveryConfig = field(default_factory=DeliveryConfig)
     translation: TranslationConfig = field(default_factory=TranslationConfig)
     neuralgcm: NeuralGCMConfig = field(default_factory=NeuralGCMConfig)
+    gencast: GenCastConfig = field(default_factory=GenCastConfig)
     dpi: DPIConfig = field(default_factory=DPIConfig)
     database_url: str = field(default_factory=lambda: os.getenv("DATABASE_URL", ""))
     tomorrow_io_key: str = field(default_factory=lambda: os.getenv("TOMORROW_IO_API_KEY", ""))

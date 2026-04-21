@@ -1,18 +1,28 @@
 """CRUD helpers for the forecasts table."""
 
 from __future__ import annotations
-from typing import Any, Dict, List
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 
 from src.database._util import _rows_to_dicts
 
 
 def insert_forecast(conn: Any, record: Dict[str, Any]) -> None:
+    """Insert a forecast row.
+
+    The 8 GenCast columns (rain_p10/p50/p90, rain_prob_1mm/5mm/15mm,
+    ensemble_size, nwp_model_version) are optional keyword-equivalent keys on
+    ``record`` and default to NULL. Existing callers that don't pass them
+    continue to work unchanged — the schema keeps all new columns nullable.
+    """
     conn.execute(
         """INSERT INTO forecasts
            (id, station_id, issued_at, valid_for_ts, temperature, humidity,
             wind_speed, rainfall, condition, model_used, nwp_source, nwp_temp,
-            correction, confidence, forecast_day)
-           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
+            correction, confidence, forecast_day,
+            rain_p10, rain_p50, rain_p90,
+            rain_prob_1mm, rain_prob_5mm, rain_prob_15mm,
+            ensemble_size, nwp_model_version)
+           VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)
            ON CONFLICT (id) DO NOTHING""",
         [record["id"], record["station_id"], record["issued_at"], record["valid_for_ts"],
          record.get("temperature"), record.get("humidity"), record.get("wind_speed"),
@@ -21,8 +31,67 @@ def insert_forecast(conn: Any, record: Dict[str, Any]) -> None:
          record.get("nwp_source", "open_meteo"),
          record.get("nwp_temp"), record.get("correction", 0.0),
          record.get("confidence", 0.7),
-         record.get("forecast_day", 0)],
+         record.get("forecast_day", 0),
+         record.get("rain_p10"), record.get("rain_p50"), record.get("rain_p90"),
+         record.get("rain_prob_1mm"), record.get("rain_prob_5mm"), record.get("rain_prob_15mm"),
+         record.get("ensemble_size"), record.get("nwp_model_version")],
     )
+
+
+def update_forecast_probabilistic(
+    conn: Any,
+    forecast_id: str,
+    *,
+    rain_p10: Optional[float] = None,
+    rain_p50: Optional[float] = None,
+    rain_p90: Optional[float] = None,
+    rain_prob_1mm: Optional[float] = None,
+    rain_prob_5mm: Optional[float] = None,
+    rain_prob_15mm: Optional[float] = None,
+    ensemble_size: Optional[int] = None,
+    nwp_model_version: Optional[str] = None,
+) -> None:
+    """Update the GenCast probabilistic columns on an existing forecast row.
+
+    Used by the pipeline after GenCast runs — the forecast row is already
+    inserted by GraphCast; GenCast only enriches the probabilistic fields.
+    """
+    conn.execute(
+        """UPDATE forecasts
+              SET rain_p10          = ?,
+                  rain_p50          = ?,
+                  rain_p90          = ?,
+                  rain_prob_1mm     = ?,
+                  rain_prob_5mm     = ?,
+                  rain_prob_15mm    = ?,
+                  ensemble_size     = ?,
+                  nwp_model_version = ?
+            WHERE id = ?""",
+        [rain_p10, rain_p50, rain_p90,
+         rain_prob_1mm, rain_prob_5mm, rain_prob_15mm,
+         ensemble_size, nwp_model_version,
+         forecast_id],
+    )
+
+
+def insert_forecast_ensemble(
+    conn: Any,
+    forecast_id: str,
+    members: Iterable[Tuple[int, float]],
+) -> None:
+    """Insert ensemble member rainfall values for one forecast.
+
+    ``members`` is an iterable of ``(member_idx, rainfall_mm)`` tuples. The
+    table has a composite primary key (forecast_id, member_idx); repeat inserts
+    are a no-op via ON CONFLICT DO NOTHING so the call stays idempotent.
+    """
+    for member_idx, rainfall in members:
+        conn.execute(
+            """INSERT INTO forecast_ensembles (forecast_id, member_idx, rainfall)
+               VALUES (?, ?, ?)
+               ON CONFLICT (forecast_id, member_idx) DO NOTHING""",
+            [forecast_id, member_idx, rainfall],
+        )
 
 
 def get_recent_forecasts(conn: Any,

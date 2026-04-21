@@ -280,6 +280,25 @@ ALTER TABLE agricultural_alerts    ADD COLUMN IF NOT EXISTS crop_sms  VARCHAR;
 ALTER TABLE personalized_advisories ADD COLUMN IF NOT EXISTS sms_en    VARCHAR;
 ALTER TABLE personalized_advisories ADD COLUMN IF NOT EXISTS sms_local VARCHAR;
 ALTER TABLE delivery_log           ADD COLUMN IF NOT EXISTS sms_text  VARCHAR;
+
+-- GenCast 1.0° probabilistic rainfall columns (Phase 2). All nullable so
+-- historical rows stay valid; GenCast runs additively after GraphCast and
+-- populates these via UPDATE. If GenCast fails or is disabled they remain NULL.
+ALTER TABLE forecasts ADD COLUMN IF NOT EXISTS rain_p10          DOUBLE PRECISION;
+ALTER TABLE forecasts ADD COLUMN IF NOT EXISTS rain_p50          DOUBLE PRECISION;
+ALTER TABLE forecasts ADD COLUMN IF NOT EXISTS rain_p90          DOUBLE PRECISION;
+ALTER TABLE forecasts ADD COLUMN IF NOT EXISTS rain_prob_1mm     DOUBLE PRECISION;
+ALTER TABLE forecasts ADD COLUMN IF NOT EXISTS rain_prob_5mm     DOUBLE PRECISION;
+ALTER TABLE forecasts ADD COLUMN IF NOT EXISTS rain_prob_15mm    DOUBLE PRECISION;
+ALTER TABLE forecasts ADD COLUMN IF NOT EXISTS ensemble_size     INTEGER;
+ALTER TABLE forecasts ADD COLUMN IF NOT EXISTS nwp_model_version VARCHAR;
+
+CREATE TABLE IF NOT EXISTS forecast_ensembles (
+    forecast_id VARCHAR NOT NULL REFERENCES forecasts(id) ON DELETE CASCADE,
+    member_idx  INTEGER NOT NULL,
+    rainfall    DOUBLE PRECISION,
+    PRIMARY KEY (forecast_id, member_idx)
+);
 """
 
 
@@ -321,6 +340,8 @@ from src.database.forecasts import (  # noqa: E402, F401
     insert_forecast,
     get_recent_forecasts,
     get_forecast_actuals,
+    insert_forecast_ensemble,
+    update_forecast_probabilistic,
 )
 from src.database.alerts import (  # noqa: E402, F401
     insert_alert,

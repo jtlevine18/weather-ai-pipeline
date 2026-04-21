@@ -62,6 +62,16 @@ export interface Forecast {
   // switch the UI to the single `temperature` field.
   temp_min?: number
   temp_max?: number
+  // Probabilistic rainfall columns from the ensemble path. All optional —
+  // historical rows written before the hybrid rollout have them NULL.
+  rain_p10?: number | null
+  rain_p50?: number | null
+  rain_p90?: number | null
+  rain_prob_1mm?: number | null
+  rain_prob_5mm?: number | null
+  rain_prob_15mm?: number | null
+  ensemble_size?: number | null
+  nwp_model_version?: string | null
 }
 
 // Matches DB `agricultural_alerts` table columns

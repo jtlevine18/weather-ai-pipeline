@@ -1,5 +1,6 @@
 import { REGION } from '../regionConfig'
 import type { Forecast } from '../api/hooks'
+import { ProbabilityChip } from './ProbabilityChip'
 
 function formatDay(dateStr: string | undefined, day: number | undefined): string {
   if (dateStr) {
@@ -109,6 +110,11 @@ export function ForecastStrip({ forecasts }: Props) {
               {f.condition}
             </div>
           )}
+          <ProbabilityChip
+            rain_prob_5mm={f.rain_prob_5mm}
+            rainfall={f.rainfall}
+            rain_p50={f.rain_p50}
+          />
         </div>
       ))}
     </div>

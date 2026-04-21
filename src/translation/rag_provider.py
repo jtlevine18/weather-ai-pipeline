@@ -8,6 +8,8 @@ import logging
 import re
 from typing import Any, Dict, List, Optional, Tuple, Union
 
+from src.translation.prompt_helpers import describe_probabilistic_day
+
 log = logging.getLogger(__name__)
 
 SCORE_THRESHOLD = 0.35
@@ -200,8 +202,21 @@ class RAGProvider:
             temp = fc.get("temperature", 25.0) or 25.0
             rain = fc.get("rainfall", 0.0) or 0.0
             wind = fc.get("wind_speed", 0.0) or 0.0
+            # When ensemble probability is available, prepend a natural-language
+            # probabilistic phrase so Claude writes "likely moderate rain
+            # Day 3" instead of leaning on the deterministic mm scalar. The
+            # literal probability number is never surfaced. Back-compat: when
+            # ``rain_prob_5mm`` is absent (deterministic-only path), the
+            # phrase is empty and the line renders exactly as before.
+            prob_phrase = ""
+            if fc.get("rain_prob_5mm") is not None:
+                prob_phrase = describe_probabilistic_day(
+                    fc.get("rain_prob_5mm"),
+                    fc.get("rain_p50"),
+                    rain,
+                ) + " — "
             forecast_lines.append(
-                f"  {label}: {cond}, {temp:.0f}°C, {rain:.0f}mm rain, {wind:.0f}km/h wind"
+                f"  {label}: {prob_phrase}{cond}, {temp:.0f}°C, {rain:.0f}mm rain, {wind:.0f}km/h wind"
             )
 
         system = (

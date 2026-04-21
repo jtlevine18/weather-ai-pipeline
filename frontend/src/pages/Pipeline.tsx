@@ -63,6 +63,19 @@ function HowItWorksSection() {
           </div>
         ))}
       </div>
+      <p
+        style={{
+          fontFamily: '"Space Grotesk", system-ui, sans-serif',
+          fontSize: '12px',
+          color: '#8d909e',
+          lineHeight: 1.6,
+          marginTop: '18px',
+          maxWidth: '680px',
+        }}
+      >
+        Weather forecasts powered by Google DeepMind's GraphCast and GenCast
+        (CC BY-NC-SA 4.0, non-commercial research use).
+      </p>
     </div>
   )
 }
