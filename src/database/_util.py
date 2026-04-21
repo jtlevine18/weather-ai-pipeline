@@ -46,10 +46,31 @@ class PgConnection:
 
     def __init__(self, dsn: str):
         pool = _get_pool(dsn)
-        self._conn = pool.getconn()
-        self._conn.autocommit = True
-        self._pool = pool
-        self._last_cur: Optional[Any] = None
+        # Validate on acquire: the pool may hold connections Neon closed
+        # server-side during idle. getconn() returns them without checking,
+        # and the first real query fails with "SSL connection has been closed
+        # unexpectedly". Cycle up to 3 times to skip dead conns.
+        last_exc: Optional[BaseException] = None
+        for _ in range(3):
+            conn = pool.getconn()
+            try:
+                conn.autocommit = True
+                with conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                    cur.fetchone()
+                self._conn = conn
+                self._pool = pool
+                self._last_cur: Optional[Any] = None
+                return
+            except Exception as exc:
+                last_exc = exc
+                try:
+                    pool.putconn(conn, close=True)
+                except Exception:
+                    pass
+        raise RuntimeError(
+            f"Could not acquire a healthy DB connection after 3 attempts: {last_exc}"
+        )
 
     def execute(self, sql: str, params=None):
         """Execute SQL, converting ? placeholders to %s for psycopg2."""

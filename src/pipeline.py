@@ -823,10 +823,14 @@ class WeatherPipeline:
         # Aggregate delivery metrics per station
         forecast_sids = {f["station_id"] for f in forecasts}
         alert_sids = {a["station_id"] for a in alerts}
+        # Filter by delivered_at within the run window — delivery_log.id is
+        # generated as a fresh uuid4 in step_deliver and has no run_id prefix,
+        # so an id LIKE match would never return rows.
         try:
             dl_rows = self.conn.execute(
-                "SELECT station_id, channel, status FROM delivery_log WHERE id LIKE ?",
-                [f"%{self.run_id[:8]}%"],
+                "SELECT station_id, channel, status FROM delivery_log "
+                "WHERE delivered_at BETWEEN ? AND ?",
+                [start_time.isoformat(), datetime.now(timezone.utc).isoformat()],
             ).fetchall()
         except Exception:
             dl_rows = []

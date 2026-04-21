@@ -180,16 +180,23 @@ class TestForecasting:
 
     @pytest.mark.asyncio
     async def test_run_forecast_step_returns_list(self):
+        from datetime import datetime, timedelta, timezone
         from src.forecasting import run_forecast_step, HybridNWPModel, PersistenceModel
+
+        # run_forecast_step drops hindcast days (valid_for < today local).
+        # Anchor the fake forecast to today so the test stays valid as the
+        # calendar advances.
+        now_utc = datetime.now(timezone.utc)
+        today_local = (now_utc + timedelta(hours=5.5)).date()
 
         class FakeOpenMeteo:
             async def get_forecast(self, lat, lon, hours=168):
-                # Return 7 days of hourly data (simplified to 4 per day)
                 results = []
                 for d in range(7):
+                    day = today_local + timedelta(days=d)
                     for h in [0, 6, 12, 18]:
                         results.append({
-                            "ts": f"2026-03-{24+d:02d}T{h:02d}:00:00",
+                            "ts": f"{day.isoformat()}T{h:02d}:00:00",
                             "temperature": 28.0 + d,
                             "humidity": 70.0,
                             "wind_speed": 5.0,

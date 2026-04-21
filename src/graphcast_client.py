@@ -63,7 +63,10 @@ MODEL_NAME = (
     "GraphCast_operational - ERA5-HRES 1979-2021 - resolution 0.25 "
     "- pressure levels 13 - mesh 2to6 - precipitation output only.npz"
 )
-FORECAST_STEPS = 28  # 7 days × 4 steps/day at 6h intervals
+FORECAST_STEPS = 48  # 12 days × 4 steps/day at 6h intervals.
+# GraphCast initializes from ERA5T which has a ~5-day lag, so output spans
+# T-5 through T+7. Downstream aggregation (forecasting.aggregate_to_daily)
+# drops the T-5..T-1 hindcast days and keeps 7 forward-looking days.
 
 
 # ---------------------------------------------------------------------------

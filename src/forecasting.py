@@ -270,30 +270,21 @@ class HybridNWPModel:
                  soil_moisture: float = 0.0,
                  station_id: str = "",
                  recent_temp_trend: float = 0.0) -> Dict[str, Any]:
-        """Produce corrected forecast. Records error for rolling tracker."""
+        """Produce corrected forecast. Records error for rolling tracker.
+
+        The MOS correction path is disabled pending a proper retrain-from-Neon
+        job (see docs/mos-retrain-plan.md). The previous per-station-per-run
+        training produced a static bias offset that made forecasts worse at
+        several stations (up to 6.5°C of added error). Falls back to the raw
+        NWP pass-through.
+        """
         nwp_temp   = nwp_forecast.get("temperature", 25.0) or 25.0
         correction = 0.0
         model_used = "nwp_only"
 
-        if self._trained and self._model is not None:
-            try:
-                import numpy as np
-                feat_vec = self._build_features(
-                    nwp_forecast,
-                    station_altitude=station_altitude,
-                    soil_moisture=soil_moisture,
-                    station_id=station_id,
-                    recent_temp_trend=recent_temp_trend,
-                )
-                correction = float(self._model.predict(np.array([feat_vec]))[0])
-                correction = max(-8.0, min(8.0, correction))  # sanity clamp
-                model_used = "hybrid_mos"
-            except Exception as exc:
-                log.warning("MOS inference failed: %s", exc, exc_info=True)
-
         final_temp = nwp_temp + correction
 
-        confidence = max(0.5, 0.85 - abs(correction) * 0.05)
+        confidence = 0.75
 
         result = dict(nwp_forecast)
         result["temperature"] = final_temp
@@ -323,6 +314,7 @@ def aggregate_to_daily(
     nwp_forecasts: List[Dict[str, Any]],
     num_days: int = 7,
     tz_offset_h: float = 5.5,
+    start_local_date: Optional[str] = None,
 ) -> List[Dict[str, Any]]:
     """Aggregate sub-daily NWP timesteps into daily summaries.
 
@@ -338,6 +330,9 @@ def aggregate_to_daily(
         tz_offset_h: UTC offset in hours for the pipeline's configured timezone.
                      Default 5.5 = IST (UTC+05:30). Use config.tz_offset_hours()
                      to derive from a timezone name.
+        start_local_date: If set (YYYY-MM-DD), drop any bucket keyed to a day
+                          before this date. Used to strip hindcast days from
+                          GraphCast output (which initializes from T-5 ERA5T).
     """
     from collections import defaultdict
 
@@ -355,8 +350,11 @@ def aggregate_to_daily(
             local_day = local_day + timedelta(days=1)
         buckets[str(local_day)].append(fc)
 
-    # Sort days chronologically, take up to num_days
-    sorted_days = sorted(buckets.keys())[:num_days]
+    # Sort days chronologically, optionally drop hindcast, take up to num_days
+    sorted_days = sorted(buckets.keys())
+    if start_local_date is not None:
+        sorted_days = [d for d in sorted_days if d >= start_local_date]
+    sorted_days = sorted_days[:num_days]
 
     # Compute noon-local as UTC: 12:00 local = (12 - offset) UTC
     noon_utc_h = 12.0 - tz_offset_h
@@ -476,10 +474,19 @@ async def run_forecast_step(
             soil_moisture=soil_moisture,
         )
 
-    # Aggregate sub-daily NWP to 7 daily forecasts
-    dailies = aggregate_to_daily(nwp_forecasts, num_days=7, tz_offset_h=tz_offset_h)
-
+    # Aggregate sub-daily NWP to 7 daily forecasts.
+    # GraphCast initializes from ERA5T (T-5 lag); its output window therefore
+    # spans T-5 through T+(FORECAST_STEPS*6/24)-5 days. Drop hindcast days so
+    # forecast_day=0 is today (local), not 5 days ago.
     now = datetime.now(timezone.utc)
+    today_local = (now + timedelta(hours=tz_offset_h)).date()
+    dailies = aggregate_to_daily(
+        nwp_forecasts,
+        num_days=7,
+        tz_offset_h=tz_offset_h,
+        start_local_date=str(today_local),
+    )
+
     results = []
     for day_idx, daily_nwp in enumerate(dailies):
         # MOS correction on each daily forecast
