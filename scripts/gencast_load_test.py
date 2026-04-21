@@ -339,7 +339,8 @@ def _build_sampler(ckpt, stats):
             stddev_by_level=stats.get("stddev_by_level"),
         )
         p = nan_cleaning.NaNCleaner(
-            predictor=p, reintroduce_nans=True, fill_value=0.0,
+            predictor=p, reintroduce_nans=True,
+            fill_value={"sea_surface_temperature": 0.0},
             var_to_clean="sea_surface_temperature",
         )
         return p
