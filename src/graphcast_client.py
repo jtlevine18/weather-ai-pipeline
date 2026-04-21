@@ -286,6 +286,41 @@ class GraphCastClient:
         full_ds = xarray.open_zarr(ERA5_PATH, chunks=None,
                                    storage_options=gcs_opts, consolidated=True)
 
+        # Walk target_date backward if ARCO hasn't populated it yet. ARCO ERA5T
+        # lags real-time by ~5–7 days; the caller's 5-day default is often one
+        # day too optimistic. Probe a single cheap gridpoint for 2m_temperature
+        # at noon; if all-NaN, the whole timestep is empty. Max lookback 12 days.
+        def _probe_ok(date_str: str) -> bool:
+            try:
+                v = full_ds["2m_temperature"].sel(
+                    time=np.datetime64(f"{date_str}T12:00"),
+                    latitude=0, longitude=0,
+                    method="nearest",
+                ).compute()
+                return not bool(np.isnan(float(v.values)))
+            except Exception:
+                return False
+
+        from datetime import date as _date, timedelta as _td, datetime as _datetime
+        requested = _datetime.strptime(target_date, "%Y-%m-%d").date()
+        chosen = None
+        for back in range(0, 13):
+            candidate = requested - _td(days=back)
+            if _probe_ok(candidate.isoformat()):
+                chosen = candidate.isoformat()
+                if back > 0:
+                    log.warning(
+                        "ARCO ERA5 unpopulated at %s; falling back to %s (%d day(s) earlier)",
+                        target_date, chosen, back,
+                    )
+                break
+        if chosen is None:
+            raise RuntimeError(
+                f"ARCO ERA5 has no valid 2m_temperature within 12 days "
+                f"of {target_date} — data pipeline outage upstream"
+            )
+        target_date = chosen
+
         # Target time: noon UTC on the requested date
         target = np.datetime64(f"{target_date}T12:00")
         t0 = full_ds.time.sel(time=target - np.timedelta64(6, "h"), method="nearest").values
