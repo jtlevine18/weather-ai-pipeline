@@ -308,7 +308,11 @@ def _prepare_era5_inputs(ckpt, target_date: dt.date):
             dims=["batch", "time", "lat", "lon"],
         )
 
-    target_lead_times = slice(f"{NATIVE_STEP_H}h", f"{N_STEPS * NATIVE_STEP_H}h")
+    # GenCast is a single-step diffusion model: each forward call predicts
+    # ONE 12h step. Multi-step rollout (full 168h) is handled externally by
+    # rollout.chunked_prediction_generator_multiple_runs and is a Phase 1
+    # concern. For Phase 0 we just need to prove one forward pass works.
+    target_lead_times = f"{NATIVE_STEP_H}h"
     inputs, targets, forcings = data_utils.extract_inputs_targets_forcings(
         ds, target_lead_times=target_lead_times, **_dc.asdict(tc),
     )
