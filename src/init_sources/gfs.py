@@ -625,6 +625,29 @@ def fetch_gfs_as_era5(
 
     full_ds = xarray.concat(per_step_ds, dim="time")
 
+    # GraphCast forcings include ``toa_incident_solar_radiation``, which GFS
+    # doesn't publish. Compute it analytically at every timestep so the
+    # dataset is a drop-in for the ERA5 one (which *does* include TOA).
+    # Accumulation is 1 hour to match ERA5's convention — GraphCast's
+    # normalization stats are tuned to ~1.07e6 J/m² mean, not 6h totals.
+    import numpy as np
+    toa_values = compute_toa_incident_solar_radiation(
+        times=full_ds.time.values,
+        latitudes=full_ds.latitude.values,
+        longitudes=full_ds.longitude.values,
+    )
+    full_ds["toa_incident_solar_radiation"] = xarray.DataArray(
+        toa_values,
+        dims=["time", "latitude", "longitude"],
+        coords={
+            "time":      full_ds.time,
+            "latitude":  full_ds.latitude,
+            "longitude": full_ds.longitude,
+        },
+    )
+    log.info("Attached analytical TOA (shape=%s, range=%.2e..%.2e J/m²)",
+             toa_values.shape, float(toa_values.min()), float(toa_values.max()))
+
     if attach_static:
         try:
             static_ds = load_static_ds()
