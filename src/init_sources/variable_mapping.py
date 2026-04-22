@@ -52,6 +52,9 @@ SURFACE_VARS: Dict[str, Tuple[str, Tuple[float, float]]] = {
     "10m_v_component_of_wind":      ("10v",   (1.0,    0.0)),
     "mean_sea_level_pressure":      ("prmsl", (1.0,    0.0)),
     "total_precipitation_6hr":      ("tp",    (1e-3,   0.0)),  # mm → m
+    # GFS publishes SST as ``WTMP:surface`` (wgrib2 PARAM) — ecCodes shortName
+    # ``sst`` matches ERA5's. NaN over land cells; GenCast 1.0° requires it.
+    "sea_surface_temperature":      ("sst",   (1.0,    0.0)),
 }
 
 
