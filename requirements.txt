@@ -13,7 +13,7 @@ scipy==1.14.0
 # Weather model (Google DeepMind GraphCast 0.25° — requires A100 80GB GPU)
 graphcast @ git+https://github.com/google-deepmind/graphcast.git
 dm-haiku>=0.0.12
-jax[cuda12]==0.4.27
+jax[cuda12]==0.10.0
 google-cloud-storage
 gcsfs>=2024.2.0
 xarray>=2024.10.0
