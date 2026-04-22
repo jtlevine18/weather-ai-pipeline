@@ -182,7 +182,7 @@ _SURFACE_IDX_PATTERNS = {
     "10v":   ("VGRD",  "10 m above ground"),
     "prmsl": ("PRMSL", "mean sea level"),
     "tp":    ("APCP",  "surface"),
-    "sst":   ("WTMP",  "surface"),  # sea surface temperature (NaN on land)
+    "wtmp":  ("WTMP",  "surface"),  # sea surface temperature (NaN on land)
 }
 
 # ecCodes shortName → wgrib2 PARAM. Level is always "<N> mb" with N in the
@@ -343,7 +343,7 @@ def _open_grib_surface(path: str, ecmwf_short_name: str) -> Any:
         "10v":   ("heightAboveGround", 10),
         "prmsl": ("meanSea", 0),
         "tp":    ("surface", 0),
-        "sst":   ("surface", 0),
+        "wtmp":  ("surface", 0),
     }
     type_of_level, level = level_map.get(ecmwf_short_name, ("surface", 0))
     filters = {"typeOfLevel": type_of_level, "shortName": ecmwf_short_name}
