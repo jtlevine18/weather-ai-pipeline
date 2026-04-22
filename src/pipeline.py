@@ -459,25 +459,28 @@ class WeatherPipeline:
         # connections after ~5 min — refresh before attempting writes.
         self._refresh_conn()
 
-        # GenCast returns one probabilistic block per station. Apply it to every
-        # daily forecast for that station (GenCast is a 24-48h rainfall total;
-        # we attach the same block to all days so downstream classify_condition
-        # can read rain_prob_5mm). A finer-grained per-day GenCast rollout is a
-        # future refinement — out of scope for Phase 2.
+        # GenCast now returns one per-day block per station: block["by_day"][d]
+        # holds the 12-member ensemble + quantiles + probabilities for day d.
+        # We index by fc["forecast_day"] so each of the 7 forecast rows for a
+        # station gets its own ensemble rather than the previous behavior of
+        # broadcasting a single 24-48h window across all 7 days.
         n_updated = 0
         for fc in forecasts:
             block = per_station.get(fc["station_id"]) or per_station.get(str(fc["station_id"]))
             if not block:
                 continue
+            day_block = (block.get("by_day") or {}).get(fc.get("forecast_day", 0))
+            if not day_block:
+                continue
 
             # Attach to the in-memory dict so classify_condition downstream
             # (step_downscale) can see the probability.
-            fc["rain_p10"] = block.get("rain_p10")
-            fc["rain_p50"] = block.get("rain_p50")
-            fc["rain_p90"] = block.get("rain_p90")
-            fc["rain_prob_1mm"] = block.get("rain_prob_1mm")
-            fc["rain_prob_5mm"] = block.get("rain_prob_5mm")
-            fc["rain_prob_15mm"] = block.get("rain_prob_15mm")
+            fc["rain_p10"] = day_block.get("rain_p10")
+            fc["rain_p50"] = day_block.get("rain_p50")
+            fc["rain_p90"] = day_block.get("rain_p90")
+            fc["rain_prob_1mm"] = day_block.get("rain_prob_1mm")
+            fc["rain_prob_5mm"] = day_block.get("rain_prob_5mm")
+            fc["rain_prob_15mm"] = day_block.get("rain_prob_15mm")
             fc["ensemble_size"] = ensemble_size
             fc["nwp_model_version"] = nwp_model_version
 
@@ -485,16 +488,16 @@ class WeatherPipeline:
                 update_forecast_probabilistic(
                     self.conn,
                     fc["id"],
-                    rain_p10=block.get("rain_p10"),
-                    rain_p50=block.get("rain_p50"),
-                    rain_p90=block.get("rain_p90"),
-                    rain_prob_1mm=block.get("rain_prob_1mm"),
-                    rain_prob_5mm=block.get("rain_prob_5mm"),
-                    rain_prob_15mm=block.get("rain_prob_15mm"),
+                    rain_p10=day_block.get("rain_p10"),
+                    rain_p50=day_block.get("rain_p50"),
+                    rain_p90=day_block.get("rain_p90"),
+                    rain_prob_1mm=day_block.get("rain_prob_1mm"),
+                    rain_prob_5mm=day_block.get("rain_prob_5mm"),
+                    rain_prob_15mm=day_block.get("rain_prob_15mm"),
                     ensemble_size=ensemble_size,
                     nwp_model_version=nwp_model_version,
                 )
-                members = block.get("rainfall_ensemble") or []
+                members = day_block.get("rainfall_ensemble") or []
                 if members:
                     insert_forecast_ensemble(
                         self.conn,
@@ -601,7 +604,7 @@ class WeatherPipeline:
         # Run one downscale per station in parallel (20 calls, not 140)
         ds_results = await asyncio.gather(*ds_tasks, return_exceptions=True)
 
-        # Build adjustment map: station_id → downscaling deltas
+        # Build adjustment map: station_id → downscaling deltas (location-based)
         adjustments: Dict[str, Dict[str, Any]] = {}
         for sid, res in zip(ds_station_ids, ds_results):
             if isinstance(res, Exception):
@@ -610,13 +613,20 @@ class WeatherPipeline:
             if res.get("downscaled"):
                 adjustments[sid] = {
                     "idw_temp": res.get("idw_temp"),
-                    "lapse_delta": res.get("lapse_delta", 0),
-                    "alt_delta_m": res.get("alt_delta_m", 0),
+                    "spatial_delta": res.get("spatial_delta", 0.0),
+                    "lapse_delta": res.get("lapse_delta", 0.0),
+                    "alt_delta_m": res.get("alt_delta_m", 0.0),
                     "farmer_lat": res.get("farmer_lat"),
                     "farmer_lon": res.get("farmer_lon"),
                 }
 
-        # Apply adjustments to all forecasts for each station
+        # Apply the delta per-day. The downscaler returns location-based
+        # adjustments (spatial_delta + lapse_delta) that are added to each
+        # day's GraphCast nwp_temp, so the 7-day temperature variation the
+        # model produced is preserved in the stored value. Previously we
+        # replaced temperature with ``idw_temp + lapse_delta`` — a single
+        # day-0 value broadcast to all 7 days, which is why stored
+        # temperature went flat while nwp_temp kept varying.
         downscaled = []
         for fc in forecasts:
             sid = fc["station_id"]
@@ -629,21 +639,22 @@ class WeatherPipeline:
             result["farmer_lon"] = adj["farmer_lon"]
             result["downscaled"] = True
             result["idw_temp"] = adj["idw_temp"]
+            result["spatial_delta"] = adj["spatial_delta"]
             result["lapse_delta"] = adj["lapse_delta"]
             result["alt_delta_m"] = adj["alt_delta_m"]
-            # Apply lapse-rate correction to this day's forecast temperature
-            if adj["idw_temp"] is not None and adj["lapse_delta"] is not None:
-                result["temperature"] = round(adj["idw_temp"] + adj["lapse_delta"], 2)
+            # Persistence-model forecasts carry nwp_temp=None; skip them so
+            # the persistence value passes through untouched.
+            nwp_temp = fc.get("nwp_temp")
+            if nwp_temp is not None:
+                total_delta = round(adj["spatial_delta"] + adj["lapse_delta"], 3)
+                result["temperature"] = round(nwp_temp + total_delta, 2)
+                result["correction"] = total_delta
                 result["condition"] = classify_condition(result)
-                # Persist the downscaled value back to Neon so the Vercel
-                # frontend / LMB consumers read the climate-corrected number,
-                # not the raw GraphCast NWP temp (which is cold-biased at
-                # 6-12 day lead and undershoots daily peaks due to sparse 6h
-                # sampling). The forecast row was inserted in step_forecast
-                # with the raw value; this UPDATE supersedes it.
                 try:
                     update_forecast_downscaled(
-                        self.conn, fc["id"], result["temperature"], result["condition"],
+                        self.conn, fc["id"],
+                        result["temperature"], result["condition"],
+                        correction=total_delta,
                     )
                 except Exception as exc:
                     log.warning("Downscale persistence failed for %s: %s", fc["id"], exc)

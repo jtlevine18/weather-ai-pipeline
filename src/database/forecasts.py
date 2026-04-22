@@ -43,20 +43,29 @@ def update_forecast_downscaled(
     forecast_id: str,
     temperature: float,
     condition: str,
+    correction: Optional[float] = None,
 ) -> None:
-    """Update forecast row with downscaled (NASA POWER + lapse-rate) values.
+    """Update forecast row with downscaled (spatial + lapse) values.
 
-    step_forecast inserts the raw GraphCast NWP temperature, which has a known
-    cold bias at longer lead times (and a daily-max undershoot from sampling
-    6h timesteps only). step_downscale then computes a station-local
-    temperature from NASA POWER 5x5 IDW + lapse-rate correction that matches
-    the recent observed climatology; this helper writes that corrected value
-    back so the Vercel frontend / LMB consumers see the realistic number.
+    step_forecast inserts the raw per-day NWP temperature (``nwp_temp``).
+    step_downscale computes a farmer-GPS adjustment — spatial delta from
+    the NWP grid + elevation lapse-rate — and writes the adjusted value
+    back here so the Vercel frontend / LMB consumers read the farmer-local
+    number. ``correction`` carries the total downscaling delta applied
+    (temperature - nwp_temp) so downstream consumers can see how much
+    post-NWP adjustment happened. With MOS disabled, correction == the
+    downscaling delta and is no longer a dead column.
     """
-    conn.execute(
-        "UPDATE forecasts SET temperature = ?, condition = ? WHERE id = ?",
-        [temperature, condition, forecast_id],
-    )
+    if correction is None:
+        conn.execute(
+            "UPDATE forecasts SET temperature = ?, condition = ? WHERE id = ?",
+            [temperature, condition, forecast_id],
+        )
+    else:
+        conn.execute(
+            "UPDATE forecasts SET temperature = ?, condition = ?, correction = ? WHERE id = ?",
+            [temperature, condition, correction, forecast_id],
+        )
 
 
 def update_forecast_probabilistic(

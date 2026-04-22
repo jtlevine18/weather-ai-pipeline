@@ -79,14 +79,15 @@ NATIVE_STEP_H = 12                      # GenCast native 12h step
 FORECAST_HORIZON_H = 168                # 7-day horizon
 N_STEPS = FORECAST_HORIZON_H // NATIVE_STEP_H  # 14 forecast steps
 
-# 24-48h window aggregation: a single ensemble "rainfall" value is the sum of
-# the rainfall increments at lead 24h (index 1, the second 12h step) and 36h
-# (index 2, the third 12h step). We use summed 24-48h — the full "tomorrow"
-# window from a midnight init — rather than just the 36h step so farmer
-# advisories reflect day-scale totals. Phase 2 writes this one scalar per
-# station per day alongside the quantiles + probabilities.
-WINDOW_START_IDX = 1  # lead time 24h (step index 1 since step 0 is 12h)
-WINDOW_END_IDX = 2    # lead time 36h (inclusive)
+# Per-day aggregation: GenCast returns 14 steps (12h..168h) per member.
+# Day d is the sum of steps (2d, 2d+1), which covers the 24h window from
+# lead (24d) to lead (24d+24). Day 0 = steps (0, 1) = hours 0-24h,
+# day 1 = steps (2, 3) = hours 24-48h, ..., day 6 = steps (12, 13) = hours
+# 144-168h. The earlier Phase-2 implementation only extracted a single
+# "24-48h" window and broadcast it to all 7 forecast rows, which is why
+# every day in forecast_ensembles carried the same 12 numbers.
+N_FORECAST_DAYS = 7
+STEPS_PER_DAY = 2   # GenCast native 12h step → 2 steps per 24h day
 
 CHECKPOINT_PRIMARY_MATCH = "1p0deg <2019"   # Full
 CHECKPOINT_FALLBACK_MATCH = "1p0deg Mini"   # Mini
@@ -152,8 +153,9 @@ class GenCastClient:
     Usage:
         client = GenCastClient(ensemble_size=20)
         per_station, meta = await client.forecast(stations)
-        # per_station: Dict[station_id, dict] with rain_p10/p50/p90,
-        #              rain_prob_1mm/5mm/15mm, rainfall_ensemble
+        # per_station: Dict[station_id, {"by_day": {0: {...}, 1: {...}, ...}}]
+        #              each per-day block has rain_p10/p50/p90,
+        #              rain_prob_1mm/5mm/15mm, rainfall_ensemble.
         # meta: GenCastResult with model name + wall time + ensemble size
 
     On 4× A100, a 20-member ensemble runs as 5 batches of 4 (pmap'd one member
@@ -654,17 +656,21 @@ class GenCastClient:
         stations: List,
     ) -> Dict[str, Dict[str, Any]]:
         """Bilinear-interp per-member rainfall to each station (lat, lon) and
-        aggregate the ensemble into quantiles + threshold probabilities.
+        aggregate the ensemble into per-day quantiles + threshold probabilities.
 
         Each station output:
-          rain_p10, rain_p50, rain_p90              — mm summed over 24–48h
-          rain_prob_1mm, rain_prob_5mm, rain_prob_15mm   — fractions in [0,1]
-          rainfall_ensemble                         — list[float] of length
-                                                      ensemble_size (per-member
-                                                      24-48h rainfall sum, mm)
+          by_day: {
+              0: {rain_p10, rain_p50, rain_p90,
+                  rain_prob_1mm, rain_prob_5mm, rain_prob_15mm,
+                  rainfall_ensemble},
+              1: {...}, ..., 6: {...}
+          }
+          temperature_by_step: list[list[float]] — 14 steps × N members,
+                               scratch for the GenCast-temp validation table.
 
         GenCast's rainfall variable is `total_precipitation_12hr` (meters per
-        12h step); we convert to mm and sum the two steps that cover 24-48h.
+        12h step); we convert to mm and sum the two steps that cover each
+        calendar day.
         """
         import numpy as np
         import xarray
@@ -708,17 +714,27 @@ class GenCastClient:
         lon_values = preds[lon_name].values
         uses_360 = float(lon_values.max()) > 180.0
 
-        # Slice the 24–48h window once. step 0 is lead 12h, so indices [1,2]
-        # cover leads 24h and 36h — summed they're the 24-48h total.
-        if preds.sizes.get("time", 0) <= WINDOW_END_IDX:
+        # We need 14 steps (2 per day × 7 days) for the full 7-day per-day
+        # breakdown. Partial rollouts (if a batch failed) still produce the
+        # full time axis per-sample, but if we ever fall short we degrade by
+        # shrinking the day count rather than returning nothing.
+        n_time = preds.sizes.get("time", 0)
+        n_available_days = n_time // STEPS_PER_DAY
+        if n_available_days == 0:
             log.error(
-                "GenCast rollout has only %d time steps; need ≥%d for the "
-                "24-48h window", preds.sizes.get("time", 0), WINDOW_END_IDX + 1,
+                "GenCast rollout has only %d time steps; need ≥%d for one day",
+                n_time, STEPS_PER_DAY,
             )
             return results
-        window = preds[precip_var].isel(
-            time=slice(WINDOW_START_IDX, WINDOW_END_IDX + 1)
-        )
+        if n_available_days < N_FORECAST_DAYS:
+            log.warning(
+                "GenCast rollout has only %d time steps → %d days of per-day "
+                "ensembles (expected %d). Remaining days will be missing.",
+                n_time, n_available_days, N_FORECAST_DAYS,
+            )
+        n_days = min(N_FORECAST_DAYS, n_available_days)
+
+        precip_full = preds[precip_var]
 
         for station in stations:
             try:
@@ -734,35 +750,46 @@ class GenCastClient:
                 # collapse of lat/lon. Phase 0 showed nearest-neighbor on 1.0°
                 # put a whole farm in the wrong grid cell for several coastal
                 # Kerala stations.
-                point = window.interp(
+                point = precip_full.interp(
                     **{lat_name: float(station.lat), lon_name: stn_lon},
-                )
+                )  # shape: (sample, time)
 
-                # Sum across the two 12h steps (lead 24h + 36h) and convert
-                # metres → mm. GenCast's total_precipitation_12hr is in metres.
-                summed = point.sum(dim="time")  # shape (sample,)
-                member_rainfall_m = np.asarray(summed.values, dtype=np.float32)
-                member_rainfall_mm = np.clip(member_rainfall_m * 1000.0, 0.0, None)
-                ensemble_list = [float(x) for x in member_rainfall_mm.tolist()]
+                by_day: Dict[int, Dict[str, Any]] = {}
+                any_day_written = False
+                for day in range(n_days):
+                    start = day * STEPS_PER_DAY
+                    end = start + STEPS_PER_DAY
+                    day_window = point.isel(time=slice(start, end))
+                    # Sum the 2 12h steps for this day and convert m → mm.
+                    # GenCast's total_precipitation_12hr is in metres.
+                    summed = day_window.sum(dim="time")  # shape (sample,)
+                    member_rainfall_m = np.asarray(summed.values, dtype=np.float32)
+                    member_rainfall_mm = np.clip(member_rainfall_m * 1000.0, 0.0, None)
+                    ensemble_list = [float(x) for x in member_rainfall_mm.tolist()]
+                    if len(ensemble_list) == 0:
+                        continue
 
-                if len(ensemble_list) == 0:
+                    arr = np.asarray(ensemble_list, dtype=np.float32)
+                    p10, p50, p90 = np.quantile(arr, [0.10, 0.50, 0.90])
+                    prob_1mm = float(np.mean(arr > 1.0))
+                    prob_5mm = float(np.mean(arr > 5.0))
+                    prob_15mm = float(np.mean(arr > 15.0))
+
+                    by_day[day] = {
+                        "rain_p10": round(float(p10), 2),
+                        "rain_p50": round(float(p50), 2),
+                        "rain_p90": round(float(p90), 2),
+                        "rain_prob_1mm": round(prob_1mm, 3),
+                        "rain_prob_5mm": round(prob_5mm, 3),
+                        "rain_prob_15mm": round(prob_15mm, 3),
+                        "rainfall_ensemble": [round(x, 3) for x in ensemble_list],
+                    }
+                    any_day_written = True
+
+                if not any_day_written:
                     continue
 
-                arr = np.asarray(ensemble_list, dtype=np.float32)
-                p10, p50, p90 = np.quantile(arr, [0.10, 0.50, 0.90])
-                prob_1mm = float(np.mean(arr > 1.0))
-                prob_5mm = float(np.mean(arr > 5.0))
-                prob_15mm = float(np.mean(arr > 15.0))
-
-                results[station.station_id] = {
-                    "rain_p10": round(float(p10), 2),
-                    "rain_p50": round(float(p50), 2),
-                    "rain_p90": round(float(p90), 2),
-                    "rain_prob_1mm": round(prob_1mm, 3),
-                    "rain_prob_5mm": round(prob_5mm, 3),
-                    "rain_prob_15mm": round(prob_15mm, 3),
-                    "rainfall_ensemble": [round(x, 3) for x in ensemble_list],
-                }
+                results[station.station_id] = {"by_day": by_day}
 
                 if temp_full is not None:
                     try:
@@ -806,9 +833,9 @@ class GenCastClient:
                 uses today - 5 days (ERA5T lag).
 
         Returns:
-            per_station: {station_id: {rain_p10, rain_p50, rain_p90,
-                                       rain_prob_1mm, rain_prob_5mm, rain_prob_15mm,
-                                       rainfall_ensemble}}
+            per_station: {station_id: {"by_day": {0: {...}, 1: {...}, ...}}},
+                each per-day dict carrying rain_p10/p50/p90,
+                rain_prob_1mm/5mm/15mm, rainfall_ensemble (list[float]).
             meta: GenCastResult metadata (sealed contract for Phase 2).
         """
         import asyncio

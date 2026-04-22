@@ -38,8 +38,16 @@ class IDWDownscaler:
         farmer_alt_m: Optional[float] = None,
     ) -> Dict[str, Any]:
         """
-        Returns a copy of station_forecast adjusted for the farmer's location.
-        Uses GraphCast 0.25° grid if available, falls back to NASA POWER.
+        Return a *location-based* downscaling adjustment for the farmer's GPS.
+
+        Previously this replaced ``temperature`` with a static value derived
+        from the day-0 grid, which is why every day in the 7-day forecast
+        ended up with the same number. Now it computes a spatial delta
+        (farmer-point minus station-point, both interpolated from the same
+        grid) plus a lapse-rate delta, and returns those as separate fields
+        without overwriting ``temperature``. step_downscale then adds the
+        deltas to each day's ``nwp_temp`` so the per-day GraphCast variation
+        is preserved in the final stored value.
         """
         result = dict(station_forecast)
         result["farmer_lat"] = farmer_lat
@@ -61,12 +69,20 @@ class IDWDownscaler:
                             farmer_lat, farmer_lon)
                 return result
 
-            # IDW interpolation for temperature at farmer's point
-            interp_temp = idw_interpolate(
+            # Two IDW interpolations on the same grid: one at the farmer's GPS
+            # and one at the station's coordinates. The difference is the pure
+            # spatial gradient between the two points — time-independent on a
+            # 0.25° grid over a ~10 km separation — so we can apply the same
+            # delta to every forecast day without re-interpolating per-day.
+            interp_farmer = idw_interpolate(
                 grid, farmer_lat, farmer_lon, field="temperature"
             )
-            if interp_temp is None:
+            interp_station = idw_interpolate(
+                grid, station.lat, station.lon, field="temperature"
+            )
+            if interp_farmer is None or interp_station is None:
                 return result
+            spatial_delta = interp_farmer - interp_station
 
             # Apply lapse-rate correction if elevation data is available
             station_alt  = station.altitude_m
@@ -74,17 +90,12 @@ class IDWDownscaler:
             alt_delta    = farmer_alt - station_alt
             lapse_delta  = -LAPSE_RATE_C_PER_M * alt_delta
 
-            downscaled_temp = interp_temp + lapse_delta
-
-            result["temperature"]   = round(downscaled_temp, 2)
             result["downscaled"]    = True
-            result["idw_temp"]      = round(interp_temp, 2)
+            result["idw_temp"]      = round(interp_farmer, 2)
+            result["spatial_delta"] = round(spatial_delta, 3)
             result["lapse_delta"]   = round(lapse_delta, 3)
             result["alt_delta_m"]   = round(alt_delta, 1)
             result["grid_source"]   = grid_source
-
-            # Re-classify after downscaling (a 2.5°C change can shift the condition)
-            result["condition"] = classify_condition(result)
 
         except Exception as exc:
             log.warning("Downscaling failed: %s — using station forecast", exc)

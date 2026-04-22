@@ -70,6 +70,7 @@ class DownscaledForecast(Forecast):
     downscaled: bool = False
     idw_temp: Optional[float] = None
     lapse_delta: Optional[float] = None
+    spatial_delta: Optional[float] = None
     alt_delta_m: Optional[float] = None
 
 
