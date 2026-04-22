@@ -72,14 +72,63 @@ class PgConnection:
             f"Could not acquire a healthy DB connection after 3 attempts: {last_exc}"
         )
 
+    def _refresh_conn(self) -> None:
+        """Swap in a fresh connection from the pool on stale-socket errors.
+
+        Neon auto-suspends idle connections; a long GPU step (e.g. 6-min
+        GraphCast inference) leaves the pooled conn's TCP socket dead.
+        The next .execute() raises ``OperationalError: SSL connection has
+        been closed unexpectedly``. We return the dead conn to the pool
+        with close=True, grab a new one, and validate with SELECT 1.
+        """
+        last_exc: Optional[BaseException] = None
+        for _ in range(3):
+            try:
+                self._pool.putconn(self._conn, close=True)
+            except Exception:
+                pass
+            try:
+                new_conn = self._pool.getconn()
+                new_conn.autocommit = True
+                with new_conn.cursor() as cur:
+                    cur.execute("SELECT 1")
+                    cur.fetchone()
+                self._conn = new_conn
+                self._last_cur = None
+                return
+            except Exception as exc:
+                last_exc = exc
+        raise RuntimeError(
+            f"Could not refresh DB connection after 3 attempts: {last_exc}"
+        )
+
     def execute(self, sql: str, params=None):
-        """Execute SQL, converting ? placeholders to %s for psycopg2."""
-        cur = self._conn.cursor()
+        """Execute SQL, converting ? placeholders to %s for psycopg2.
+
+        If the socket is dead (Neon idle-suspend during long GPU step),
+        refresh the connection and retry once.
+        """
         if params is not None:
             sql = sql.replace("?", "%s")
-            cur.execute(sql, params)
-        else:
-            cur.execute(sql)
+
+        def _run():
+            cur = self._conn.cursor()
+            if params is not None:
+                cur.execute(sql, params)
+            else:
+                cur.execute(sql)
+            return cur
+
+        try:
+            cur = _run()
+        except Exception as first_exc:
+            import psycopg2
+            # Only retry on connection-level failures, not on syntax/data errors.
+            if not isinstance(first_exc, (psycopg2.OperationalError, psycopg2.InterfaceError)):
+                raise
+            self._refresh_conn()
+            cur = _run()
+
         self._last_cur = cur
         return cur
 
