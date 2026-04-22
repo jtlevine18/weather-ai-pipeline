@@ -117,11 +117,18 @@ def _download_grib2(
     cycle: GfsCycle,
     forecast_hour: int,
     dest_dir: str,
+    levels: Sequence[int] = GRAPHCAST_PRESSURE_LEVELS,
 ) -> str:
-    """Download a single GFS GRIB2 file from the public S3 bucket.
+    """Download a GFS GRIB2 analysis/forecast file from the public S3 bucket.
 
-    Returns the local path. Uses ``boto3`` with unsigned requests (the bucket
-    is public). Imports boto3 lazily so the module loads without it.
+    Default path is byte-range fetching: downloads the companion ``.idx``
+    index, identifies the ~83 messages GraphCast actually needs (out of
+    ~700 in a pgrb2.0p25 cycle), and fetches only their byte ranges in
+    parallel. A pgrb2.0p25 analysis file is ~465 MB; the subset is
+    ~70 MB — 85% bandwidth savings.
+
+    Set ``GFS_USE_BYTE_RANGE=0`` to force the legacy full-file fetch
+    (useful when debugging a suspected byte-range bug).
     """
     os.makedirs(dest_dir, exist_ok=True)
     local_path = os.path.join(dest_dir, cycle.file_name(forecast_hour))
@@ -129,14 +136,183 @@ def _download_grib2(
         log.info("GFS GRIB cached: %s", local_path)
         return local_path
 
+    if os.environ.get("GFS_USE_BYTE_RANGE", "1") != "0":
+        try:
+            return _fetch_grib2_byte_range(
+                cycle, forecast_hour, dest_dir, levels=levels,
+            )
+        except Exception as exc:
+            log.warning(
+                "Byte-range fetch failed (%s); falling back to full-file download",
+                exc,
+            )
+
     import boto3
     from botocore import UNSIGNED
     from botocore.config import Config
 
     s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
     key = cycle.s3_key(forecast_hour)
-    log.info("Downloading s3://%s/%s", GFS_S3_BUCKET, key)
+    log.info("Downloading full s3://%s/%s", GFS_S3_BUCKET, key)
     s3.download_file(GFS_S3_BUCKET, key, local_path)
+    return local_path
+
+
+# ---------------------------------------------------------------------------
+# Byte-range GRIB fetching (default path)
+# ---------------------------------------------------------------------------
+#
+# NOAA publishes a wgrib2-style ``.idx`` alongside every ``.grib2`` file:
+#
+#   1:0:d=2026041512:PRMSL:mean sea level:anl:
+#   2:927234:d=2026041512:CLWMR:1 hybrid level:anl:
+#   3:1184731:d=2026041512:ICMR:1 hybrid level:anl:
+#   ...
+#
+# Fields are ``msg_n : byte_offset : d=YYYYMMDDHH : PARAM : LEVEL_DESC :
+# STEP_TYPE : …``. Each message's byte length is the next message's offset
+# minus its own (or the file size, for the last message). Since GRIB2 is
+# self-terminating, concatenated messages read back fine via cfgrib —
+# eccodes just walks the record headers.
+
+# ecCodes shortName → (wgrib2 PARAM, exact LEVEL_DESC string in .idx)
+_SURFACE_IDX_PATTERNS = {
+    "2t":    ("TMP",   "2 m above ground"),
+    "10u":   ("UGRD",  "10 m above ground"),
+    "10v":   ("VGRD",  "10 m above ground"),
+    "prmsl": ("PRMSL", "mean sea level"),
+    "tp":    ("APCP",  "surface"),
+}
+
+# ecCodes shortName → wgrib2 PARAM. Level is always "<N> mb" with N in the
+# GraphCast 13-level set.
+_PRESSURE_IDX_PARAMS = {
+    "t":  "TMP",
+    "q":  "SPFH",
+    "u":  "UGRD",
+    "v":  "VGRD",
+    "w":  "VVEL",
+    "gh": "HGT",
+}
+
+
+def _parse_idx_for_wanted_messages(
+    idx_text: str,
+    levels: Sequence[int],
+) -> List[Tuple[int, Optional[int]]]:
+    """Return ``[(offset, length), ...]`` for every message we want.
+
+    ``length`` is ``None`` for the last message in the file (fetch to EOF).
+    Deduplicates by (param, level_desc): GFS forecast files sometimes ship
+    multiple APCP messages for different accumulation windows; we take the
+    lowest-message-number match.
+    """
+    import re
+
+    lines = [l for l in idx_text.splitlines() if l.strip()]
+    records: List[Tuple[int, int, str, str]] = []
+    for line in lines:
+        parts = line.split(":")
+        if len(parts) < 6:
+            continue
+        try:
+            msg_n = int(parts[0])
+            offset = int(parts[1])
+        except ValueError:
+            continue
+        records.append((msg_n, offset, parts[3], parts[4]))
+    records.sort(key=lambda r: r[0])
+
+    next_offset: dict = {}
+    for i, rec in enumerate(records):
+        next_offset[rec[0]] = records[i + 1][1] if i + 1 < len(records) else None
+
+    wanted_levels = set(levels)
+    mb_re = re.compile(r"^(\d+) mb$")
+    seen: set = set()
+    out: List[Tuple[int, Optional[int]]] = []
+
+    for msg_n, offset, param, level_desc in records:
+        match_key = None
+        # Surface match
+        for wg_param, wg_level in _SURFACE_IDX_PATTERNS.values():
+            if param == wg_param and level_desc == wg_level:
+                match_key = (wg_param, wg_level)
+                break
+        # Pressure match
+        if match_key is None and param in _PRESSURE_IDX_PARAMS.values():
+            m = mb_re.match(level_desc)
+            if m and int(m.group(1)) in wanted_levels:
+                match_key = (param, level_desc)
+
+        if match_key and match_key not in seen:
+            seen.add(match_key)
+            nxt = next_offset[msg_n]
+            length = (nxt - offset) if nxt is not None else None
+            out.append((offset, length))
+
+    return sorted(out)  # monotone offsets for sequential write
+
+
+def _fetch_grib2_byte_range(
+    cycle: GfsCycle,
+    forecast_hour: int,
+    dest_dir: str,
+    levels: Sequence[int] = GRAPHCAST_PRESSURE_LEVELS,
+    max_workers: int = 8,
+) -> str:
+    """Download only the GRIB messages GraphCast needs, via HTTP Range.
+
+    Fetches the tiny ``.idx`` first, selects the ~83 messages covering
+    (5 surface vars) + (6 pressure-level vars × 13 levels), then issues
+    parallel ``GetObject`` calls with a ``Range:`` header for each wanted
+    byte span. Writes all bytes in ascending-offset order into a normal
+    ``.grib2`` file that cfgrib reads identically to the full-file copy.
+    """
+    import boto3
+    from botocore import UNSIGNED
+    from botocore.config import Config
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+
+    os.makedirs(dest_dir, exist_ok=True)
+    local_path = os.path.join(dest_dir, cycle.file_name(forecast_hour))
+
+    s3 = boto3.client("s3", config=Config(signature_version=UNSIGNED))
+    key = cycle.s3_key(forecast_hour)
+    idx_key = key + ".idx"
+
+    idx_text = s3.get_object(Bucket=GFS_S3_BUCKET, Key=idx_key)["Body"].read().decode("ascii")
+    ranges = _parse_idx_for_wanted_messages(idx_text, levels)
+    if not ranges:
+        raise RuntimeError(f"No matching GRIB messages in {idx_key}")
+
+    def _fetch(offset: int, length: Optional[int]) -> Tuple[int, bytes]:
+        if length is None:
+            r = s3.get_object(
+                Bucket=GFS_S3_BUCKET, Key=key,
+                Range=f"bytes={offset}-",
+            )
+        else:
+            r = s3.get_object(
+                Bucket=GFS_S3_BUCKET, Key=key,
+                Range=f"bytes={offset}-{offset + length - 1}",
+            )
+        return offset, r["Body"].read()
+
+    buffers: dict = {}
+    with ThreadPoolExecutor(max_workers=max_workers) as pool:
+        futures = [pool.submit(_fetch, off, length) for off, length in ranges]
+        for fut in as_completed(futures):
+            off, buf = fut.result()
+            buffers[off] = buf
+
+    total_bytes = sum(len(b) for b in buffers.values())
+    with open(local_path, "wb") as f:
+        for off, _length in ranges:
+            f.write(buffers[off])
+
+    log.info("GFS byte-range: %d messages, %.1f MB → %s",
+             len(ranges), total_bytes / 1024 / 1024, local_path)
     return local_path
 
 
