@@ -240,3 +240,61 @@ class TestPhysicalPlausibility:
         assert np.all(tp >= 0.0)
         # After the mm→m conversion, a realistic 6h max ≤ ~0.2 m (200mm).
         assert np.all(tp < 1.0)
+
+
+class TestToaIncidentSolarRadiation:
+    """GFS doesn't publish TOA so we reconstruct it analytically.
+
+    GraphCast fails without TOA (it's a forcing variable). These tests lock in
+    shape, sign, and physical magnitude so a regression surfaces before a
+    live run.
+    """
+
+    def _basic_call(self, times, lats, lons):
+        return gfs.compute_toa_incident_solar_radiation(
+            times=times, latitudes=lats, longitudes=lons,
+        )
+
+    def test_shape_matches_T_Nlat_Nlon(self):
+        times = [np.datetime64("2026-04-15T12:00"),
+                 np.datetime64("2026-04-15T18:00"),
+                 np.datetime64("2026-04-16T00:00")]
+        lats = np.array([-10.0, 0.0, 10.0])
+        lons = np.array([0.0, 90.0, 180.0, 270.0])
+        out = self._basic_call(times, lats, lons)
+        assert out.shape == (3, 3, 4)
+
+    def test_all_nonnegative_and_finite(self):
+        times = [np.datetime64("2026-04-15T12:00")]
+        lats = np.linspace(-80, 80, 33)
+        lons = np.linspace(0, 359, 37)
+        out = self._basic_call(times, lats, lons)
+        assert np.isfinite(out).all()
+        assert (out >= 0).all()
+
+    def test_night_window_is_zero_at_equator(self):
+        # 00Z window = 9pm-3am local at λ=0; entirely dark at the equator.
+        out = self._basic_call(
+            [np.datetime64("2026-04-15T00:00")],
+            [0.0], [0.0],
+        )
+        assert out[0, 0, 0] == 0.0
+
+    def test_noon_window_peaks_near_solar_constant(self):
+        # 12Z window at the equator, λ=0 → midday local; cos(zenith) ≈ 1 at peak.
+        # Peak 6h energy ≤ 6 * 3600 * 1361 ≈ 2.94e7 J/m². Practical average
+        # over the 6h block (mean cos_z ~0.5 over a sunny window) is ~1.5e7.
+        out = self._basic_call(
+            [np.datetime64("2026-04-15T12:00")],
+            [0.0], [0.0],
+        )
+        v = float(out[0, 0, 0])
+        assert 5e6 < v < 3e7, f"noon-window TOA out of range: {v:.3e} J/m²"
+
+    def test_polar_night_is_zero(self):
+        # June 15: northern summer → south pole is in polar night.
+        out = self._basic_call(
+            [np.datetime64("2026-06-15T12:00")],
+            [-85.0], [0.0],
+        )
+        assert out[0, 0, 0] == 0.0

@@ -258,7 +258,68 @@ def _assemble_timestep(
     # Stamp the time coord.
     ts64 = np.datetime64(timestep.replace(tzinfo=None).isoformat())
     ds = ds.expand_dims(time=[ts64])
+    loaded_surface = [v for v in SURFACE_VARS if v in ds.data_vars]
+    loaded_pressure = [v for v in PRESSURE_LEVEL_VARS if v in ds.data_vars]
+    log.info("GFS %s: loaded %d/%d surface + %d/%d pressure-level vars",
+             ts64, len(loaded_surface), len(SURFACE_VARS),
+             len(loaded_pressure), len(PRESSURE_LEVEL_VARS))
     return ds
+
+
+def compute_toa_incident_solar_radiation(
+    times: Sequence[Any],
+    latitudes: Any,
+    longitudes: Any,
+    accumulation_hours: int = 6,
+    substeps: int = 12,
+) -> Any:
+    """Analytical ``toa_incident_solar_radiation`` in ERA5-compatible form.
+
+    GraphCast requires TOA incident solar radiation as a forcing input. GFS
+    doesn't publish it, so we reconstruct it from orbital geometry:
+
+        TOA(t, φ, λ) = ∫_{t-6h}^{t} S₀ · max(0, cos(θ_z(τ, φ, λ))) dτ
+
+    where θ_z is the solar zenith angle, S₀ = 1361 W/m² is the solar constant,
+    and the integral uses a simple circular-orbit declination with 30-min
+    substeps over the 6h accumulation window. The returned units are J/m²
+    (accumulated over ``accumulation_hours``), matching ERA5's convention.
+
+    Args:
+        times: iterable of np.datetime64 values; each is the *end* of a 6h
+            accumulation window.
+        latitudes: 1-D array of latitudes (degrees, +N).
+        longitudes: 1-D array of longitudes (degrees, 0-360 or -180 to 180).
+        accumulation_hours: window length (default 6, GraphCast's resolution).
+        substeps: integration resolution within each window (12 → 30min).
+
+    Returns:
+        np.ndarray shape (T, Nlat, Nlon), dtype float32, in J/m².
+    """
+    import numpy as np
+
+    S0 = 1361.0
+    dt_s = accumulation_hours * 3600 / substeps
+    phi = np.deg2rad(np.asarray(latitudes, dtype=np.float64))[:, None]
+    lam = np.deg2rad(np.asarray(longitudes, dtype=np.float64))[None, :]
+    out = np.zeros((len(times), phi.shape[0], lam.shape[1]), dtype=np.float32)
+    for i, t in enumerate(times):
+        t_np = np.datetime64(t)
+        t0 = t_np - np.timedelta64(accumulation_hours, "h")
+        acc = np.zeros((phi.shape[0], lam.shape[1]), dtype=np.float64)
+        for j in range(substeps):
+            st = t0 + np.timedelta64(int((j + 0.5) * dt_s), "s")
+            year_start = st.astype("datetime64[Y]").astype("datetime64[D]")
+            doy = (st.astype("datetime64[D]") - year_start).astype(int) + 1
+            decl = np.deg2rad(23.44) * np.sin(2 * np.pi * (doy - 81) / 365.0)
+            sec_of_day = (st - st.astype("datetime64[D]")).astype("timedelta64[s]").astype(float)
+            utc_frac = sec_of_day / 86400.0
+            H = 2 * np.pi * (utc_frac - 0.5) + lam
+            cos_z = np.sin(phi) * np.sin(decl) + np.cos(phi) * np.cos(decl) * np.cos(H)
+            cos_z = np.maximum(cos_z, 0.0)
+            acc += S0 * cos_z * dt_s
+        out[i] = acc.astype(np.float32)
+    return out
 
 
 def _normalise_coords(ds: Any) -> Any:
