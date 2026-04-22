@@ -6,7 +6,7 @@ imdlib==0.1.21
 
 # ML / Forecasting
 xgboost==2.0.0
-scikit-learn==1.5.0
+scikit-learn==1.8.0
 numpy==2.0.0
 scipy==1.14.0
 
