@@ -446,28 +446,39 @@ def compute_toa_incident_solar_radiation(
     times: Sequence[Any],
     latitudes: Any,
     longitudes: Any,
-    accumulation_hours: int = 6,
-    substeps: int = 12,
+    accumulation_hours: int = 1,
+    substeps: int = 6,
 ) -> Any:
     """Analytical ``toa_incident_solar_radiation`` in ERA5-compatible form.
 
     GraphCast requires TOA incident solar radiation as a forcing input. GFS
     doesn't publish it, so we reconstruct it from orbital geometry:
 
-        TOA(t, φ, λ) = ∫_{t-6h}^{t} S₀ · max(0, cos(θ_z(τ, φ, λ))) dτ
+        TOA(t, φ, λ) = ∫_{t-1h}^{t} S₀ · max(0, cos(θ_z(τ, φ, λ))) dτ
 
     where θ_z is the solar zenith angle, S₀ = 1361 W/m² is the solar constant,
-    and the integral uses a simple circular-orbit declination with 30-min
-    substeps over the 6h accumulation window. The returned units are J/m²
-    (accumulated over ``accumulation_hours``), matching ERA5's convention.
+    and the integral samples 10-min substeps across the accumulation window.
+    Returned units are J/m² accumulated over ``accumulation_hours``.
+
+    **Accumulation window**: ERA5's ``toa_incident_solar_radiation`` in the
+    ARCO Zarr that GraphCast trains on is a *1-hour accumulation* ending at
+    the timestamp (i.e. hourly flux, not daily), even though GraphCast itself
+    steps at 6h. The model's normalization statistics confirm it: the global
+    mean of the stats file is ≈ 1.07 × 10⁶ J/m², which matches S₀/4 × 3600s
+    (340 W/m² × 3600s = 1.22 × 10⁶). A 6-hour accumulation would have a
+    mean 6× larger (~7 × 10⁶) and would push GraphCast's autoregressive
+    rollout out of distribution — our first smoke on the benchmark Space
+    diverged to impossible 60 °C temperatures with the old 6h default.
 
     Args:
-        times: iterable of np.datetime64 values; each is the *end* of a 6h
-            accumulation window.
+        times: iterable of np.datetime64 values; each is the *end* of a
+            ``accumulation_hours`` window.
         latitudes: 1-D array of latitudes (degrees, +N).
         longitudes: 1-D array of longitudes (degrees, 0-360 or -180 to 180).
-        accumulation_hours: window length (default 6, GraphCast's resolution).
-        substeps: integration resolution within each window (12 → 30min).
+        accumulation_hours: window length. Default 1 to match ERA5's
+            convention as used by GraphCast.
+        substeps: quadrature points within each window (6 → 10-min
+            resolution for the default 1h window).
 
     Returns:
         np.ndarray shape (T, Nlat, Nlon), dtype float32, in J/m².

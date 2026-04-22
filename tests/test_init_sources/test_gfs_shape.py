@@ -281,15 +281,31 @@ class TestToaIncidentSolarRadiation:
         assert out[0, 0, 0] == 0.0
 
     def test_noon_window_peaks_near_solar_constant(self):
-        # 12Z window at the equator, λ=0 → midday local; cos(zenith) ≈ 1 at peak.
-        # Peak 6h energy ≤ 6 * 3600 * 1361 ≈ 2.94e7 J/m². Practical average
-        # over the 6h block (mean cos_z ~0.5 over a sunny window) is ~1.5e7.
+        # Default 1h accumulation (what GraphCast was trained on — see the
+        # compute_toa_incident_solar_radiation docstring for why 1h not 6h).
+        # Noon at equator, λ=0: cos(zenith) averages ~0.95 over the hour.
+        # Peak 1h energy ≤ 3600 * 1361 = 4.9e6 J/m²; typical ~4e6.
         out = self._basic_call(
             [np.datetime64("2026-04-15T12:00")],
             [0.0], [0.0],
         )
         v = float(out[0, 0, 0])
-        assert 5e6 < v < 3e7, f"noon-window TOA out of range: {v:.3e} J/m²"
+        assert 2e6 < v < 5e6, f"noon-window TOA out of range: {v:.3e} J/m²"
+
+    def test_graphcast_stats_compatibility(self):
+        # GraphCast's published stats give mean toa_incident_solar_radiation
+        # ≈ 1.07e6 J/m² (global/time average). Our values must land in the
+        # same order of magnitude — a 6× error (the 6h bug) would push the
+        # autoregressive rollout out of distribution and diverge.
+        ts = [np.datetime64(f"2026-04-15T{h:02d}:00") for h in (0, 6, 12, 18)]
+        lats = np.linspace(-87.5, 87.5, 36)
+        lons = np.linspace(0, 355, 72)
+        out = self._basic_call(ts, lats, lons)
+        global_mean = float(out.mean())
+        assert 5e5 < global_mean < 3e6, (
+            f"mean TOA {global_mean:.3e} J/m² outside expected band around "
+            f"GraphCast's 1.07e6; accumulation_hours may be wrong"
+        )
 
     def test_polar_night_is_zero(self):
         # June 15: northern summer → south pole is in polar night.
