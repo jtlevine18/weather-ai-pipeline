@@ -426,11 +426,18 @@ class GraphCastClient:
         # Combine input + forecast
         ds = xarray.concat([ds_input, ds_forecast_forcing], dim="time")
 
-        # Load static variables (no time dimension)
+        # Load static variables. ERA5 ships these with a spurious time dim;
+        # GFS static vars (from src/init_sources/static_vars.py) are already
+        # 2D. Handle both — only .sel on time when it's present.
         for svar in static_vars:
             if svar in full_ds:
-                static_data = full_ds[svar].sel(time=t1).compute()
+                da = full_ds[svar]
+                if "time" in da.dims:
+                    da = da.sel(time=t1)
+                static_data = da.compute()
                 if "time" in static_data.dims:
+                    static_data = static_data.drop_vars("time")
+                if "time" in static_data.coords:
                     static_data = static_data.drop_vars("time")
                 ds[svar] = static_data
                 log.info("Loaded static var %s", svar)

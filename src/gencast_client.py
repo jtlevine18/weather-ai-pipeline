@@ -473,10 +473,16 @@ class GenCastClient:
 
         ds = xarray.concat([ds_input, ds_forecast_forcing], dim="time")
 
+        # Static vars: ERA5 ships with spurious time dim; GFS is already 2D.
         for svar in static_vars:
             if svar in full_ds:
-                static_data = full_ds[svar].sel(time=t1).compute()
+                da = full_ds[svar]
+                if "time" in da.dims:
+                    da = da.sel(time=t1)
+                static_data = da.compute()
                 if "time" in static_data.dims:
+                    static_data = static_data.drop_vars("time")
+                if "time" in static_data.coords:
                     static_data = static_data.drop_vars("time")
                 ds[svar] = static_data
             else:
