@@ -52,11 +52,14 @@ SURFACE_VARS: Dict[str, Tuple[str, Tuple[float, float]]] = {
     "10m_v_component_of_wind":      ("10v",   (1.0,    0.0)),
     "mean_sea_level_pressure":      ("prmsl", (1.0,    0.0)),
     "total_precipitation_6hr":      ("tp",    (1e-3,   0.0)),  # mm → m
-    # GFS publishes SST as ``WTMP:surface`` (wgrib2 PARAM). cfgrib decodes
-    # it with ecCodes shortName ``wtmp`` (not ``sst`` — that's ERA5's
-    # shortName; GFS uses GRIB2 template 0 discipline=10 which eccodes maps
-    # to ``wtmp``). NaN over land cells; GenCast 1.0° requires it.
-    "sea_surface_temperature":      ("wtmp",  (1.0,    0.0)),
+    # GFS pgrb2.0p25 doesn't publish WTMP or SST directly — it ships
+    # ``TMP:surface`` (skin temperature). cfgrib decodes that with
+    # ecCodes shortName ``t`` (same paramId=130 as 2m temp) but with
+    # typeOfLevel=surface, which makes it unambiguous alongside the
+    # isobaric ``t`` messages. Over ocean cells, skin temperature ≈ SST;
+    # over land cells, it's land-surface skin temperature (not NaN, unlike
+    # ERA5's SST field). Gets GenCast past the missing-SST KeyError.
+    "sea_surface_temperature":      ("t",     (1.0,    0.0)),
 }
 
 
