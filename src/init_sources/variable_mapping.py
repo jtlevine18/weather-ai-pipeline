@@ -36,10 +36,20 @@ from typing import Dict, Tuple
 # step — cfgrib exposes ``tp`` in kg/m² which is numerically the same as mm of
 # liquid water. ERA5 reports precipitation in m. We divide by 1000 to match.
 
+#
+# ``ecCodes`` shortName differs from cfgrib's output variable name for a
+# handful of surface fields. The GRIB *message* is indexed by the ecCodes
+# shortName (``2t``, ``10u``, ``10v``, ``prmsl``, ``tp``) which is what
+# ``filter_by_keys`` takes. When cfgrib materialises the filtered message as
+# an xarray variable, it uses its own naming (``t2m``, ``u10``, ``v10``,
+# ``prmsl``, ``tp``). We carry the ecCodes shortName here because the filter
+# is load-bearing — get this wrong and filter_by_keys returns an empty
+# dataset, which was the Phase-2-take-1 failure mode.
+
 SURFACE_VARS: Dict[str, Tuple[str, Tuple[float, float]]] = {
-    "2m_temperature":               ("t2m",   (1.0,    0.0)),
-    "10m_u_component_of_wind":      ("u10",   (1.0,    0.0)),
-    "10m_v_component_of_wind":      ("v10",   (1.0,    0.0)),
+    "2m_temperature":               ("2t",    (1.0,    0.0)),
+    "10m_u_component_of_wind":      ("10u",   (1.0,    0.0)),
+    "10m_v_component_of_wind":      ("10v",   (1.0,    0.0)),
     "mean_sea_level_pressure":      ("prmsl", (1.0,    0.0)),
     "total_precipitation_6hr":      ("tp",    (1e-3,   0.0)),  # mm → m
 }

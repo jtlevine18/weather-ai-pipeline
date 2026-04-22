@@ -45,6 +45,25 @@ class TestSurfaceVarsLookup:
         assert scale == 1.0
         assert offset == 0.0
 
+    def test_surface_short_names_are_eccodes_not_cfgrib(self):
+        # Phase 2 regression: cfgrib's ``filter_by_keys`` takes the ecCodes
+        # shortName (``2t``, ``10u``, ``10v``, etc.), NOT cfgrib's output
+        # xarray variable name (``t2m``, ``u10``, ``v10``). Getting this
+        # wrong returns an empty Dataset silently — the first smoke run
+        # burned ~$3 of A100 discovering it.
+        expected_eccodes_names = {
+            "2m_temperature":          "2t",
+            "10m_u_component_of_wind": "10u",
+            "10m_v_component_of_wind": "10v",
+            "mean_sea_level_pressure": "prmsl",
+            "total_precipitation_6hr": "tp",
+        }
+        for era5_name, eccodes in expected_eccodes_names.items():
+            assert vm.SURFACE_VARS[era5_name][0] == eccodes, (
+                f"{era5_name!r}: must use ecCodes shortName "
+                f"{eccodes!r}, not cfgrib output name"
+            )
+
 
 class TestPressureLevelVarsLookup:
     def test_geopotential_converts_gpm_to_m2s2(self):
@@ -87,7 +106,8 @@ class TestPressureLevelsSelection:
 
 class TestHelpers:
     def test_gfs_short_name_surface(self):
-        assert vm.gfs_short_name("2m_temperature") == "t2m"
+        # ecCodes shortName convention — see test_surface_short_names_are_eccodes_not_cfgrib.
+        assert vm.gfs_short_name("2m_temperature") == "2t"
         assert vm.gfs_short_name("mean_sea_level_pressure") == "prmsl"
 
     def test_gfs_short_name_pressure_level(self):

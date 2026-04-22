@@ -144,30 +144,48 @@ def _download_grib2(
 # GRIB parsing
 # ---------------------------------------------------------------------------
 
-def _open_grib_surface(path: str, gfs_short_name: str) -> Any:
+def _open_grib_surface(path: str, ecmwf_short_name: str) -> Any:
     """Return an xarray.DataArray for a single surface variable from GRIB2.
 
-    cfgrib requires ``filter_by_keys`` to select which GRIB message layer
-    to decode. For surface variables we filter by the short name plus the
-    ``heightAboveGround`` or ``meanSea`` type of level as appropriate.
+    ``ecmwf_short_name`` is the ecCodes shortName (e.g. ``2t``, ``10u``,
+    ``prmsl``, ``tp``) — what GRIB messages are indexed by, NOT cfgrib's
+    output variable name (e.g. ``t2m``, ``u10``). cfgrib's
+    ``filter_by_keys`` takes ecCodes names; getting this wrong returns an
+    empty dataset silently, which was the Phase-2-take-1 failure.
+
+    The filter is typeOfLevel + shortName (+ level for heightAboveGround).
+    After filtering there's exactly one message remaining, so we return the
+    first data_var regardless of cfgrib's rename.
     """
     import xarray
-    # cfgrib's "typeOfLevel" filters pick the right surface layer. GFS stores
-    # t2m/u10/v10 at ``heightAboveGround`` (2m and 10m), ``prmsl`` at
-    # ``meanSea``, and ``tp`` at ``surface``.
+    # GFS stores ``2t``/``10u``/``10v`` at ``heightAboveGround`` (2m and
+    # 10m), ``prmsl`` at ``meanSea``, and ``tp`` at ``surface``.
     level_map = {
-        "t2m": ("heightAboveGround", 2),
-        "u10": ("heightAboveGround", 10),
-        "v10": ("heightAboveGround", 10),
+        "2t":    ("heightAboveGround", 2),
+        "10u":   ("heightAboveGround", 10),
+        "10v":   ("heightAboveGround", 10),
         "prmsl": ("meanSea", 0),
         "tp":    ("surface", 0),
     }
-    type_of_level, level = level_map.get(gfs_short_name, ("surface", 0))
-    filters = {"typeOfLevel": type_of_level, "shortName": gfs_short_name}
+    type_of_level, level = level_map.get(ecmwf_short_name, ("surface", 0))
+    filters = {"typeOfLevel": type_of_level, "shortName": ecmwf_short_name}
     if type_of_level == "heightAboveGround":
         filters["level"] = level
-    return xarray.open_dataset(path, engine="cfgrib",
-                                backend_kwargs={"filter_by_keys": filters})[gfs_short_name]
+    ds = xarray.open_dataset(
+        path, engine="cfgrib",
+        backend_kwargs={"filter_by_keys": filters},
+    )
+    names = list(ds.data_vars)
+    if not names:
+        raise RuntimeError(
+            f"cfgrib returned 0 variables for shortName={ecmwf_short_name!r}, "
+            f"typeOfLevel={type_of_level!r}. Filter likely wrong — check "
+            f"ecCodes naming (2t vs t2m, 10u vs u10, etc.)."
+        )
+    if len(names) != 1:
+        log.warning("Multiple data vars (%s) after GRIB filter for %s; "
+                    "using first", names, ecmwf_short_name)
+    return ds[names[0]]
 
 
 def _open_grib_pressure_levels(
