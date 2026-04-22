@@ -487,11 +487,16 @@ async def run_forecast_step(
     # forecast_day=0 is today (local), not 5 days ago.
     now = datetime.now(timezone.utc)
     today_local = (now + timedelta(hours=tz_offset_h)).date()
+    # Override lets us keep hindcast days for validation runs (e.g. GFS-init
+    # experiments where the init date is in the past and we want all 7 leads
+    # retained). Defaults to today_local so production behavior is unchanged.
+    start_override = os.environ.get("FORECAST_START_LOCAL_OVERRIDE")
+    start_local_date = start_override or str(today_local)
     dailies = aggregate_to_daily(
         nwp_forecasts,
         num_days=7,
         tz_offset_h=tz_offset_h,
-        start_local_date=str(today_local),
+        start_local_date=start_local_date,
     )
 
     results = []

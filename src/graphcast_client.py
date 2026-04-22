@@ -284,10 +284,17 @@ class GraphCastClient:
             log.info("ERA5 cache hit for %s", target_date)
             return cached
 
-        log.info("Opening ARCO ERA5 Zarr for %s...", target_date)
-        gcs_opts = {"token": "anon"}
-        full_ds = xarray.open_zarr(ERA5_PATH, chunks=None,
-                                   storage_options=gcs_opts, consolidated=True)
+        if os.environ.get("NWP_INIT_SOURCE", "era5t").lower() == "gfs":
+            log.info("NWP_INIT_SOURCE=gfs — fetching GFS init for %s", target_date)
+            from src.init_sources import fetch_gfs_as_era5
+            full_ds = fetch_gfs_as_era5(
+                target_date, forecast_horizon_hours=FORECAST_STEPS * 6,
+            )
+        else:
+            log.info("Opening ARCO ERA5 Zarr for %s...", target_date)
+            gcs_opts = {"token": "anon"}
+            full_ds = xarray.open_zarr(ERA5_PATH, chunks=None,
+                                       storage_options=gcs_opts, consolidated=True)
 
         # Walk target_date backward if ARCO hasn't populated it yet. ARCO ERA5T
         # lags real-time by ~5–7 days; the caller's 5-day default is often one
@@ -802,9 +809,19 @@ class GraphCastClient:
 
         # Determine the forecast date
         if target_date is None:
-            now = np.datetime64("now")
-            candidate = now - np.timedelta64(5 * 24, "h")  # ERA5 ~5-day lag
-            target_date = str(np.datetime_as_string(candidate, unit="D"))
+            override = os.environ.get("NWP_TARGET_DATE_OVERRIDE")
+            if override:
+                target_date = override
+            elif os.environ.get("NWP_INIT_SOURCE", "era5t").lower() == "gfs":
+                # GFS has ~3h lag, not 5 days — init from yesterday's 12Z
+                # cycle (always complete by the time a pipeline runs).
+                now = np.datetime64("now")
+                candidate = now - np.timedelta64(24, "h")
+                target_date = str(np.datetime_as_string(candidate, unit="D"))
+            else:
+                now = np.datetime64("now")
+                candidate = now - np.timedelta64(5 * 24, "h")  # ERA5T ~5-day lag
+                target_date = str(np.datetime_as_string(candidate, unit="D"))
 
         meta.init_time = target_date
 

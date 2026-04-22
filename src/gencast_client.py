@@ -344,11 +344,20 @@ class GenCastClient:
         import xarray
         from graphcast import data_utils
 
-        log.info("Opening ARCO ERA5 Zarr for GenCast init %s...", target_date)
-        full_ds = xarray.open_zarr(
-            ERA5_PATH, chunks=None,
-            storage_options={"token": "anon"}, consolidated=True,
-        )
+        if os.environ.get("NWP_INIT_SOURCE", "era5t").lower() == "gfs":
+            log.info("NWP_INIT_SOURCE=gfs — fetching GFS init for GenCast at %s",
+                     target_date)
+            from src.init_sources import fetch_gfs_as_era5
+            full_ds = fetch_gfs_as_era5(
+                target_date.isoformat() if hasattr(target_date, "isoformat") else str(target_date),
+                forecast_horizon_hours=FORECAST_HORIZON_H,
+            )
+        else:
+            log.info("Opening ARCO ERA5 Zarr for GenCast init %s...", target_date)
+            full_ds = xarray.open_zarr(
+                ERA5_PATH, chunks=None,
+                storage_options={"token": "anon"}, consolidated=True,
+            )
 
         def _probe_ok(date_str: str) -> bool:
             try:
@@ -810,7 +819,14 @@ class GenCastClient:
         meta.model_used = self._model_tag
 
         if target_date is None:
-            target_date = dt.date.today() - dt.timedelta(days=5)
+            override = os.environ.get("NWP_TARGET_DATE_OVERRIDE")
+            if override:
+                target_date = dt.date.fromisoformat(override)
+            elif os.environ.get("NWP_INIT_SOURCE", "era5t").lower() == "gfs":
+                # GFS has ~3h lag — init from yesterday, always complete.
+                target_date = dt.date.today() - dt.timedelta(days=1)
+            else:
+                target_date = dt.date.today() - dt.timedelta(days=5)
         meta.target_date = target_date.isoformat()
 
         loop = asyncio.get_event_loop()

@@ -53,6 +53,7 @@ markers = [
     "slow: long-running evaluation scripts",
     "offline: runs without external API keys",
     "api: requires ANTHROPIC_API_KEY or other API credentials",
+    "live: hits live external services (AWS, HF, etc.); opt-in via env flag",
 ]
 filterwarnings = [
     "ignore::DeprecationWarning:apscheduler.*",
