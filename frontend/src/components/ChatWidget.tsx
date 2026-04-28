@@ -186,15 +186,19 @@ export function ChatWidget() {
         onClick={() => setOpen(true)}
         aria-label="Open farmer advisor chat"
         title="Ask the model"
-        className="hidden lg:block fixed bottom-8 left-8 z-[1000]"
+        className="hidden lg:block fixed z-[1000]"
         style={{
+          bottom: '72px',
+          left: 0,
+          width: '240px',
+          textAlign: 'center',
           background: 'none',
           border: 'none',
           padding: '10px 14px',
           fontFamily: '"Space Grotesk", system-ui, sans-serif',
           fontSize: '13px',
           fontWeight: 500,
-          color: '#2d5b7d',
+          color: '#fcfaf7',
           cursor: 'pointer',
           textUnderlineOffset: '4px',
         }}

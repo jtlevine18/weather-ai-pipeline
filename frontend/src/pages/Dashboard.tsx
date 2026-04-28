@@ -7,6 +7,7 @@ import {
   useForecasts,
   useAlerts,
   usePipelineStats,
+  usePipelineRuns,
   useDeliveryLog,
   useTelemetryClean,
   useHealingLog,
@@ -478,6 +479,7 @@ function PipelineHero() {
   const [selected, setSelected] = useState(0) // default Collect
   const [locked, setLocked] = useState(false)
   const [mounted, setMounted] = useState(false)
+  const recentRuns = usePipelineRuns(1)
 
   useEffect(() => {
     const t = setTimeout(() => setMounted(true), 40)
@@ -485,6 +487,22 @@ function PipelineHero() {
   }, [])
 
   const step = HERO_STEPS[selected]
+
+  const lastRun = recentRuns.data?.[0]
+  const lastRunLabel = (() => {
+    if (!lastRun?.started_at) return null
+    const started = new Date(lastRun.started_at)
+    const dateStr = started.toLocaleDateString('en-US', {
+      weekday: 'short', month: 'short', day: 'numeric',
+    })
+    const parts = [`Last run: ${dateStr}`]
+    if (lastRun.ended_at) {
+      const durationS = (new Date(lastRun.ended_at).getTime() - started.getTime()) / 1000
+      if (durationS > 0) parts.push(`${durationS < 60 ? `${durationS.toFixed(1)}s` : `${(durationS / 60).toFixed(1)}m`}`)
+    }
+    if (lastRun.status && lastRun.status !== 'ok') parts.push(lastRun.status)
+    return parts.join(' · ')
+  })()
 
   return (
     <section style={{ paddingTop: '0', paddingBottom: '0' }} data-tour="hero">
@@ -826,18 +844,20 @@ function PipelineHero() {
       </div>
 
       {/* Honesty line */}
-      <div
-        style={{
-          marginTop: '14px',
-          fontFamily: '"Space Grotesk", system-ui, sans-serif',
-          fontSize: '11px',
-          color: '#8d909e',
-          fontStyle: 'italic',
-          fontVariantNumeric: 'tabular-nums',
-        }}
-      >
-        Last run: Mon Apr 14 · 5.9s · $0.003
-      </div>
+      {lastRunLabel && (
+        <div
+          style={{
+            marginTop: '14px',
+            fontFamily: '"Space Grotesk", system-ui, sans-serif',
+            fontSize: '11px',
+            color: '#8d909e',
+            fontStyle: 'italic',
+            fontVariantNumeric: 'tabular-nums',
+          }}
+        >
+          {lastRunLabel}
+        </div>
+      )}
     </section>
   )
 }
@@ -847,29 +867,14 @@ function PipelineHero() {
 export default function Dashboard() {
   const stations = useStations()
   const forecasts = useForecasts(500)
-  const alerts = useAlerts(200)
   const pipelineStats = usePipelineStats()
-  const deliveries = useDeliveryLog(200)
-  const clean = useTelemetryClean(200)
 
   const isLoading =
     stations.isLoading && forecasts.isLoading && pipelineStats.isLoading
   if (isLoading) return <DashboardSkeleton />
 
-  const alertCount = alerts.data?.length ?? 0
-  const deliveryCount = deliveries.data?.length ?? 0
-
-  const totalRuns = pipelineStats.data?.total_runs ?? 0
-  const successfulRuns = pipelineStats.data?.successful_runs ?? 0
-  const successDisplay =
-    totalRuns > 0 ? `${successfulRuns}/${totalRuns}` : '—'
-
-  const cleanData = clean.data ?? []
-  const avgQuality =
-    cleanData.length > 0
-      ? cleanData.reduce((sum, r) => sum + (r.quality_score ?? 0), 0) /
-        cleanData.length
-      : 0
+  const stationCount = stations.data?.length ?? 0
+  const farmerCount = pipelineStats.data?.farmer_profiles ?? 0
 
   return (
     <div className="space-y-6">
@@ -877,19 +882,15 @@ export default function Dashboard() {
 
       {/* KPI row */}
       <div
-        className="grid grid-cols-2 md:grid-cols-4 gap-6 md:gap-8"
+        className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-8"
         style={{
           borderTop: '1px solid #e8e5e1',
           paddingTop: '20px',
         }}
       >
-        <MetricCard label="Successful runs" value={successDisplay} />
-        <MetricCard
-          label="Data quality"
-          value={avgQuality > 0 ? `${Math.round(avgQuality * 100)}%` : '—'}
-        />
-        <MetricCard label="Advisories generated" value={alertCount} />
-        <MetricCard label="Advisories delivered" value={deliveryCount} />
+        <MetricCard label="Stations" value={stationCount > 0 ? stationCount : '—'} />
+        <MetricCard label="Farmers" value={farmerCount > 0 ? farmerCount : '—'} />
+        <MetricCard label="Forecast horizon" value="7 days" />
       </div>
     </div>
   )

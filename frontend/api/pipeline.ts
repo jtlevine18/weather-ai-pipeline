@@ -38,9 +38,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       UNION ALL SELECT 'agricultural_alerts', COUNT(*)::int FROM agricultural_alerts
       UNION ALL SELECT 'delivery_log', COUNT(*)::int FROM delivery_log
       UNION ALL SELECT 'pipeline_runs', COUNT(*)::int FROM pipeline_runs
+      UNION ALL SELECT 'farmer_profiles', COUNT(*)::int FROM farmer_profiles
     `
     for (const row of rows) counts[row.t] = row.c
-    return res.json(counts)
+
+    const [runStats] = await sql`
+      SELECT
+        COUNT(*)::int AS total_runs,
+        COUNT(*) FILTER (WHERE status = 'ok')::int AS successful_runs,
+        COUNT(*) FILTER (WHERE status IN ('failed', 'partial'))::int AS failed_runs,
+        COALESCE(AVG(EXTRACT(EPOCH FROM (ended_at - started_at)))::float, 0) AS avg_duration
+      FROM pipeline_runs
+      WHERE ended_at IS NOT NULL
+    `
+    return res.json({
+      ...counts,
+      total_runs: runStats?.total_runs ?? 0,
+      successful_runs: runStats?.successful_runs ?? 0,
+      failed_runs: runStats?.failed_runs ?? 0,
+      avg_duration: runStats?.avg_duration ?? 0,
+    })
   }
 
   // Default: runs

@@ -20,7 +20,7 @@ const STACK = [
   },
   {
     label: 'Models',
-    items: ['GraphCast 0.25° (Google DeepMind)', 'Claude Sonnet for advisories', 'Claude Haiku for Tamil / Malayalam'],
+    items: ['GraphCast 0.25° or GenCast 1.0° (Google DeepMind)', 'Claude Sonnet for advisories', 'Claude Haiku for Tamil / Malayalam'],
   },
   {
     label: 'Delivery',

@@ -258,6 +258,7 @@ export interface PipelineStats {
   agricultural_alerts?: number
   delivery_log?: number
   pipeline_runs?: number
+  farmer_profiles?: number
   // Legacy fields (kept for components that reference them)
   total_runs?: number
   successful_runs?: number
